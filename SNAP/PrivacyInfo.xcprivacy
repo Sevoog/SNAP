@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        SNAP — Privacy Manifest.
+
+        SNAP does no user tracking and contains no third-party SDKs,
+        analytics, or crash reporting. Nothing is reported back to the
+        developer. Most traffic is user-invoked (lookups, scans, speed
+        tests, UniFi calls), but some status features contact public
+        services automatically while visible — connectivity checks,
+        public-IP / ISP lookups, gateway pings. README.md § Privacy lists
+        every destination and when it is contacted.
+    -->
+    <key>NSPrivacyTracking</key>
+    <false/>
+
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <!--
+        Required Reason APIs we call:
+
+        • UserDefaults — Bandwidth alert thresholds, Speed Test history,
+          Network Map last-scan cache, UniFi controller URL/username,
+          and other in-app preferences. Read/written only within this app.
+          Reason: CA92.1 — "Access info from same app, per Apple's docs."
+
+        • File Timestamp — modificationDate of the macOS DHCP lease file
+          (/var/db/dhcpclient_leases/) so the UI can display when the
+          current lease was last refreshed. Read-only, displayed in app.
+          Reason: C617.1 — "Display file timestamps to the user within
+          the app that called the API."
+    -->
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>C617.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

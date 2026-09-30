@@ -1,0 +1,49 @@
+# Xcode build artifacts
+build/
+DerivedData/
+# Per-user Xcode state at any depth (incl. SNAP.xcodeproj/project.xcworkspace/xcuserdata)
+xcuserdata/
+*.xcworkspace/xcshareddata/
+*.xcuserstate
+*.moved-aside
+*.orig
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# Archives & exports
+*.ipa
+*.xcarchive
+*.dSYM.zip
+*.dSYM
+
+# Fastlane (if added later)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# CocoaPods (if added later)
+Pods/
+
+# Crash logs
+*.crash
+
+# Release builds (attach to GitHub Releases instead of committing)
+*.zip
+*.dmg
+
+# Local-only files — never commit
+.claude/
+# Unscrubbed screenshots: real SSID, hostname, MAC, and public IP
+marketing/raw/
+# Unrelated Windows scripts that live in this folder
+Debloat-Win11.ps1
+Undo-Debloat-Win11.ps1

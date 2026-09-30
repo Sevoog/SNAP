@@ -1,0 +1,42 @@
+SNAP — Sev's Network Analysis Platform
+Copyright (c) 2025–2026 Sevag Bardakjian. All rights reserved.
+
+This software, including its source code, compiled application, documentation,
+and associated files (the "Software"), is proprietary. It is not open source.
+
+1. Permission to use. You may download, install, and use the compiled SNAP
+   application free of charge, for personal or professional purposes.
+
+2. Restrictions. Unless you have separate written permission from the
+   copyright holder, you may not:
+     a. copy, modify, or create derivative works of the source code;
+     b. redistribute, sublicense, sell, or publish the Software or its source
+        code, in whole or in part, including as part of another product;
+     c. remove or alter any copyright notice.
+   Being able to view the source code (for example, on GitHub) grants no
+   rights beyond viewing it, except as required by the terms of the platform
+   hosting it.
+
+3. Responsible use. SNAP includes network scanning and diagnostic tools. You
+   are responsible for using them only on networks and devices you own or are
+   authorized to test, and in compliance with applicable laws.
+
+4. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+   KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+5. Limitation of liability. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE
+   FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+   CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH
+   THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+6. Third-party services. SNAP can contact third-party services, listed in
+   README.md under "Privacy & Security". Those services are governed by their
+   own terms, and the copyright holder does not control them.
+
+7. Future licensing. The copyright holder may release future versions under
+   different terms, including an open-source license. Such a change applies
+   only to the versions it is published with.
+
+For permissions beyond this license, contact the copyright holder through
+https://github.com/Sevoog.
