@@ -10,6 +10,8 @@
 //   • TopTalkersMonitor  — per-process RX/TX via `nettop -P`
 //   • PublicIPMonitor    — fetches external IPv4 + ISP/ASN via ipwho.is,
 //                          cached with a 10-minute refresh
+// Plus `ConnectionHealth` (v1.5.3): the one scoring model behind the System
+// Health tile, the Gateway Latency tile, and the menu bar status dot.
 //
 // All keep the same lightweight pattern used across SNAP: MainActor-isolated
 // ObservableObject singletons with @Published state, background workers
@@ -407,5 +409,125 @@ final class PublicIPMonitor: ObservableObject {
                 self.lastRefresh = Date()
             }
         }.resume()
+    }
+}
+
+// MARK: - Connection health (shared scoring)
+
+/// One scoring model for "how healthy is the path to my router?", shared by
+/// the System Health and Gateway Latency tiles so they can't contradict each
+/// other. Inputs are `MenuBarMonitor`'s gateway ping window (30 samples at
+/// 10 s ≈ 5 min), Wi-Fi signal when Wi-Fi carries the default route, and
+/// alerts from the last hour.
+///
+/// Thresholds are gateway-scale: a healthy first hop answers in a few ms
+/// with near-zero jitter. Before v1.5.3 the score used a 40 ms
+/// internet-scale cutoff and ignored jitter and Wi-Fi, so it could read
+/// "Excellent" next to 64 ms of jitter.
+enum ConnectionHealth {
+
+    struct Assessment: Equatable {
+        /// 0–100, or nil before the first gateway sample.
+        let score: Int?
+        let grade: String
+        /// Most significant factors first, e.g. "Jitter 32 ms · Weak Wi‑Fi".
+        let summary: String
+    }
+
+    enum GatewayState: Equatable {
+        case measuring, healthy, slow, unstable, degraded, notResponding
+    }
+
+    // Each factor is free up to its "fine" level, then costs points up to a
+    // cap. Calibrated so each gateway factor alone crosses the tile's warning
+    // line (avg > 30 ms, jitter > 15 ms, loss ≥ 5 %) as the score drops
+    // below 90, and reaches its cap where the gateway reads "Degraded".
+    static func latencyPenalty(_ avgMs: Double) -> Double { min(30, max(0, avgMs - 10) * 0.5) }
+    static func jitterPenalty(_ ms: Double) -> Double { min(25, max(0, ms - 5)) }
+    static func lossPenalty(_ pct: Double) -> Double { min(80, max(0, pct) * 3) }
+    static func wifiPenalty(_ quality: Int) -> Double { min(20, Double(max(0, 60 - quality)) * 0.5) }
+    static func alertPenalty(_ count: Int) -> Double { min(20, Double(max(0, count)) * 4) }
+
+    /// This many timeouts in a row means the router is down *now*, whatever
+    /// the rest of the window says. Two (≈20 s at the 10 s cadence) is fast
+    /// enough to catch an outage without flagging a single dropped ping.
+    static let outageTimeouts = 2
+
+    static func assess(avgMs: Double?, jitterMs: Double?, lossPct: Double, samples: Int,
+                       wifiQuality: Int?, recentAlerts: Int,
+                       trailingTimeouts: Int = 0) -> Assessment {
+        guard samples > 0 else {
+            return Assessment(score: nil, grade: "Measuring", summary: "Waiting for gateway samples")
+        }
+        guard let avg = avgMs, trailingTimeouts < outageTimeouts else {
+            return Assessment(score: 0, grade: "Poor", summary: "Router not responding")
+        }
+        let jitter = jitterMs ?? 0
+        let lat = latencyPenalty(avg)
+        let jit = jitterPenalty(jitter)
+        let loss = lossPenalty(lossPct)
+        let wifi = wifiQuality.map(wifiPenalty) ?? 0
+        let alerts = alertPenalty(recentAlerts)
+
+        // Named when they cost ≥ 5 points; any loss or alert is always named.
+        let factors: [(cost: Double, text: String, named: Bool)] = [
+            (lat, "Latency \(Int(avg.rounded())) ms", lat >= 5),
+            (jit, "Jitter \(Int(jitter.rounded())) ms", jit >= 5),
+            (loss, "\(Int(lossPct.rounded()))% loss", lossPct > 0),
+            (wifi, "Weak Wi‑Fi", wifi >= 5),
+            (alerts, recentAlerts == 1 ? "1 alert this hour" : "\(recentAlerts) alerts this hour", recentAlerts > 0),
+        ]
+        let total = tenths(factors.reduce(0) { $0 + $1.cost })
+        let score = Int(max(0, min(100, 100 - total)))
+
+        var named = factors.enumerated()
+            .filter { $0.element.named }
+            .sorted { $0.element.cost != $1.element.cost ? $0.element.cost > $1.element.cost : $0.offset < $1.offset }
+            .prefix(3)
+            .map { $0.element.text }
+        if named.isEmpty {
+            named = ["Latency stable", "No packet loss"]
+        } else if lossPct == 0 && named.count < 3 {
+            named.append("No packet loss")
+        }
+        return Assessment(score: score, grade: grade(score), summary: named.joined(separator: " · "))
+    }
+
+    static func grade(_ score: Int) -> String {
+        switch score {
+        case 90...:   return "Excellent"
+        case 75..<90: return "Good"
+        case 50..<75: return "Fair"
+        case 25..<50: return "Degraded"
+        default:      return "Poor"
+        }
+    }
+
+    /// The Gateway Latency tile's label and the menu bar dot, judged on the
+    /// same window and the same costs as the score — not on the single
+    /// latest ping.
+    static func gatewayState(avgMs: Double?, jitterMs: Double?, lossPct: Double,
+                             samples: Int, trailingTimeouts: Int = 0) -> GatewayState {
+        guard samples > 0 else { return .measuring }
+        guard let avg = avgMs, trailingTimeouts < outageTimeouts else { return .notResponding }
+        let lat = latencyPenalty(avg)
+        let unsteady = jitterPenalty(jitterMs ?? 0) + lossPenalty(lossPct)
+        let cost = tenths(lat + unsteady)
+        if cost <= 10 { return .healthy }
+        if cost >= 30 { return .degraded }
+        return lat >= unsteady ? .slow : .unstable
+    }
+
+    /// Costs rounded to 0.1 before comparing, so float noise can't flip a
+    /// boundary: one lost ping in 30 is 3.333…% × 3 = 10.000000000000002,
+    /// which would otherwise tip "Healthy / 90" into "Slow / 89".
+    private static func tenths(_ x: Double) -> Double { (x * 10).rounded() / 10 }
+
+    /// RSSI → 0–100 (−40 dBm = 100, −85 dBm = 0); 0 when not associated.
+    /// Shared by the Wi-Fi tile's quality ring and the health score.
+    static func wifiQuality(rssi: Int) -> Int {
+        guard rssi != 0 else { return 0 }
+        let s = 100.0 - (Double(-40 - rssi) * (100.0 / 45.0))
+        return Int(max(0, min(100, s)))
     }
 }

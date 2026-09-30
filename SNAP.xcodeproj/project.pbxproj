@@ -47,6 +47,9 @@
 		AA0908166CF4030DC0BF9C0B /* ConnectionSummaryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E5A81F9DD795FEB54BDAEF /* ConnectionSummaryCard.swift */; };
 		AA0B000000000000000000AA /* SNMPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0C000000000000000000AA /* SNMPTests.swift */; };
 		AA0D000000000000000000AA /* SyslogParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0E000000000000000000AA /* SyslogParserTests.swift */; };
+		AA39000000000000000000AA /* ConnectionHealthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3A000000000000000000AA /* ConnectionHealthTests.swift */; };
+		AA3B000000000000000000AA /* PublicLookupPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3C000000000000000000AA /* PublicLookupPolicyTests.swift */; };
+		AA3D000000000000000000AA /* StatusBoardWiFiTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3E000000000000000000AA /* StatusBoardWiFiTests.swift */; };
 		AA0F000000000000000000AA /* OUIEnterpriseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10000000000000000000AA /* OUIEnterpriseTests.swift */; };
 		AA11000000000000000000AA /* BGPLookupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA12000000000000000000AA /* BGPLookupView.swift */; };
 		AA13000000000000000000AA /* UniFiControllerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA14000000000000000000AA /* UniFiControllerView.swift */; };
@@ -134,6 +137,9 @@
 		AA0A000000000000000000AA /* SyslogReceiverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyslogReceiverView.swift; sourceTree = "<group>"; };
 		AA0C000000000000000000AA /* SNMPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPTests.swift; sourceTree = "<group>"; };
 		AA0E000000000000000000AA /* SyslogParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyslogParserTests.swift; sourceTree = "<group>"; };
+		AA3A000000000000000000AA /* ConnectionHealthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionHealthTests.swift; sourceTree = "<group>"; };
+		AA3C000000000000000000AA /* PublicLookupPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicLookupPolicyTests.swift; sourceTree = "<group>"; };
+		AA3E000000000000000000AA /* StatusBoardWiFiTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBoardWiFiTests.swift; sourceTree = "<group>"; };
 		AA10000000000000000000AA /* OUIEnterpriseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OUIEnterpriseTests.swift; sourceTree = "<group>"; };
 		AA12000000000000000000AA /* BGPLookupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BGPLookupView.swift; sourceTree = "<group>"; };
 		AA14000000000000000000AA /* UniFiControllerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UniFiControllerView.swift; sourceTree = "<group>"; };
@@ -212,6 +218,9 @@
 				9805D9A4CDDD0736B25F86BD /* NetworkMapModelTests.swift */,
 				AA0C000000000000000000AA /* SNMPTests.swift */,
 				AA0E000000000000000000AA /* SyslogParserTests.swift */,
+				AA3A000000000000000000AA /* ConnectionHealthTests.swift */,
+				AA3C000000000000000000AA /* PublicLookupPolicyTests.swift */,
+				AA3E000000000000000000AA /* StatusBoardWiFiTests.swift */,
 				AA10000000000000000000AA /* OUIEnterpriseTests.swift */,
 				AA1C000000000000000000AA /* ParserTests.swift */,
 			);
@@ -467,6 +476,9 @@
 				45EF9F720715477F97E272B4 /* NetworkMapModelTests.swift in Sources */,
 				AA0B000000000000000000AA /* SNMPTests.swift in Sources */,
 				AA0D000000000000000000AA /* SyslogParserTests.swift in Sources */,
+				AA39000000000000000000AA /* ConnectionHealthTests.swift in Sources */,
+				AA3B000000000000000000AA /* PublicLookupPolicyTests.swift in Sources */,
+				AA3D000000000000000000AA /* StatusBoardWiFiTests.swift in Sources */,
 				AA0F000000000000000000AA /* OUIEnterpriseTests.swift in Sources */,
 				AA1B000000000000000000AA /* ParserTests.swift in Sources */,
 			);

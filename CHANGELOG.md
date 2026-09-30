@@ -5,7 +5,7 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ## [1.5.3] — 2026-09-30
 
-**macOS 27 / Xcode 27 compatibility pass, a Status Board handoff fix, UniFi certificate pinning, and public-release prep.** Mostly a warning cleanup surfaced by building against the macOS 27 SDK with Swift 6.4. On top of that: one real behavioral bug fixed (the board's "Run Now" button), a security hardening of the UniFi login, and the licensing and privacy documentation needed before SNAP is shared publicly. Build, Release build, and all 90 tests pass clean. Deployment target stays at **macOS 13.0**.
+**macOS 27 / Xcode 27 compatibility pass, five behavioral fixes, UniFi certificate pinning, and public-release prep.** Mostly a warning cleanup surfaced by building against the macOS 27 SDK with Swift 6.4. On top of that: five behavioral fixes (the board's "Run Now" button, the Dashboard over-polling ipinfo.io, a System Health score that could read "Excellent" on a bad connection, hard-coded values in the Status Board Wi-Fi tile, and a menu bar status dot that judged a single ping), a security hardening of the UniFi login, and the licensing and privacy documentation needed before SNAP is shared publicly. Build, Release build, and all 122 tests (90 existing + 32 new) pass clean. Deployment target stays at **macOS 13.0**.
 
 ### Security — UniFi login uses certificate pinning (trust on first use)
 
@@ -18,6 +18,52 @@ The UniFi client used `PermissiveTLS`, which accepts **any** certificate, on the
 - **Plain-HTTP controller URLs are refused.** Credentials are never sent unencrypted.
 - The credential bar shows **Certificate pinned** (fingerprint on hover) with a **Forget** link. Pins are stored in UserDefaults under `unifi.certPins`, keyed by host:port. They're fingerprints, not secrets.
 - `PermissiveTLS` remains for the Network Map's read-only HTTP banner grabs, which send no credentials.
+
+### Fixed — Dashboard over-polled ipinfo.io (~2,900 requests/day)
+
+The Dashboard's Connection Summary card refreshes every 30 s, and each refresh repeated **all three** public lookups: `api.ipify.org`, `api6.ipify.org`, and `ipinfo.io/json`. That's ~2,900 ipinfo requests a day with the Dashboard open, well past ipinfo's free anonymous allowance. It's the likely reason ipinfo rate-limited this Mac and broke Visual Trace's hop geolocation back in v1.5.1. Now ([ConnectionSummaryCard.swift](SNAP/ConnectionSummaryCard.swift)):
+
+- **Public IP (ipify)** is re-checked when the card first opens, every 10 min, whenever the local network changes (interface, local address, gateway, SSID, or VPN state), and on a manual **Refresh**. A network change clears the old address, so the previous network's IP is never shown for the new one.
+- **ISP / ASN / city (ipinfo)** is fetched once per public IP and kept for 24 h. The request now names the address (`ipinfo.io/<ip>/json`) so each cache entry describes exactly one IP. A failure, including ipinfo's rate-limit response, is never cached and retries after 5 min instead of every 30 s.
+- The cache (`PublicInfoCache`) lives outside the card, because the card's model is recreated on every tab switch and a per-card cache would re-fetch on each Dashboard visit.
+- **Latency pings are unchanged**: 1.1.1.1 and the gateway every 30 s, since those feed the live readouts.
+- Net effect for a full day with the Dashboard open: **144 ipify checks and 1 ipinfo lookup, down from 2,880 each**, asserted by `PublicLookupPolicyTests` (8 tests). With ipinfo failing all day, retries are capped at 288.
+
+### Fixed — System Health could read "Excellent" on a bad connection
+
+The Status Board's System Health score ignored jitter and Wi-Fi signal, charged only 0.5 points per 1 % of packet loss, and applied a 40 ms internet-scale latency cutoff to *gateway* pings, which normally answer in 1–5 ms. The Gateway Latency tile's label had the opposite flaw: it classified only the **single latest ping**. So an unscrubbed v1.5.2 screenshot showed **98 "Excellent"** beside a 50 ms average, **63.7 ms jitter**, Wi-Fi quality 37, and a "Healthy · gateway" label from one 5 ms ping.
+
+Both tiles, and the menu bar dot (below), now use one shared model, `ConnectionHealth` ([StatusBoardMonitors.swift](SNAP/StatusBoardMonitors.swift)), so they can't contradict each other:
+
+- **Gateway-scale costs** over the 5-minute ping window. Latency costs nothing up to 10 ms, then 0.5 pt/ms (capped at 30). Jitter costs nothing up to 5 ms, then 1 pt/ms (capped at 25). Loss is 3 pts per % (capped at 80). Wi-Fi quality below 60 costs 0.5 pt per point (capped at 20), and only while Wi-Fi carries the default route. Each alert in the last hour costs 4 pts (capped at 20).
+- **Calibrated together**: each gateway factor alone crosses from "Healthy" to "Slow" / "Unstable" exactly where the score drops from 90 (Excellent) to 89 (Good). Costs are rounded to 0.1 before comparing; otherwise one lost ping in 30 (3.333…% × 3 = 10.000000000000002) would tip Healthy/90 into Slow/89.
+- **The summary names what's wrong**, worst first: e.g. "Jitter 64 ms · Latency 50 ms · Weak Wi‑Fi". It says "Latency stable · No packet loss" only when that's true.
+- **Gateway label** gains **Unstable** (jitter or loss dominant, as opposed to Slow) and **Not responding** (every ping timed out, previously just "Degraded").
+- **No more "Excellent" with no data**: before the first sample the tile shows "—" and "Measuring".
+- Score colors now match the grades: green for Good and above, amber for Fair, red below.
+- The Wi-Fi tile's quality ring uses the same RSSI mapping as the score.
+- The screenshots' own numbers are now regression tests: 98 → **43 "Degraded"** and the marketing shot → **55 "Fair"**, both with a "Degraded" gateway (`ConnectionHealthTests`, 14 tests).
+
+### Fixed — Status Board Wi-Fi tile showed hard-coded values
+
+Four of the six detail cells in the Wi-Fi tile were mockup placeholders that were never wired to data, carried over from the v1.5.2 POC. **TX Rate** was always "1441", **Security** always "WPA3", **Noise** always "−95", **MCS** always "—", and **SNR** was computed as RSSI + 95 (assuming that fixed noise floor). Only RSSI and the quality ring were real. A v1.5.2 screenshot shows it: the Dashboard reported a real 288 Mbps while the Status Board said 1441. Now ([StatusBoardView.swift](SNAP/StatusBoardView.swift) `StatusBoardWiFi`, [StatusBoardTiles.swift](SNAP/StatusBoardTiles.swift) `SBWiFiTile`):
+
+- **Every cell is a live CoreWLAN reading**, or "—" when unavailable: RSSI, **SNR** (RSSI minus measured noise), **TX Rate** in Mbps, **Security**, **Noise**, and **PHY**.
+- **MCS is replaced by PHY** (Wi-Fi 4 / 5 / 6 / 6E / 7). CoreWLAN doesn't expose the MCS index. Wi-Fi 7 and the OWE security modes are matched by raw value, so SNAP still builds on SDKs that predate their Swift names.
+- **Colors mean something**: SNR is green at ≥ 25 dB, amber at 15–25, and red below. Security is red for Open or WEP networks.
+- **Security names are shared with the Dashboard** (`CWSecurity.snapLabel`), replacing the Dashboard's inline copy, so the two can't disagree. OWE networks now show "OWE" instead of "Unknown".
+- When not associated, the tile says "Not associated" instead of "Hidden".
+- Verified live on a Wi-Fi 6E / WPA3 network: TX Rate read 432 Mbps (the old tile said 1441). Noise and security happened to match the placeholders on that particular network, which is why they looked plausible.
+
+### Fixed — menu bar status dot judged a single ping
+
+The menu bar dot was green whenever the *latest* gateway ping was under 40 ms, and turned red on any single dropped ping. It ignored jitter and loss entirely and flapped on one lost packet. It now uses the shared `ConnectionHealth` model over the same 5-minute window as the Status Board, so **the dot, the Gateway Latency tile, and the System Health tile always agree** ([MenuBarView.swift](SNAP/MenuBarView.swift)):
+
+- **Green** when healthy, **amber** when slow or unstable, **red** when degraded or not responding. `MenuBarMonitor` now publishes the `gatewayState`, and the Gateway tile reads that same value.
+- **Outages are still caught quickly**: two timeouts in a row (≈ 20 s) mean "Router not responding" right away, whatever the rest of the window says. A single dropped ping no longer turns the dot red.
+- **Recovery is honest**: after an outage the dot stays amber while the lost pings are still in the window (up to ~5 min), then returns to green.
+- **The tooltip explains the color**, e.g. "SNAP · Gateway unstable · Jitter 20 ms · No packet loss (5 ms gw)".
+- `LatencyStats` gained `trailingTimeouts` and an `init(history:)`, so tests can replay real ping sequences. They replay a full outage-and-recovery timeline (green → one drop stays green → two drops red → recovery amber → green) and a spiky gateway that the old rule showed green because its latest ping was 3 ms.
 
 ### Changed — credited to Sevag Bardakjian
 

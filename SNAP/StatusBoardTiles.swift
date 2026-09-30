@@ -466,10 +466,14 @@ private struct SBBandwidthTile: View {
 // ─── WI-FI — quality ring + detail grid
 private struct SBWiFiTile: View {
     @State private var ssid = "—"
-    @State private var rssi = 0
     @State private var band = ""
+    /// Latest CoreWLAN reading; nil until the first read or when there's
+    /// no Wi-Fi interface.
+    @State private var info: StatusBoardWiFi.Info?
     @State private var timer: Timer?
     @ObservedObject private var themeMgr = ThemeManager.shared
+
+    private var rssi: Int { info?.rssi ?? 0 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -505,19 +509,37 @@ private struct SBWiFiTile: View {
         .onDisappear { timer?.invalidate(); timer = nil }
     }
 
+    /// Every cell is a live CoreWLAN reading, or "—" when unavailable. (In
+    /// v1.5.2 TX Rate, Security, Noise, and MCS were hard-coded mockup
+    /// values and SNR was RSSI + 95.) MCS was replaced by PHY: CoreWLAN
+    /// doesn't expose the MCS index.
     private var wifiDetailGrid: some View {
         Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
             GridRow {
-                detailCell("RSSI", "\(rssi)", rssiColor)
-                detailCell("SNR", snrText, NS.green)
-                detailCell("TX Rate", "1441", NS.text1)
+                detailCell("RSSI", rssi == 0 ? "—" : "\(rssi)", rssiColor)
+                detailCell("SNR", info?.snr.map { "\($0)" } ?? "—", snrColor)
+                detailCell("TX Rate", info?.txRateMbps.map { "\(Int($0.rounded())) Mbps" } ?? "—",
+                           info?.txRateMbps == nil ? NS.text3 : NS.text1)
             }
             GridRow {
-                detailCell("Security", "WPA3", NS.text1)
-                detailCell("Noise", "−95", NS.text1)
-                detailCell("MCS", "—", NS.text2)
+                detailCell("Security", info?.security ?? "—", securityColor)
+                detailCell("Noise", info?.noise.map { "\($0)" } ?? "—",
+                           info?.noise == nil ? NS.text3 : NS.text1)
+                detailCell("PHY", info?.standard ?? "—",
+                           info?.standard == nil ? NS.text3 : NS.text1)
             }
         }
+    }
+    /// ≥ 25 dB is a clean link, 15–25 is usable, below 15 is struggling.
+    private var snrColor: Color {
+        guard let snr = info?.snr else { return NS.text3 }
+        if snr >= 25 { return NS.green }
+        if snr >= 15 { return NS.amber }
+        return NS.red
+    }
+    private var securityColor: Color {
+        guard info?.security != nil else { return NS.text3 }
+        return info?.securityInsecure == true ? NS.red : NS.text1
     }
     private func detailCell(_ k: String, _ v: String, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 1) {
@@ -527,20 +549,13 @@ private struct SBWiFiTile: View {
         }
     }
 
-    /// Wi-Fi "quality" score = mapping of RSSI to 0…100. −40dBm=100, −85dBm=0.
-    private var qualityScore: Int {
-        guard rssi != 0 else { return 0 }
-        let s = 100.0 - (Double(-40 - rssi) * (100.0 / 45.0))
-        return Int(max(0, min(100, s)))
-    }
+    /// RSSI → 0…100, via the mapping the health score also uses.
+    private var qualityScore: Int { ConnectionHealth.wifiQuality(rssi: rssi) }
     private var qualityFraction: Double { Double(qualityScore) / 100 }
     private var qualityColor: Color {
         if qualityScore >= 70 { return NS.green }
         if qualityScore >= 40 { return NS.amber }
         return NS.red
-    }
-    private var snrText: String {
-        rssi == 0 ? "—" : "\(rssi + 95)"
     }
     private var rssiColor: Color {
         if rssi == 0 { return NS.text3 }
@@ -555,11 +570,11 @@ private struct SBWiFiTile: View {
     }
     private func refresh() {
         DispatchQueue.global(qos: .utility).async {
-            let info = StatusBoardWiFi.read()
+            let reading = StatusBoardWiFi.read()
             DispatchQueue.main.async {
-                ssid = info?.ssid ?? "Not associated"
-                rssi = info?.rssi ?? 0
-                band = info?.band ?? ""
+                info = reading
+                ssid = reading.map { $0.rssi == 0 ? "Not associated" : $0.ssid } ?? "Not associated"
+                band = reading?.rssi == 0 ? "" : (reading?.band ?? "")
             }
         }
     }
@@ -570,15 +585,19 @@ private struct SBAlertsTile: View {
     @ObservedObject private var alerts = AlertManager.shared
     @ObservedObject private var mon = MenuBarMonitor.shared
     @ObservedObject private var themeMgr = ThemeManager.shared
+    /// Wi-Fi signal (0–100), only while Wi-Fi carries the default route —
+    /// on Ethernet a weak Wi-Fi signal doesn't affect the connection.
+    @State private var wifiQuality: Int?
+    @State private var wifiTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 14) {
                 ZStack {
-                    RingGauge(progress: Double(healthScore) / 100, lineWidth: 7,
+                    RingGauge(progress: Double(assessment.score ?? 0) / 100, lineWidth: 7,
                               color: scoreColor)
                     VStack(spacing: 0) {
-                        Text(verbatim: "\(healthScore)")
+                        Text(verbatim: assessment.score.map(String.init) ?? "—")
                             .font(.system(size: 24, weight: .heavy, design: .monospaced))
                             .foregroundStyle(scoreColor)
                         Text("SCORE").font(.system(size: 8, weight: .bold))
@@ -587,10 +606,10 @@ private struct SBAlertsTile: View {
                 }
                 .frame(width: 88, height: 88)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(verbatim: healthGrade)
+                    Text(verbatim: assessment.grade)
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(scoreColor)
-                    Text(verbatim: healthDesc)
+                    Text(verbatim: assessment.summary)
                         .font(.system(size: 11))
                         .foregroundStyle(NS.text2)
                         .lineLimit(2)
@@ -607,6 +626,27 @@ private struct SBAlertsTile: View {
             timelineStrip
                 .padding(.top, 6)
                 .overlay(Divider().background(NS.border), alignment: .top)
+        }
+        .onAppear { readWiFi(); startWiFi() }
+        .onDisappear { wifiTimer?.invalidate(); wifiTimer = nil }
+    }
+
+    private func startWiFi() {
+        wifiTimer?.invalidate()
+        wifiTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in
+            Task { @MainActor in readWiFi() }
+        }
+    }
+
+    private func readWiFi() {
+        DispatchQueue.global(qos: .utility).async {
+            let info = StatusBoardWiFi.read()
+            let primary = RouteInfo.defaultInterface()
+            let q: Int? = {
+                guard let info, info.rssi != 0, info.iface != nil, info.iface == primary else { return nil }
+                return ConnectionHealth.wifiQuality(rssi: info.rssi)
+            }()
+            DispatchQueue.main.async { wifiQuality = q }
         }
     }
 
@@ -650,48 +690,24 @@ private struct SBAlertsTile: View {
         switch sev { case 2: return NS.red; case 1: return NS.amber; default: return NS.green }
     }
 
-    // Composite score: 100 minus penalties for latency, loss, and recent alerts.
-    private var healthScore: Int {
-        var score = 100.0
+    /// Scored by the shared `ConnectionHealth` model — the same one behind
+    /// the Gateway Latency tile's label, so the two can't disagree.
+    private var assessment: ConnectionHealth.Assessment {
         let stats = mon.latencyStats
-        if let avg = stats.avg {
-            if avg > 40 { score -= min(30, (avg - 40) / 5) }
-        } else if !mon.latencyHistory.isEmpty {
-            score -= 20 // no successful pings recently
-        }
-        score -= stats.lossPct * 0.5
         let recentAlerts = alerts.recentEvents.filter {
             Date().timeIntervalSince($0.date) < 3600
         }.count
-        score -= Double(recentAlerts) * 4
-        return Int(max(0, min(100, score)))
+        return ConnectionHealth.assess(avgMs: stats.avg, jitterMs: stats.jitter,
+                                       lossPct: stats.lossPct, samples: stats.sampleCount,
+                                       wifiQuality: wifiQuality, recentAlerts: recentAlerts,
+                                       trailingTimeouts: stats.trailingTimeouts)
     }
+    /// Green for Good and above, amber for Fair, red below — matches the grade.
     private var scoreColor: Color {
-        if healthScore >= 80 { return NS.green }
-        if healthScore >= 50 { return NS.amber }
+        guard let s = assessment.score else { return NS.text3 }
+        if s >= 75 { return NS.green }
+        if s >= 50 { return NS.amber }
         return NS.red
-    }
-    private var healthGrade: String {
-        switch healthScore {
-        case 90...: return "Excellent"
-        case 75..<90: return "Good"
-        case 50..<75: return "Fair"
-        case 25..<50: return "Degraded"
-        default: return "Poor"
-        }
-    }
-    private var healthDesc: String {
-        let stats = mon.latencyStats
-        var parts: [String] = []
-        if let avg = stats.avg {
-            parts.append(avg < 40 ? "Latency stable" : "Latency \(Int(avg))ms")
-        }
-        if stats.lossPct > 0 {
-            parts.append(String(format: "%.0f%% loss", stats.lossPct))
-        } else {
-            parts.append("No packet loss")
-        }
-        return parts.joined(separator: " · ")
     }
     private var cleanForText: String {
         guard let last = alerts.recentEvents.first else { return "CLEAN ALL DAY" }
@@ -892,22 +908,30 @@ private struct SBLatencyTile: View {
         guard let ms = mon.gatewayLatencyMs else { return 0 }
         return min(ms / 200, 1)   // ring fills as latency approaches 200ms
     }
+    /// Judged on the whole sample window with the same costs as the System
+    /// Health score. It used to classify only the latest single ping, which
+    /// could read "Healthy" beside a 50 ms average and 64 ms of jitter.
+    /// Same value the menu bar dot is colored from.
+    private var gatewayState: ConnectionHealth.GatewayState { mon.gatewayState }
     private var ringColor: Color {
-        switch mon.health {
-        case .good: return NS.green
-        case .warn: return NS.amber
-        case .bad, .offline: return NS.red
-        case .unknown: return NS.text3
+        if mon.health == .offline { return NS.red }
+        switch gatewayState {
+        case .healthy:                 return NS.green
+        case .slow, .unstable:         return NS.amber
+        case .degraded, .notResponding: return NS.red
+        case .measuring:               return NS.text3
         }
     }
     private var stateColor: Color { ringColor }
     private var stateLabel: String {
-        switch mon.health {
-        case .good: return "Healthy · gateway"
-        case .warn: return "Slow · gateway"
-        case .bad:  return "Degraded · gateway"
-        case .offline: return "Offline"
-        case .unknown: return "Checking…"
+        if mon.health == .offline { return "Offline" }
+        switch gatewayState {
+        case .healthy:       return "Healthy · gateway"
+        case .slow:          return "Slow · gateway"
+        case .unstable:      return "Unstable · gateway"
+        case .degraded:      return "Degraded · gateway"
+        case .notResponding: return "Not responding"
+        case .measuring:     return "Checking…"
         }
     }
     private var lossColor: Color {

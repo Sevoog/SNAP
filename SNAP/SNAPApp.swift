@@ -177,13 +177,22 @@ struct MenuBarLabel: View {
         }
     }
 
+    /// Names the state and why, from the same model as the Status Board's
+    /// Gateway Latency tile — e.g. "SNAP · Gateway unstable · Jitter 20 ms ·
+    /// No packet loss (5 ms gw)".
     private var tooltip: String {
-        switch mon.health {
-        case .good:    return "SNAP · Network healthy (\(latency))"
-        case .warn:    return "SNAP · Network slow (\(latency))"
-        case .bad:     return "SNAP · Network degraded (\(latency))"
-        case .offline: return "SNAP · Offline"
-        case .unknown: return "SNAP · Checking…"
+        if mon.health == .offline { return "SNAP · Offline" }
+        let s = mon.latencyStats
+        let why = ConnectionHealth.assess(avgMs: s.avg, jitterMs: s.jitter, lossPct: s.lossPct,
+                                          samples: s.sampleCount, wifiQuality: nil,
+                                          recentAlerts: 0, trailingTimeouts: s.trailingTimeouts).summary
+        switch mon.gatewayState {
+        case .measuring:     return "SNAP · Checking…"
+        case .healthy:       return "SNAP · Network healthy · \(why) (\(latency))"
+        case .slow:          return "SNAP · Gateway slow · \(why) (\(latency))"
+        case .unstable:      return "SNAP · Gateway unstable · \(why) (\(latency))"
+        case .degraded:      return "SNAP · Gateway degraded · \(why) (\(latency))"
+        case .notResponding: return "SNAP · Router not responding"
         }
     }
 

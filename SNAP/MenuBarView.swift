@@ -37,9 +37,12 @@ final class MenuBarMonitor: ObservableObject {
     @Published var isOnline: Bool = true
     @Published var activeInterface: String = "en0"
 
-    // Network health — derived from a periodic gateway ping (every 10 s).
+    // Network health — derived from a periodic gateway ping (every 10 s),
+    // judged over the whole history window by the shared `ConnectionHealth`
+    // model, so the dot always matches the Gateway Latency tile.
     enum Health { case unknown, good, warn, bad, offline }
     @Published var health: Health = .unknown
+    @Published var gatewayState: ConnectionHealth.GatewayState = .measuring
     @Published var gatewayLatencyMs: Double?
     // Rolling latency history for the Gateway Latency tile's sparkline +
     // min/max/avg/jitter/loss stats. Timeouts stored as nil so we can
@@ -125,7 +128,6 @@ final class MenuBarMonitor: ObservableObject {
             let ms = Self.singlePing(host: gw)
             DispatchQueue.main.async {
                 self.gatewayLatencyMs = ms
-                self.health = Self.classify(latency: ms, online: self.isOnline)
                 // Roll the history buffer — nil samples represent timeouts and
                 // are preserved (unlike Favorites history) so we can compute
                 // loss % for the tile.
@@ -133,11 +135,19 @@ final class MenuBarMonitor: ObservableObject {
                 if self.latencyHistory.count > Self.latencyHistoryMax {
                     self.latencyHistory.removeFirst(self.latencyHistory.count - Self.latencyHistoryMax)
                 }
+                // Judge the window, not this one ping. It used to be `ms < 40`
+                // → green, and any single dropped ping → red.
+                let s = self.latencyStats
+                self.gatewayState = ConnectionHealth.gatewayState(
+                    avgMs: s.avg, jitterMs: s.jitter, lossPct: s.lossPct,
+                    samples: s.sampleCount, trailingTimeouts: s.trailingTimeouts)
+                self.health = self.isOnline ? Self.dotHealth(self.gatewayState) : .offline
             }
         }
     }
 
-    /// Aggregates of the latency history — used by the Gateway Latency tile.
+    /// Aggregates of the latency history — used by the Gateway Latency and
+    /// System Health tiles and the menu bar dot.
     struct LatencyStats {
         let min: Double?
         let avg: Double?
@@ -145,31 +155,38 @@ final class MenuBarMonitor: ObservableObject {
         let jitter: Double?
         let lossPct: Double  // 0…100
         let sampleCount: Int
-    }
+        /// Timeouts in a row at the end of the history — the "down right
+        /// now" signal (see `ConnectionHealth.outageTimeouts`).
+        let trailingTimeouts: Int
 
-    var latencyStats: LatencyStats {
-        let all = latencyHistory
-        let hits = all.compactMap { $0 }
-        let lossPct = all.isEmpty ? 0 : Double(all.count - hits.count) / Double(all.count) * 100
-        guard !hits.isEmpty else {
-            return LatencyStats(min: nil, avg: nil, max: nil, jitter: nil,
-                                lossPct: lossPct, sampleCount: all.count)
+        init(history all: [Double?]) {
+            let hits = all.compactMap { $0 }
+            sampleCount = all.count
+            lossPct = all.isEmpty ? 0 : Double(all.count - hits.count) / Double(all.count) * 100
+            trailingTimeouts = all.reversed().prefix { $0 == nil }.count
+            guard !hits.isEmpty else {
+                min = nil; avg = nil; max = nil; jitter = nil
+                return
+            }
+            let mean = hits.reduce(0, +) / Double(hits.count)
+            min = hits.min()
+            max = hits.max()
+            avg = mean
+            // Mean absolute deviation as a light jitter proxy.
+            jitter = hits.map { abs($0 - mean) }.reduce(0, +) / Double(hits.count)
         }
-        let mn = hits.min()!
-        let mx = hits.max()!
-        let avg = hits.reduce(0, +) / Double(hits.count)
-        // Mean absolute deviation as a light jitter proxy.
-        let jit = hits.map { abs($0 - avg) }.reduce(0, +) / Double(hits.count)
-        return LatencyStats(min: mn, avg: avg, max: mx, jitter: jit,
-                            lossPct: lossPct, sampleCount: all.count)
     }
 
-    private static func classify(latency: Double?, online: Bool) -> Health {
-        guard online else { return .offline }
-        guard let ms = latency else { return .bad }
-        if ms < 40 { return .good }
-        if ms < 150 { return .warn }
-        return .bad
+    var latencyStats: LatencyStats { LatencyStats(history: latencyHistory) }
+
+    /// Dot color bucket for a gateway state (offline is decided separately).
+    static func dotHealth(_ state: ConnectionHealth.GatewayState) -> Health {
+        switch state {
+        case .measuring:               return .unknown
+        case .healthy:                 return .good
+        case .slow, .unstable:         return .warn
+        case .degraded, .notResponding: return .bad
+        }
     }
 
     /// Synchronous one-shot ping. Returns nil if no response.

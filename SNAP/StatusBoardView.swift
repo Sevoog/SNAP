@@ -273,7 +273,27 @@ struct StatusBoardView: View {
 // MARK: - WiFi snapshot helper (kept light — no listener / no live updates)
 
 enum StatusBoardWiFi {
-    struct Info { let ssid: String; let rssi: Int; let band: String }
+    struct Info {
+        let ssid: String; let rssi: Int; let band: String
+        /// BSD name (e.g. "en0") — lets the health score tell whether Wi-Fi
+        /// is actually carrying the default route.
+        let iface: String?
+        // Live link details for the tile's detail grid; nil when CoreWLAN
+        // doesn't report them (e.g. not associated). These replace values
+        // that were hard-coded from the v1.5.2 mockup.
+        let noise: Int?
+        let txRateMbps: Double?
+        let security: String?
+        /// Open or WEP — effectively unencrypted.
+        let securityInsecure: Bool
+        let standard: String?
+
+        /// Signal-to-noise ratio in dB, when both readings exist.
+        var snr: Int? {
+            guard rssi != 0, let n = noise else { return nil }
+            return rssi - n
+        }
+    }
     static func read() -> Info? {
         guard let i = CWWiFiClient.shared().interface() else { return nil }
         let s = DemoMode.isActive ? DemoMode.ssid : (i.ssid() ?? "Hidden")
@@ -290,7 +310,66 @@ enum StatusBoardWiFi {
             @unknown default: return "Wi-Fi · ch \(ch)"
             }
         }()
-        return Info(ssid: s, rssi: r, band: band)
+        let associated = r != 0
+        let noise = i.noiseMeasurement()
+        let tx = i.transmitRate()
+        let sec = i.security()
+        return Info(ssid: s, rssi: r, band: band, iface: i.interfaceName,
+                    noise: associated && noise != 0 ? noise : nil,
+                    txRateMbps: associated && tx > 0 ? tx : nil,
+                    security: associated ? sec.snapLabel : nil,
+                    securityInsecure: associated && [.none, .WEP, .dynamicWEP].contains(sec),
+                    standard: associated
+                        ? standard(i.activePHYMode(), sixGHz: i.wlanChannel()?.channelBand == .band6GHz)
+                        : nil)
+    }
+
+    /// Marketing name for the active PHY mode; 802.11ax on 6 GHz is Wi-Fi 6E.
+    static func standard(_ mode: CWPHYMode, sixGHz: Bool) -> String? {
+        switch mode {
+        case .mode11ax: return sixGHz ? "Wi-Fi 6E" : "Wi-Fi 6"
+        case .mode11ac: return "Wi-Fi 5"
+        case .mode11n:  return "Wi-Fi 4"
+        case .mode11a:  return "802.11a"
+        case .mode11g:  return "802.11g"
+        case .mode11b:  return "802.11b"
+        case .modeNone: return nil
+        default:
+            // 802.11be (raw 7) by value, so this builds on SDKs that predate
+            // its Swift name.
+            return mode.rawValue == 7 ? "Wi-Fi 7" : nil
+        }
+    }
+}
+
+extension CWSecurity {
+    /// Display name shared by the Dashboard hero card and the Status Board
+    /// Wi-Fi tile, so the two always agree.
+    var snapLabel: String {
+        switch self {
+        case .none:               return "Open"
+        case .WEP:                return "WEP"
+        case .wpaPersonal:        return "WPA"
+        case .wpaPersonalMixed:   return "WPA/WPA2"
+        case .wpa2Personal:       return "WPA2"
+        case .personal:           return "Personal"
+        case .dynamicWEP:         return "Dynamic WEP"
+        case .wpaEnterprise:      return "WPA Enterprise"
+        case .wpaEnterpriseMixed: return "WPA/WPA2 Enterprise"
+        case .wpa2Enterprise:     return "WPA2 Enterprise"
+        case .enterprise:         return "Enterprise"
+        case .wpa3Personal:       return "WPA3"
+        case .wpa3Enterprise:     return "WPA3 Enterprise"
+        case .wpa3Transition:     return "WPA2/WPA3"
+        default:
+            // OWE (14) and OWE Transition (15) by value, so this builds on
+            // SDKs that predate their Swift names.
+            switch rawValue {
+            case 14: return "OWE"
+            case 15: return "OWE Transition"
+            default: return "Unknown"
+            }
+        }
     }
 }
 

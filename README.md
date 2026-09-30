@@ -68,7 +68,7 @@ No accounts, analytics, telemetry, or crash reporting. See [Privacy & Security](
 - **Connection Quality Score** — 0–100 rating (Excellent → Critical) derived from latency, loss, jitter, retransmits, and DNS responsiveness
 - **Sandboxless Networking** — Direct `getifaddrs` / `sysctl` / raw UDP syscalls — no `netstat` spawning for hot-path sampling
 - **Dark-Only UI** — Custom 3-column layout (icon rail + sidebar + main) with NS design tokens throughout
-- **XCTest target** — 86 unit tests across SubnetCalculator, DNSWire, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip + sysObjectID), Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, and WiFi band/channel helpers — *added in v1.2.3, expanded through v1.4.3*
+- **XCTest target** — 122 unit tests across SubnetCalculator, DNSWire, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip + sysObjectID), Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, WiFi band/channel helpers, connection-health scoring (incl. menu bar dot outage timelines), public-lookup caching, and Status Board Wi-Fi readings — *added in v1.2.3, expanded through v1.5.3*
 
 ## Requirements
 - macOS 13.0+
@@ -87,7 +87,8 @@ These happen without a click, while the view in question is open:
 |---|---|---|
 | From launch, every 10 s, for as long as SNAP runs (it stays in the menu bar after the window closes) | Your router (default gateway) | Ping, for the menu bar health dot |
 | While the sidebar is visible, every 15 s | `www.apple.com` (falls back to `www.cloudflare.com`, then `www.google.com`) | A small HTTPS request to confirm you're online |
-| While the Dashboard is open, every 30 s | `api.ipify.org`, `api6.ipify.org`, `ipinfo.io` | Your public IPv4/IPv6 address, then ISP, ASN, and city. **These services see your public IP.** |
+| While the Dashboard is open: when it first opens, every 10 min, whenever your network changes, and when you press Refresh | `api.ipify.org`, `api6.ipify.org` | Your public IPv4/IPv6 address. **These services see your public IP.** |
+| Once per public IP per day (sooner if you press Refresh) | `ipinfo.io` | ISP, ASN, and city for that address. **ipinfo sees your public IP.** |
 | While the Dashboard is open, every 30 s | `1.1.1.1` and your router | Ping, for the latency readouts |
 | Once favorites are loaded, every 30 s (10 s while the Status Board is open) | Hosts you added as favorites | Ping |
 | When the menu bar popover or the Network Info tool opens | `api.ipify.org` | Your public IP |
@@ -160,17 +161,21 @@ To remove everything SNAP has stored: delete the app, run `defaults delete com.s
 open SNAP.xcodeproj
 # ⌘⇧K — Clean Build Folder
 # ⌘R   — Build & Run
-# ⌘U   — Run tests (86 tests in SNAPTests)
+# ⌘U   — Run tests (122 tests in SNAPTests)
 ```
 
 ## Version
 Current: **v1.5.3** — see [CHANGELOG.md](CHANGELOG.md)
 
 ### What's new in v1.5.3 — macOS 27 / Xcode 27 compatibility, UniFi pinning, release prep
-Mostly a warning cleanup, plus one real bug fix, a security hardening, and release prep. Builds clean against the macOS 27 SDK with Swift 6.4; all 90 tests pass. Deployment target stays at macOS 13.0.
+Mostly a warning cleanup, plus five behavioral fixes, a security hardening, and release prep. Builds clean against the macOS 27 SDK with Swift 6.4; all 122 tests pass. Deployment target stays at macOS 13.0.
 - **UniFi certificate pinning** — the UniFi login used to accept any certificate on the connection carrying your admin credentials. Now a self-signed controller certificate is shown and approved once, then pinned; a changed certificate is refused inside the TLS handshake, before credentials are sent. Plain-HTTP controller URLs are refused.
 - **[LICENSE](LICENSE) + [Privacy & Security](#privacy--security)** — proprietary license (free to use, source not open), and an audited list of everything SNAP contacts, stores, and can do on your network.
 - **Credited to Sevag Bardakjian** — About window, file headers, session-report footer, and copyright string.
+- **Dashboard stops hammering ipinfo.io** — it used to repeat the public-IP and ISP lookups on every 30-second refresh, about 2,900 ipinfo requests a day, enough to get rate-limited. Now the public IP is re-checked every 10 min or when your network changes, and ISP details are fetched once per IP per day. Latency pings still run every 30 s.
+- **System Health tells the truth** — the score now counts jitter, packet loss, and Wi-Fi signal on router-scale thresholds, and the Gateway Latency label uses the same model over the whole sample window instead of the latest ping. A connection that used to score 98 "Excellent" next to 64 ms of jitter now reads 43 "Degraded".
+- **Real Wi-Fi details on the Status Board** — TX Rate, Security, Noise, and SNR were hard-coded mockup values (TX Rate always said 1441). All six cells are now live CoreWLAN readings; MCS is replaced by PHY (Wi-Fi 4/5/6/6E/7), since CoreWLAN doesn't expose MCS.
+- **Menu bar dot judges the last 5 minutes** — it used to go green or red on a single ping. It now uses the same model as the Status Board, so all three agree. It still turns red ~20 s into an outage, and its tooltip explains the color.
 - **Status Board "Run Now" actually runs a test now** — it previously only switched tabs *underneath a board that was still covering them*, so nothing happened. Added an autostart handoff token, made board dismissal mode-aware (in-window boards come down, detached second-monitor boards stay up), and forced the internet pane so the test isn't run behind the iPerf3 view.
 - **All cross-tool handoffs fixed, not just Speed Test** — `ConsumeHandoffModifier` only fired on `.onAppear`, so a handoff to a tab you were *already* on was never consumed. "Send to Ping" while sitting on the Ping tab was silently broken too. Root cause was a missing `@ObservedObject` — the same SwiftUI view-diffing trap as the v1.5.0 theme-propagation bugs.
 - **Swift 6 concurrency (14 warnings → 0)** — marked four pure-computation statics `nonisolated` (`dnsPing`, `runNettop`, `parse`, `ping`) since a `@MainActor` class also isolates its statics, and wrapped four `Timer`/`asyncAfter` callbacks in `Task { @MainActor in … }`.

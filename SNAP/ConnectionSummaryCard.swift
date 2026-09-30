@@ -61,7 +61,9 @@ final class ConnectionSummary: ObservableObject {
     @Published var isRefreshing: Bool = false
     @Published var lastRefresh:  Date? = nil
 
-    func refresh() async {
+    /// `force` (the Refresh button) also repeats the public-IP and ISP
+    /// lookups, which are otherwise cached — see `PublicInfoCache`.
+    func refresh(force: Bool = false) async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
@@ -115,28 +117,56 @@ final class ConnectionSummary: ObservableObject {
         gatewayVendor = gw.vendor
         dnsServers = dns
 
-        // Stage 3: public network
-        async let v4Task:    String? = Self.fetchPublicIPv4()
-        async let v6Task:    String? = Self.fetchPublicIPv6()
-        async let geoTask:   GeoFields = Self.fetchGeo()
-        async let inetPing:  Double? = Self.pingOnce("1.1.1.1")
+        // Stage 3: public network. The latency pings run every refresh — they
+        // feed the live readouts. The public-IP and ISP lookups are cached
+        // and repeated only when the network changes, every 10 min, or on a
+        // manual Refresh.
+        let cache = PublicInfoCache.shared
+        cache.noteNetwork([iface, localIPv4, gw.ip, ssid, vpnActive ? "vpn" : nil]
+                            .map { $0 ?? "-" }.joined(separator: "|"))
+        let now = Date()
+        async let inetPing: Double? = Self.pingOnce("1.1.1.1")
 
-        let (v4, v6, geo, inetMs) = await (v4Task, v6Task, geoTask, inetPing)
+        if PublicLookupPolicy.needsIPCheck(force: force, lastCheck: cache.ipCheckedAt, now: now) {
+            async let v4Task: String? = Self.fetchPublicIPv4()
+            async let v6Task: String? = Self.fetchPublicIPv6()
+            let (v4, v6) = await (v4Task, v6Task)
+            // Only a successful lookup counts; a failure retries next refresh.
+            if v4 != nil || v6 != nil {
+                cache.publicIPv4 = v4
+                cache.publicIPv6 = v6
+                cache.ipCheckedAt = now
+            }
+        }
+        if let ip = cache.publicIPv4,
+           PublicLookupPolicy.needsGeo(force: force, publicIPv4: ip,
+                                       fetchedAt: cache.geoByIP[ip]?.fetchedAt,
+                                       failedAt: cache.geoFailedAt[ip], now: now) {
+            if let fields = await Self.fetchGeo(ip: ip) {
+                cache.geoByIP[ip] = (fields, now)
+                cache.geoFailedAt[ip] = nil
+            } else {
+                cache.geoFailedAt[ip] = now
+            }
+        }
+        let geo = cache.publicIPv4.flatMap { cache.geoByIP[$0]?.fields }
+
+        let inetMs = await inetPing
         let gwMs: Double? = (gw.ip != nil) ? await Self.pingOnce(gw.ip!) : nil
-        publicIPv4 = DemoMode.isActive ? DemoMode.publicIPv4 : v4
-        publicIPv6 = v6
-        isp = geo.isp
-        asn = geo.asn
-        city = geo.city
-        region = geo.region
-        country = geo.country
+        publicIPv4 = DemoMode.isActive ? DemoMode.publicIPv4 : cache.publicIPv4
+        publicIPv6 = cache.publicIPv6
+        isp = geo?.isp
+        asn = geo?.asn
+        city = geo?.city
+        region = geo?.region
+        country = geo?.country
         gatewayLatencyMs  = gwMs
         internetLatencyMs = inetMs
 
         lastRefresh = Date()
     }
 
-    private struct GeoFields {
+    fileprivate struct GeoFields {
         let isp: String?
         let asn: String?
         let city: String?
@@ -223,25 +253,8 @@ final class ConnectionSummary: ObservableObject {
         }()
         let rssi = iface.rssiValue() != 0 ? Int(iface.rssiValue()) : nil
         let tx   = iface.transmitRate() > 0 ? iface.transmitRate() : nil
-        let sec: String? = {
-            switch iface.security() {
-            case .none:          return "Open"
-            case .WEP:           return "WEP"
-            case .wpaPersonal:   return "WPA"
-            case .wpaPersonalMixed: return "WPA/WPA2"
-            case .wpa2Personal:  return "WPA2"
-            case .personal:      return "Personal"
-            case .dynamicWEP:    return "Dynamic WEP"
-            case .wpaEnterprise: return "WPA Enterprise"
-            case .wpaEnterpriseMixed: return "WPA/WPA2 Enterprise"
-            case .wpa2Enterprise: return "WPA2 Enterprise"
-            case .enterprise:    return "Enterprise"
-            case .wpa3Personal:  return "WPA3"
-            case .wpa3Enterprise: return "WPA3 Enterprise"
-            case .wpa3Transition: return "WPA2/WPA3"
-            default:             return "Unknown"
-            }
-        }()
+        // Shared with the Status Board Wi-Fi tile so the two always agree.
+        let sec: String? = iface.security().snapLabel
         return WiFiInfo(ssid: ssid, bssid: iface.bssid(),
                         channel: channelNum, band: band,
                         rssi: rssi, txRate: tx, security: sec)
@@ -381,16 +394,19 @@ final class ConnectionSummary: ObservableObject {
     ///   {"ip":"…","city":"Toronto","region":"Ontario","country":"CA",
     ///    "org":"AS7922 Comcast Cable Communications, LLC", …}
     /// We split `org` on the first whitespace: `AS7922` → ASN, rest → ISP.
-    private static func fetchGeo() async -> GeoFields {
-        let empty = GeoFields(isp: nil, asn: nil, city: nil, region: nil, country: nil)
-        guard let url = URL(string: "https://ipinfo.io/json") else { return empty }
+    /// Asks about `ip` explicitly so the cache entry is keyed to the address
+    /// it describes. Returns nil on any failure — including ipinfo's
+    /// rate-limit response — so nothing empty gets cached.
+    private static func fetchGeo(ip: String) async -> GeoFields? {
+        guard let url = URL(string: "https://ipinfo.io/\(ip)/json") else { return nil }
         var req = URLRequest(url: url)
         req.timeoutInterval = 4
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         do {
-            let (data, _) = try await URLSession.shared.data(for: req)
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                return empty
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            guard (resp as? HTTPURLResponse)?.statusCode == 200,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return nil
             }
             let city    = json["city"]    as? String
             let region  = json["region"]  as? String
@@ -407,9 +423,10 @@ final class ConnectionSummary: ObservableObject {
                     isp = org
                 }
             }
+            if isp == nil && asn == nil && city == nil && country == nil { return nil }
             return GeoFields(isp: isp, asn: asn, city: city, region: region, country: country)
         } catch {
-            return empty
+            return nil
         }
     }
 
@@ -425,6 +442,66 @@ final class ConnectionSummary: ObservableObject {
             if digits.count >= 2 { return Double(String(digits[1])) }
         }
         return nil
+    }
+}
+
+// MARK: - Public lookup caching
+
+/// When to repeat the public-IP (ipify) and ISP (ipinfo.io) lookups. Kept
+/// pure so it can be unit tested. The card refreshes every 30 s, but these
+/// lookups don't need to follow it.
+enum PublicLookupPolicy {
+    /// Re-check the public address this often even when nothing local
+    /// changed — an ISP can reassign it without the LAN noticing.
+    static let ipRecheckInterval: TimeInterval = 10 * 60
+    /// ISP, ASN, and city for one address are effectively static.
+    static let geoMaxAge: TimeInterval = 24 * 60 * 60
+    /// After a failed ISP lookup (offline, rate-limited), wait this long.
+    static let geoRetryAfterFailure: TimeInterval = 5 * 60
+
+    static func needsIPCheck(force: Bool, lastCheck: Date?, now: Date) -> Bool {
+        guard !force, let last = lastCheck else { return true }
+        return now.timeIntervalSince(last) >= ipRecheckInterval
+    }
+
+    /// `fetchedAt` / `failedAt`: the last success and failure for this
+    /// address. With no known address there's nothing to look up.
+    static func needsGeo(force: Bool, publicIPv4: String?, fetchedAt: Date?,
+                         failedAt: Date?, now: Date) -> Bool {
+        guard publicIPv4 != nil else { return false }
+        if force { return true }
+        if let f = failedAt, now.timeIntervalSince(f) < geoRetryAfterFailure { return false }
+        guard let at = fetchedAt else { return true }
+        return now.timeIntervalSince(at) >= geoMaxAge
+    }
+}
+
+/// Public-IP and ISP results, shared across refreshes and across Dashboard
+/// visits (the card's model is recreated on every tab switch). Before
+/// v1.5.3 every 30 s refresh repeated all three lookups — about 2,900
+/// ipinfo.io requests a day with the Dashboard open, enough for ipinfo to
+/// rate-limit the user's IP.
+@MainActor
+final class PublicInfoCache {
+    static let shared = PublicInfoCache()
+    private init() {}
+
+    private(set) var networkKey: String?
+    var publicIPv4: String?
+    var publicIPv6: String?
+    var ipCheckedAt: Date?
+    fileprivate var geoByIP: [String: (fields: ConnectionSummary.GeoFields, fetchedAt: Date)] = [:]
+    var geoFailedAt: [String: Date] = [:]
+
+    /// A different interface, local address, gateway, SSID, or VPN state can
+    /// mean a different public address, so forget the old one rather than
+    /// show it for the new network. ISP details stay, keyed by address.
+    func noteNetwork(_ key: String) {
+        guard key != networkKey else { return }
+        networkKey = key
+        publicIPv4 = nil
+        publicIPv6 = nil
+        ipCheckedAt = nil
     }
 }
 
@@ -451,7 +528,7 @@ struct ConnectionSummaryCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .onAppear {
             Task { await summary.refresh() }
-            // Light auto-refresh — re-pings + re-fetches every 30s
+            // Light auto-refresh every 30 s — re-pings; public-IP/ISP lookups are cached
             let t = Timer(timeInterval: 30, repeats: true) { _ in
                 Task { await summary.refresh() }
             }
@@ -725,7 +802,7 @@ struct ConnectionSummaryCard: View {
             }
             Spacer()
             Button {
-                Task { await summary.refresh() }
+                Task { await summary.refresh(force: true) }
             } label: {
                 HStack(spacing: 4) {
                     if summary.isRefreshing {
