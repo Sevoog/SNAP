@@ -116,6 +116,9 @@ struct InfoView: View {
                 selectedName = provider.activeRouteInterface ?? provider.interfaces.first?.name
             }
         }
+        // The tab stays alive in the background; reload on return, as
+        // opening the tab always did.
+        .onTabVisibilityChange(shown: { provider.refresh() })
         .onChange(of: provider.interfaces.count, perform: { _ in
             if selectedName == nil {
                 selectedName = provider.activeRouteInterface ?? provider.interfaces.first?.name
@@ -331,7 +334,7 @@ private struct InterfaceRow: View {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(isSelected
                           ? NS.amber.opacity(0.12)
-                          : (isHovered ? Color.white.opacity(0.03) : Color.clear))
+                          : (isHovered ? NS.text1.opacity(0.03) : Color.clear))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)

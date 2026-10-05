@@ -173,7 +173,7 @@ struct PortScanView: View {
             }
         }
         .navigationTitle("Port Scan")
-        // Tab switching recreates this view — cancel the scan instead of
+        // Runs when the window closes (tabs now stay alive across switches) — cancel the scan instead of
         // letting it probe up to 65k ports with no UI handle left to stop it
         .onDisappear { scanTask?.cancel(); isRunning = false }
         .consumeHandoff(for: .portScan) { host = $0 }

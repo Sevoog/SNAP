@@ -166,7 +166,7 @@ struct PingView: View {
             }
         }
         .navigationTitle("Ping")
-        // Tab switching recreates this view — without this the ping process
+        // Runs when the window closes (tabs now stay alive across switches) — without this the ping process
         // keeps running with no UI handle left to stop it
         .onDisappear { stopPing() }
         .consumeHandoff(for: .ping) { host = $0 }

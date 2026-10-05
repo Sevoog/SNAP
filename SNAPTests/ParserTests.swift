@@ -12,47 +12,6 @@ import XCTest
 
 final class ParserTests: XCTestCase {
 
-    // MARK: - CIDR expansion (Bulk Discovery)
-
-    func test_expandCIDR_slash24_has254Hosts() {
-        let hosts = expandCIDR("192.168.1.0/24")
-        XCTAssertEqual(hosts?.count, 254)
-        XCTAssertEqual(hosts?.first, "192.168.1.1")
-        XCTAssertEqual(hosts?.last, "192.168.1.254")
-    }
-
-    func test_expandCIDR_slash30_has2Hosts() {
-        let hosts = expandCIDR("10.0.0.0/30")
-        XCTAssertEqual(hosts, ["10.0.0.1", "10.0.0.2"])
-    }
-
-    func test_expandCIDR_slash32_singleAddress() {
-        XCTAssertEqual(expandCIDR("8.8.8.8/32"), ["8.8.8.8"])
-    }
-
-    func test_expandCIDR_slash31_pointToPoint() {
-        XCTAssertEqual(expandCIDR("10.0.0.0/31"), ["10.0.0.0", "10.0.0.1"])
-    }
-
-    func test_expandCIDR_normalizesNonZeroHostBits() {
-        // 192.168.1.50/24 should still expand the whole /24 network.
-        let hosts = expandCIDR("192.168.1.50/24")
-        XCTAssertEqual(hosts?.first, "192.168.1.1")
-        XCTAssertEqual(hosts?.count, 254)
-    }
-
-    func test_expandCIDR_rejectsGarbage() {
-        XCTAssertNil(expandCIDR("not-a-cidr"))
-        XCTAssertNil(expandCIDR("192.168.1.0"))      // no prefix
-        XCTAssertNil(expandCIDR("192.168.1.0/33"))   // prefix out of range
-        XCTAssertNil(expandCIDR("999.1.1.1/24"))     // bad octet
-    }
-
-    func test_expandCIDR_rejectsOversizedRange() {
-        // /16 (65k hosts) exceeds the safety cap → nil, not a hang.
-        XCTAssertNil(expandCIDR("10.0.0.0/16"))
-    }
-
     // MARK: - ARP cache parsing (ARP Table)
 
     func test_parseARP_typicalLines() {

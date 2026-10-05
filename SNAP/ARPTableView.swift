@@ -27,6 +27,7 @@ struct ARPTableView: View {
         }
         .navigationTitle("ARP Table")
         .onAppear { reload() }
+        .onTabVisibilityChange(shown: { reload() })   // fresh table on return
     }
 
     private var toolbar: some View {

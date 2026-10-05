@@ -100,6 +100,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        ThemeManager.shared.applyAppearance()  // light/dark AppKit chrome to match the theme
         requestLocationPermission()
         _ = MenuBarMonitor.shared  // start background bandwidth sampling immediately
         OUIDatabase.preload()      // warm the 39k-entry IEEE registry off-thread

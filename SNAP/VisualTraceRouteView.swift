@@ -293,7 +293,7 @@ struct VisualTraceRouteView: View {
             }
         }
         .navigationTitle("Visual Trace Route")
-        // Tab switching recreates this view — terminate the traceroute
+        // Runs when the window closes (tabs now stay alive across switches) — terminate the traceroute
         // process instead of orphaning it
         .onDisappear { model.stop() }
     }

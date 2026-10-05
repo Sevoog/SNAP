@@ -603,7 +603,7 @@ struct BandwidthMonitorView: View {
             }
             .padding(.vertical, 8)
 
-            Divider().background(Color.white.opacity(0.05))
+            Divider().background(NS.text1.opacity(0.05))
 
             // Row 2: quality score + ISP info
             HStack(spacing: 0) {
@@ -623,7 +623,7 @@ struct BandwidthMonitorView: View {
                     }
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.08))
+                            RoundedRectangle(cornerRadius: 2).fill(NS.text1.opacity(0.08))
                             RoundedRectangle(cornerRadius: 2).fill(qualityColor)
                                 .frame(width: geo.size.width * CGFloat(monitor.qualityScore) / 100)
                                 .animation(.easeInOut(duration: 0.5), value: monitor.qualityScore)
@@ -911,7 +911,7 @@ struct BandwidthMonitorView: View {
     }
 
     private func statDivider() -> some View {
-        Rectangle().fill(Color.white.opacity(0.06)).frame(width: 0.5)
+        Rectangle().fill(NS.text1.opacity(0.06)).frame(width: 0.5)
     }
 
     private func legendPill(color: Color, label: String) -> some View {

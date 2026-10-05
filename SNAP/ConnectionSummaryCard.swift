@@ -477,7 +477,7 @@ enum PublicLookupPolicy {
 }
 
 /// Public-IP and ISP results, shared across refreshes and across Dashboard
-/// visits (the card's model is recreated on every tab switch). Before
+/// visits (the card's model is recreated when the window is reopened). Before
 /// v1.5.3 every 30 s refresh repeated all three lookups — about 2,900
 /// ipinfo.io requests a day with the Dashboard open, enough for ipinfo to
 /// rate-limit the user's IP.
@@ -526,19 +526,27 @@ struct ConnectionSummaryCard: View {
                 .strokeBorder(NS.border, lineWidth: 0.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .onAppear {
+        .onAppear { startTicking() }
+        .onDisappear { stopTicking() }
+        // The Dashboard stays alive in the background: no pings or lookups
+        // while it's hidden, and a fresh refresh on return.
+        .onTabVisibilityChange(shown: { startTicking() }, hidden: { stopTicking() })
+    }
+
+    /// Light auto-refresh every 30 s — re-pings; public-IP/ISP lookups are cached.
+    private func startTicking() {
+        stopTicking()
+        Task { await summary.refresh() }
+        let t = Timer(timeInterval: 30, repeats: true) { _ in
             Task { await summary.refresh() }
-            // Light auto-refresh every 30 s — re-pings; public-IP/ISP lookups are cached
-            let t = Timer(timeInterval: 30, repeats: true) { _ in
-                Task { await summary.refresh() }
-            }
-            RunLoop.main.add(t, forMode: .common)
-            tick = t
         }
-        .onDisappear {
-            tick?.invalidate()
-            tick = nil
-        }
+        RunLoop.main.add(t, forMode: .common)
+        tick = t
+    }
+
+    private func stopTicking() {
+        tick?.invalidate()
+        tick = nil
     }
 
     // MARK: Header

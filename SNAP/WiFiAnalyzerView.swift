@@ -145,6 +145,22 @@ final class WiFiAnalyzerModel: ObservableObject {
         liveOn = false
     }
 
+    /// Pause Live while the tab is in the background, without switching it
+    /// off. Each scan briefly takes the Wi-Fi radio off-channel, which would
+    /// skew a ping or speed test running in another tab.
+    func suspendLive() {
+        liveTimer?.invalidate(); liveTimer = nil
+    }
+
+    /// Resume Live on return, if it was on.
+    func resumeLive() {
+        guard liveOn, liveTimer == nil else { return }
+        liveTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.scan() }
+        }
+        scan()
+    }
+
     func scan() {
         isScanning = true
         error = ""
@@ -373,9 +389,12 @@ struct WiFiAnalyzerView: View {
             statusBar
         }
         .navigationTitle("WiFi Analyzer")
-        // Tab switching recreates this view — stop the 5s live radio scan
-        // instead of letting it run forever in the background
+        // Tabs stay alive in the background now: pause the 5 s live radio
+        // scan while hidden (each scan disturbs Wi-Fi for every other tool)
+        // and resume it on return. A real teardown still stops it.
         .onDisappear { model.stopLive() }
+        .onTabVisibilityChange(shown: { model.resumeLive() },
+                               hidden: { model.suspendLive() })
         .onAppear { if model.networks.isEmpty { model.scan() } }
         .onReceive(NotificationCenter.default.publisher(for: .locationPermissionChanged)) { _ in model.scan() }
     }

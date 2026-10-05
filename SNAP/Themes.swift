@@ -8,6 +8,7 @@
 // New themes only need to be registered in `Theme.all`.
 
 import SwiftUI
+import AppKit
 
 // MARK: - Theme model
 
@@ -36,6 +37,15 @@ struct Theme: Identifiable, Hashable {
     let blue: Color         // info / TX
     let red: Color          // danger
     let purple: Color       // special / launcher tag
+
+    /// Light surfaces. Drives the window appearance so system controls
+    /// (tables, lists, text fields, pickers) and `.secondary` text render for
+    /// a light background. Before v1.5.3 the app forced dark mode for every
+    /// theme, so Daylight showed dark tables and near-invisible gray labels.
+    var isLight: Bool = false
+
+    var colorScheme: ColorScheme { isLight ? .light : .dark }
+    var appearanceName: NSAppearance.Name { isLight ? .aqua : .darkAqua }
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (a: Theme, b: Theme) -> Bool { a.id == b.id }
@@ -78,7 +88,8 @@ extension Theme {
         green: hex(0x248a3d),
         blue:  hex(0x0066cc),
         red:   hex(0xd70015),
-        purple: hex(0xaf52de)
+        purple: hex(0xaf52de),
+        isLight: true
     )
 
     // ----- Developer -----
@@ -207,10 +218,20 @@ final class ThemeManager: ObservableObject {
         self.current = (stored.flatMap(Theme.byId)) ?? .midnight
     }
 
+    @MainActor
     func select(_ theme: Theme) {
         guard theme.id != current.id else { return }
         current = theme
         UserDefaults.standard.set(theme.id, forKey: key)
+        applyAppearance()
+    }
+
+    /// Light or dark AppKit appearance for every window — main window,
+    /// sheets, alerts, menus, the detached Status Board, the menu bar
+    /// popover — to match the theme. Called at launch and on every switch.
+    @MainActor
+    func applyAppearance() {
+        NSApp.appearance = NSAppearance(named: current.appearanceName)
     }
 }
 

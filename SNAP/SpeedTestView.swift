@@ -154,7 +154,7 @@ struct SpeedTestView: View {
             }
         }
         .navigationTitle("Speed Test")
-        // Tab switching recreates this view — cancel the running test (the
+        // Runs when the window closes (tabs now stay alive across switches) — cancel the running test (the
         // cancellation handlers abort the transfer / terminate iperf3)
         .onDisappear { testTask?.cancel() }
         // The Status Board's "Run Now" hands off with the autostart sentinel;

@@ -180,6 +180,9 @@ struct ConnectionTableView: View {
         .navigationTitle("Active Connections")
         .onAppear { model.load() }
         .onDisappear { model.stopAutoRefresh() }
+        // Auto-refresh (if you turned it on) keeps running in the background;
+        // otherwise take a fresh snapshot on return, as opening the tab did.
+        .onTabVisibilityChange(shown: { if !model.autoRefresh { model.load() } })
     }
 
     private func stateColor(_ state: String) -> Color {

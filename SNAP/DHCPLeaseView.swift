@@ -33,6 +33,7 @@ struct DHCPLeaseView: View {
         }
         .navigationTitle("DHCP Leases")
         .onAppear { reload() }
+        .onTabVisibilityChange(shown: { reload() })   // fresh leases on return
     }
 
     private var toolbar: some View {

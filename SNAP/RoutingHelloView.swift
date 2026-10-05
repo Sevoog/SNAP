@@ -307,7 +307,7 @@ struct RoutingHelloView: View {
             limitationsFooter
         }
         .navigationTitle("Routing Hello")
-        // Tab switching recreates this view and its model — leave the
+        // Runs when the window closes (tabs now stay alive across switches) — leave the
         // multicast groups cleanly instead of leaking the joins
         .onDisappear { model.stop() }
     }

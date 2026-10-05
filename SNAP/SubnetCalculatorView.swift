@@ -43,7 +43,10 @@ struct SubnetCalculatorView: View {
                             ForEach(InputMode.allCases, id: \.self) { m in Text(m.rawValue).tag(m) }
                         }
                         .pickerStyle(.segmented)
-                        .frame(width: 240)
+                        // Sized to content — a fixed frame can squeeze the
+                        // label until it wraps (same bug as the Network Map's
+                        // "View" picker).
+                        .fixedSize()
 
                         if inputMode == .cidr {
                             HStack {

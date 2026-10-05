@@ -172,41 +172,106 @@ final class NetworkMapModel: ObservableObject {
         phase = .done
     }
 
-    /// Subnet prefixes to scan, parsed from the comma-separated `subnet`
-    /// field. e.g. "192.168.1, 10.0.10" → ["192.168.1", "10.0.10"]. Empty
-    /// entries and trailing dots are stripped.
-    var subnetPrefixes: [String] { Self.parseSubnetPrefixes(subnet) }
+    // MARK: Scan range
 
-    /// Static — pure string parser, exposed `internal` for XCTest.
-    /// Accepts forms like `192.168.1`, `192.168.1.0/24`, `192.168.1.x`,
-    /// comma-separated combinations, with surrounding whitespace.
-    /// `nonisolated` so tests can call without MainActor hop.
-    nonisolated static func parseSubnetPrefixes(_ raw: String) -> [String] {
-        raw.split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .map { $0.hasSuffix(".") ? String($0.dropLast()) : $0 }
-            .map { stripTrailing24($0) }
-            .filter { !$0.isEmpty }
+    /// Most addresses one scan covers: a full /16 (65,534 hosts).
+    nonisolated static let maxScanHosts = 65_536
+    /// Bigger than a /22 → show the time estimate and ask first.
+    nonisolated static let confirmAboveHosts = 1_024
+
+    /// What the range field currently means — CIDR, custom ranges, or the
+    /// classic /24 shorthand, comma-separated (see `ScanRange`).
+    var scanRange: Result<ScanRange, ScanRange.ParseError> {
+        ScanRange.parse(subnet, maxHosts: Self.maxScanHosts)
     }
 
-    /// Convert "192.168.1.0/24" or "192.168.1.x" into "192.168.1".
-    nonisolated static func stripTrailing24(_ s: String) -> String {
-        var out = s
-        if let slash = out.firstIndex(of: "/") { out = String(out[..<slash]) }
-        let parts = out.split(separator: ".")
-        if parts.count >= 3 { return parts.prefix(3).joined(separator: ".") }
-        return out
+    /// The /24 around this Mac — offered as a quick alternative when the
+    /// detected network is large.
+    private(set) var localSlash24: String?
+
+    /// Set when a scan is big enough to confirm first; drives the alert.
+    @Published var pendingLargeScan: LargeScanPrompt?
+
+    struct LargeScanPrompt: Identifiable {
+        let id = UUID()
+        let hostCount: Int
+        let estimate: String
+        /// The local /24, when it's inside the range and smaller than it.
+        let quickAlternative: String?
+    }
+
+    /// Addresses for the scan in progress, fixed when it starts.
+    private var scanTargets: [String] = []
+
+    var canScan: Bool {
+        if case .success = scanRange { return true }
+        return false
+    }
+
+    /// Rough wall-clock time for a scan. Calibrated on an M-series Mac: a
+    /// batch of 32 pings to dead addresses takes ~1.06 s, and the UBNT
+    /// unicast sweep runs alongside it in batches of 48 with a 1.5 s
+    /// timeout. Later stages only touch live hosts. ~19 s for a /24,
+    /// ~38 min for a /16.
+    nonisolated static func estimatedScanSeconds(hosts: Int) -> Int {
+        let ping = Double((hosts + 31) / 32) * 1.1
+        let ubnt = Double((hosts + 47) / 48) * 1.5
+        return Int(max(ping, ubnt).rounded(.up)) + 10
+    }
+
+    nonisolated static func describeDuration(seconds: Int) -> String {
+        if seconds < 90 { return "about \(seconds) seconds" }
+        return "about \(Int((Double(seconds) / 60).rounded())) minutes"
     }
 
     init() {
-        if let det = autodetectSubnet() { subnet = det } else { subnet = "192.168.1" }
+        if let net = ScanRange.localNetwork() {
+            subnet = net.cidr
+            localSlash24 = net.slash24
+        } else {
+            subnet = "192.168.1.0/24"
+        }
     }
 
     // MARK: Scan pipeline
 
+    /// The Scan button: runs small scans straight away, asks before big ones.
+    func requestScan() {
+        guard !isScanning, case .success(let range) = scanRange else { return }
+        if DemoMode.isActive || range.hostCount <= Self.confirmAboveHosts {
+            scan()
+            return
+        }
+        // Offer the local /24 only if it's actually part of what was typed.
+        var quick: String? = nil
+        if let s24 = localSlash24, case .success(let small) = ScanRange.parse(s24, maxHosts: 256),
+           let first = small.spans.first,
+           range.spans.contains(where: { $0.first <= first.first && first.last <= $0.last }) {
+            quick = s24
+        }
+        pendingLargeScan = LargeScanPrompt(
+            hostCount: range.hostCount,
+            estimate: Self.describeDuration(seconds: Self.estimatedScanSeconds(hosts: range.hostCount)),
+            quickAlternative: quick)
+    }
+
+    func confirmLargeScan() {
+        pendingLargeScan = nil
+        scan()
+    }
+
+    func scanQuickAlternative() {
+        guard let quick = pendingLargeScan?.quickAlternative else { return }
+        pendingLargeScan = nil
+        subnet = quick
+        scan()
+    }
+
     func scan() {
         guard !isScanning else { return }
         if DemoMode.isActive { loadDemoDevices(); return }
+        guard case .success(let range) = scanRange else { return }
+        scanTargets = range.addresses()
         isScanning = true
         progress = 0
         phase = .arp
@@ -277,66 +342,60 @@ final class NetworkMapModel: ObservableObject {
     // MARK: Stage 1a — Ping sweep
 
     private func pingSweep() async {
-        let prefixes = subnetPrefixes
-        guard !prefixes.isEmpty else { return }
+        let targets = scanTargets
+        guard !targets.isEmpty else { return }
         let chunkSize = 32
-        let total = Double(prefixes.count * 254)
+        let total = Double(targets.count)
         var completed = 0.0
-        for prefix in prefixes {
-            for start in stride(from: 1, through: 254, by: chunkSize) {
-                let end = min(start + chunkSize - 1, 254)
-                await withTaskGroup(of: (String, Double?)?.self) { group in
-                    for i in start...end {
-                        let ip = "\(prefix).\(i)"
-                        group.addTask {
-                            return await Self.pingOne(ip: ip)
-                        }
-                    }
-                    for await result in group {
-                        if let (ip, ms) = result {
-                            recordPing(ip: ip, ms: ms)
-                        }
+        for start in stride(from: 0, to: targets.count, by: chunkSize) {
+            let batch = targets[start..<min(start + chunkSize, targets.count)]
+            await withTaskGroup(of: (String, Double?)?.self) { group in
+                for ip in batch {
+                    group.addTask {
+                        return await Self.pingOne(ip: ip)
                     }
                 }
-                completed += Double(end - start + 1)
-                progress = min(0.5, completed / total * 0.5)
+                for await result in group {
+                    if let (ip, ms) = result {
+                        recordPing(ip: ip, ms: ms)
+                    }
+                }
             }
+            completed += Double(batch.count)
+            progress = min(0.5, completed / total * 0.5)
         }
     }
 
     // MARK: Stage 1c — Unicast UBNT sweep
     //
-    // Sends a unicast UBNT discovery probe to every IP in every configured
-    // subnet. This catches UniFi gear on subnets the Mac can't broadcast
+    // Sends a unicast UBNT discovery probe to every address in the scan
+    // range. This catches UniFi gear on subnets the Mac can't broadcast
     // to (VLAN-segmented setups) and devices that filter ICMP. Unicast UDP
     // routes correctly through the gateway, so cross-VLAN discovery works
     // when the Mac has a route to the target subnet.
 
     private func unicastUBNTSweep() async -> [String: IdentitySignal] {
-        let prefixes = subnetPrefixes
-        guard !prefixes.isEmpty else { return [:] }
+        let targets = scanTargets
+        guard !targets.isEmpty else { return [:] }
         var results: [String: IdentitySignal] = [:]
         // Chunked to keep file-descriptor usage bounded.
         let chunkSize = 48
-        for prefix in prefixes {
-            for start in stride(from: 1, through: 254, by: chunkSize) {
-                let end = min(start + chunkSize - 1, 254)
-                let batch = await withTaskGroup(of: (String, IdentitySignal?).self) { group -> [(String, IdentitySignal)] in
-                    for i in start...end {
-                        let ip = "\(prefix).\(i)"
-                        group.addTask {
-                            let sig = await UBNTUnicastProbe.probe(ip: ip, timeout: 1.5)
-                            return (ip, sig)
-                        }
+        for start in stride(from: 0, to: targets.count, by: chunkSize) {
+            let chunk = targets[start..<min(start + chunkSize, targets.count)]
+            let batch = await withTaskGroup(of: (String, IdentitySignal?).self) { group -> [(String, IdentitySignal)] in
+                for ip in chunk {
+                    group.addTask {
+                        let sig = await UBNTUnicastProbe.probe(ip: ip, timeout: 1.5)
+                        return (ip, sig)
                     }
-                    var found: [(String, IdentitySignal)] = []
-                    for await (ip, sig) in group {
-                        if let s = sig { found.append((ip, s)) }
-                    }
-                    return found
                 }
-                for (ip, sig) in batch { results[ip] = sig }
+                var found: [(String, IdentitySignal)] = []
+                for await (ip, sig) in group {
+                    if let s = sig { found.append((ip, s)) }
+                }
+                return found
             }
+            for (ip, sig) in batch { results[ip] = sig }
         }
         return results
     }
@@ -468,30 +527,6 @@ final class NetworkMapModel: ObservableObject {
         let parts = ip.split(separator: ".").compactMap { UInt32($0) }
         guard parts.count == 4 else { return 0 }
         return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]
-    }
-
-    private func autodetectSubnet() -> String? {
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0 else { return nil }
-        defer { freeifaddrs(ifaddr) }
-        var cur = ifaddr
-        while let c = cur {
-            defer { cur = c.pointee.ifa_next }
-            let name = String(cString: c.pointee.ifa_name)
-            guard name.hasPrefix("en") else { continue }
-            // ifa_addr can be NULL for some pseudo-interfaces
-            guard let sa = c.pointee.ifa_addr, Int32(sa.pointee.sa_family) == AF_INET else { continue }
-            var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-            var sin = sa.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
-            inet_ntop(AF_INET, &sin.sin_addr, &buf, socklen_t(INET_ADDRSTRLEN))
-            let ip = String(cString: buf)
-            if ip == "127.0.0.1" || ip.hasPrefix("169.254.") { continue }
-            let parts = ip.split(separator: ".")
-            if parts.count == 4 {
-                return "\(parts[0]).\(parts[1]).\(parts[2])"
-            }
-        }
-        return nil
     }
 
     // MARK: Persistence (last scan)
@@ -681,7 +716,7 @@ struct NetworkMapView: View {
             if model.devices.isEmpty && !model.isScanning {
                 EmptyStateView(title: "No Devices Found",
                                systemImage: "map.circle",
-                               description: "Set your subnet prefix (e.g. 192.168.1) and press Scan Network. SNAP will ping every host, run mDNS + SSDP + NetBIOS probes, and identify each device.")
+                               description: "SNAP fills in your current network. Adjust the range if you like (a subnet like 10.0.0.0/16, a range like 10.0.0.1-10.0.3.254, or several separated by commas), then press Scan Network. SNAP will ping every address, run mDNS + SSDP + NetBIOS probes, and identify each device.")
             } else {
                 HSplitView {
                     Group {
@@ -700,21 +735,68 @@ struct NetworkMapView: View {
         }
         .navigationTitle("Network Map")
         .onAppear { model.restoreLastScan() }
+        .alert(Text(verbatim: model.pendingLargeScan.map { "Scan \($0.hostCount.formatted()) addresses?" } ?? ""),
+               isPresented: Binding(get: { model.pendingLargeScan != nil },
+                                    set: { if !$0 { model.pendingLargeScan = nil } }),
+               presenting: model.pendingLargeScan) { p in
+            Button("Scan All") { model.confirmLargeScan() }
+            if let quick = p.quickAlternative {
+                Button("Scan \(quick) Only") { model.scanQuickAlternative() }
+            }
+            Button("Cancel", role: .cancel) { model.pendingLargeScan = nil }
+        } message: { p in
+            if let quick = p.quickAlternative {
+                Text(verbatim: "This takes \(p.estimate) and sends pings and discovery probes to every address, which network monitoring tools will see.\n\nOr scan just \(quick), the /24 this Mac is on, in \(NetworkMapModel.describeDuration(seconds: NetworkMapModel.estimatedScanSeconds(hosts: 254))).")
+            } else {
+                Text(verbatim: "This takes \(p.estimate) and sends pings and discovery probes to every address, which network monitoring tools will see.")
+            }
+        }
+    }
+
+    /// Host count for a valid range, or the reason it isn't one.
+    @ViewBuilder private var rangeSummary: some View {
+        switch model.scanRange {
+        case .success(let r):
+            Text(r.hostCount == 1 ? "1 host" : "\(r.hostCount.formatted()) hosts")
+                .font(.caption).foregroundStyle(.secondary)
+                .help(r.hostCount > NetworkMapModel.confirmAboveHosts
+                      ? "Large range — \(NetworkMapModel.describeDuration(seconds: NetworkMapModel.estimatedScanSeconds(hosts: r.hostCount))). SNAP will ask before scanning."
+                      : "Scans every address in the range.")
+        case .failure(let e):
+            Label(e == .empty ? "No range" : "Invalid range", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption).foregroundStyle(NS.amber)
+                .help(e.message)
+        }
     }
 
     private var topBar: some View {
         HStack(spacing: 12) {
             Image(systemName: "map.circle").foregroundStyle(.blue)
-            TextField("Subnets (e.g. 192.168.1, 10.0.10)", text: $model.subnet)
+            TextField("Range (e.g. 192.168.1.0/24)", text: $model.subnet)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 240)
-                .help("Comma-separated /24 prefixes. Add your UniFi management VLAN here if your APs/switches live on a different subnet than your Mac.")
-            Text(".1 – .254").font(.caption).foregroundStyle(.secondary)
+                // Gives up width first when the window is narrow, so the
+                // fixed-size controls below never get squeezed.
+                .frame(minWidth: 170, idealWidth: 260, maxWidth: 260)
+                .disabled(model.isScanning)
+                .help("""
+                      A subnet (10.0.0.0/16), a range (10.0.0.1-10.0.3.254 or 192.168.1.100-150), \
+                      a /24 shorthand (192.168.1), or a single address — several separated by commas. \
+                      Up to 65,536 addresses. Add your UniFi management VLAN here if your APs/switches \
+                      live on a different subnet than your Mac.
+                      """)
+            rangeSummary
+                .lineLimit(1)
+                .fixedSize()
 
             Picker("View", selection: $viewMode) {
                 ForEach(ViewMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
-            .pickerStyle(.segmented).frame(width: 220)
+            .pickerStyle(.segmented)
+            // Sized to its content. A fixed 220 pt frame left the "View"
+            // label almost no slack, so a fraction-of-a-point shift from the
+            // device count's width changing (e.g. toggling Online only)
+            // wrapped it onto two lines.
+            .fixedSize()
 
             Spacer()
 
@@ -725,17 +807,21 @@ struct NetworkMapView: View {
                 Text(model.phase.label)
                     .font(.system(size: 11))
                     .foregroundStyle(NS.text3)
+                    .lineLimit(1)
             } else {
                 if let t = model.lastScan {
                     Text("Scanned \(t.formatted(date: .omitted, time: .shortened))")
                         .font(.system(size: 11))
                         .foregroundStyle(NS.text3)
+                        .lineLimit(1)
                 }
             }
 
             Text("\(filtered.count) of \(model.devices.count)")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(NS.text3)
+                .lineLimit(1)
+                .fixedSize()
 
             if !model.devices.isEmpty {
                 ToolActionBar("Network-Map",
@@ -744,9 +830,9 @@ struct NetworkMapView: View {
                               json: { model.exportInventoryJSON() })
             }
 
-            Button(model.isScanning ? "Scanning…" : "Scan Network") { model.scan() }
+            Button(model.isScanning ? "Scanning…" : "Scan Network") { model.requestScan() }
                 .buttonStyle(.borderedProminent)
-                .disabled(model.isScanning)
+                .disabled(model.isScanning || !model.canScan)
                 .keyboardShortcut(.return)
         }
         .padding(.horizontal, 16).padding(.vertical, 10)

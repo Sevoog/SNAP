@@ -50,11 +50,11 @@ No accounts, analytics, telemetry, or crash reporting. See [Privacy & Security](
 - **DNS Benchmark** — Race resolvers across a basket of domains, ranked by latency + loss *(moved from Diagnostics in v1.2.4)*
 - **Fingerprint** — Service / OS fingerprinting on remote hosts. **v1.3** adds SNMP probe + a vendor classifier that fuses sysObjectID, SSH banner, HTTP Server, and rDNS into a single vendor + model + role verdict (Cisco / Juniper / Arista / Aruba / Palo Alto / Fortinet / MikroTik / Ubiquiti / etc.)
 - **Multi-Host Compare** — Compare metrics across multiple hosts simultaneously
-- **Network Map** — Visualize the local network topology with **multi-signal device identification** (mDNS, SSDP, UBNT discovery for UniFi gear, NetBIOS, HTTP banner, reverse DNS, full IEEE OUI registry + vendor-pattern role inference) — *enterprise-grade vendor coverage in v1.3*
+- **Network Map** — Visualize the local network topology with **multi-signal device identification** (mDNS, SSDP, UBNT discovery for UniFi gear, NetBIOS, HTTP banner, reverse DNS, full IEEE OUI registry + vendor-pattern role inference) — *enterprise-grade vendor coverage in v1.3*. Scans any range up to a /16: a subnet (`10.0.0.0/16`), a custom range (`10.0.0.1-10.0.3.254`), a /24 shorthand, or a comma-separated mix. Prefilled from your connection's real subnet; asks before scans over ~1,000 addresses, with a time estimate — *ranges in v1.5.3*
 - **SNMP** — *new in v1.3* Read-only SNMP v2c client (ASN.1 BER from scratch, no deps). System Info / Interfaces / Custom OID Walk modes. `sysObjectID` lookup against an enterprise database (Cisco, Cisco Meraki, Juniper, Arista, Extreme, HP/HPE, Aruba, Palo Alto, Fortinet, Check Point, SonicWall, F5, NetScaler, Synology, QNAP, …).
 - **Routing Hello** — *new in v1.3* Passive UDP multicast listener for HSRPv1 / HSRPv2 / GLBP — gateway redundancy + load-balancing speakers detected without raw-socket access. Limitations footer documents what OSPF/EIGRP/VRRP/PIM detection would need.
 - **UniFi** — *new in v1.4* Authenticate to a UniFi Network Controller (UDM-Pro / Cloud Key / self-hosted Network application or legacy standalone controller) and pull the adopted-device inventory across all VLANs the controller knows. Credentials stored in the macOS Keychain; self-signed certs accepted.
-- **Bulk Discovery** — *new in v1.4* CIDR-driven asset inventory: aliveness sweep + per-host port scan + SNMP probe + reverse DNS + ARP-based vendor lookup. Concurrent two-phase pipeline. CSV/JSON export shares the schema with Network Map + UniFi for cross-source correlation.
+- **Bulk Discovery** — *new in v1.4* Range-driven asset inventory (same range syntax as Network Map, up to 8,192 addresses): aliveness sweep + per-host port scan + SNMP probe + reverse DNS + ARP-based vendor lookup. Concurrent two-phase pipeline. CSV/JSON export shares the schema with Network Map + UniFi for cross-source correlation.
 - **Packet Capture** — Capture and inspect network packets
 
 ### Additional Features
@@ -68,7 +68,7 @@ No accounts, analytics, telemetry, or crash reporting. See [Privacy & Security](
 - **Connection Quality Score** — 0–100 rating (Excellent → Critical) derived from latency, loss, jitter, retransmits, and DNS responsiveness
 - **Sandboxless Networking** — Direct `getifaddrs` / `sysctl` / raw UDP syscalls — no `netstat` spawning for hot-path sampling
 - **Dark-Only UI** — Custom 3-column layout (icon rail + sidebar + main) with NS design tokens throughout
-- **XCTest target** — 122 unit tests across SubnetCalculator, DNSWire, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip + sysObjectID), Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, WiFi band/channel helpers, connection-health scoring (incl. menu bar dot outage timelines), public-lookup caching, and Status Board Wi-Fi readings — *added in v1.2.3, expanded through v1.5.3*
+- **XCTest target** — 124 unit tests across SubnetCalculator, DNSWire, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip + sysObjectID), Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, WiFi band/channel helpers, connection-health scoring (incl. menu bar dot outage timelines), public-lookup caching, Status Board Wi-Fi readings, and scan-range parsing (CIDR, ranges, limits) — *added in v1.2.3, expanded through v1.5.3*
 
 ## Requirements
 - macOS 13.0+
@@ -87,16 +87,20 @@ These happen without a click, while the view in question is open:
 |---|---|---|
 | From launch, every 10 s, for as long as SNAP runs (it stays in the menu bar after the window closes) | Your router (default gateway) | Ping, for the menu bar health dot |
 | While the sidebar is visible, every 15 s | `www.apple.com` (falls back to `www.cloudflare.com`, then `www.google.com`) | A small HTTPS request to confirm you're online |
-| While the Dashboard is open: when it first opens, every 10 min, whenever your network changes, and when you press Refresh | `api.ipify.org`, `api6.ipify.org` | Your public IPv4/IPv6 address. **These services see your public IP.** |
+| While the Dashboard is on screen: when it first opens, every 10 min, whenever your network changes, and when you press Refresh | `api.ipify.org`, `api6.ipify.org` | Your public IPv4/IPv6 address. **These services see your public IP.** |
 | Once per public IP per day (sooner if you press Refresh) | `ipinfo.io` | ISP, ASN, and city for that address. **ipinfo sees your public IP.** |
-| While the Dashboard is open, every 30 s | `1.1.1.1` and your router | Ping, for the latency readouts |
+| While the Dashboard is on screen, every 30 s | `1.1.1.1` and your router | Ping, for the latency readouts |
 | Once favorites are loaded, every 30 s (10 s while the Status Board is open) | Hosts you added as favorites | Ping |
-| When the menu bar popover or the Network Info tool opens | `api.ipify.org` | Your public IP |
-| When the Bandwidth tool opens | `ipinfo.io` | ISP name |
+| When the menu bar popover opens, or you open or return to the Network Info tab | `api.ipify.org` | Your public IP |
+| When the Bandwidth monitor starts (opening its tab starts it) | `ipinfo.io` | ISP name |
+| While the Bandwidth monitor runs. It keeps running after you switch tabs, until you press **Stop** or close the window | `1.1.1.1` (TCP port 80) and your DNS resolver | Every 3 s, four TCP connections to time latency, jitter, and loss; every 10 s, a lookup of `one.one.one.one` to time DNS |
 | While the Status Board is open: on open, then every 10 min | `ipwho.is` | Public IP, ISP, ASN, and country for the header chip |
 | While the Status Board's DNS Latency tile is shown, every 10 s | Your system DNS resolver, `1.1.1.1`, `8.8.8.8`, `9.9.9.9` | A lookup of `cloudflare.com`, to time each resolver |
 
 ### Contacted only when you use a tool
+
+Tools keep running after you switch to another tab (a ping, a traceroute, a scan, a capture) until they finish or you stop them. Closing the main window stops everything.
+
 
 - **Anything you type into a tool goes to the target you chose.** That covers Ping, Traceroute, MTR, Port Scan, HTTP Probe, SSL/TLS, MTU Discovery, Wake-on-LAN, SNMP, iperf3, and the UniFi controller.
 - **GeoIP Lookup and Visual Trace** → `ipwho.is`. It receives the IP you look up; Visual Trace sends each hop's IP.
@@ -112,6 +116,7 @@ These happen without a click, while the view in question is open:
 
 - **Network Map and Bulk Discovery** (when you click Scan): a ping sweep of the range, the ARP table, mDNS/Bonjour queries, SSDP (UPnP) multicast, Ubiquiti discovery broadcasts plus a unicast probe to every address in the range, NetBIOS name queries, and a read-only HTTP/HTTPS request to each device's web page to read its title. Those page requests accept self-signed certificates and never send credentials.
 - **Port Scan**: TCP connection attempts to the ports you choose.
+- **Bonjour Browser**: once opened, keeps listening for and querying mDNS services on your local network until the window closes.
 - **Syslog receiver**: listens on a UDP port (5140 by default) only while it's running.
 - **Packet Capture**: runs macOS's `tcpdump`, which only works if you launch SNAP with `sudo`. Captured packets appear in SNAP and go nowhere else.
 
@@ -161,27 +166,30 @@ To remove everything SNAP has stored: delete the app, run `defaults delete com.s
 open SNAP.xcodeproj
 # ⌘⇧K — Clean Build Folder
 # ⌘R   — Build & Run
-# ⌘U   — Run tests (122 tests in SNAPTests)
+# ⌘U   — Run tests (124 tests in SNAPTests)
 ```
 
 ## Version
 Current: **v1.5.3** — see [CHANGELOG.md](CHANGELOG.md)
 
 ### What's new in v1.5.3 — macOS 27 / Xcode 27 compatibility, UniFi pinning, release prep
-Mostly a warning cleanup, plus five behavioral fixes, a security hardening, and release prep. Builds clean against the macOS 27 SDK with Swift 6.4; all 122 tests pass. Deployment target stays at macOS 13.0.
+Mostly a warning cleanup, plus behavioral fixes, persistent tabs, a Daylight theme repair, a security hardening, and release prep. Builds clean against the macOS 27 SDK with Swift 6.4; all 124 tests pass. Deployment target stays at macOS 13.0.
 - **UniFi certificate pinning** — the UniFi login used to accept any certificate on the connection carrying your admin credentials. Now a self-signed controller certificate is shown and approved once, then pinned; a changed certificate is refused inside the TLS handshake, before credentials are sent. Plain-HTTP controller URLs are refused.
 - **[LICENSE](LICENSE) + [Privacy & Security](#privacy--security)** — proprietary license (free to use, source not open), and an audited list of everything SNAP contacts, stores, and can do on your network.
 - **Credited to Sevag Bardakjian** — About window, file headers, session-report footer, and copyright string.
 - **Dashboard stops hammering ipinfo.io** — it used to repeat the public-IP and ISP lookups on every 30-second refresh, about 2,900 ipinfo requests a day, enough to get rate-limited. Now the public IP is re-checked every 10 min or when your network changes, and ISP details are fetched once per IP per day. Latency pings still run every 30 s.
 - **System Health tells the truth** — the score now counts jitter, packet loss, and Wi-Fi signal on router-scale thresholds, and the Gateway Latency label uses the same model over the whole sample window instead of the latest ping. A connection that used to score 98 "Excellent" next to 64 ms of jitter now reads 43 "Degraded".
 - **Real Wi-Fi details on the Status Board** — TX Rate, Security, Noise, and SNR were hard-coded mockup values (TX Rate always said 1441). All six cells are now live CoreWLAN readings; MCS is replaced by PHY (Wi-Fi 4/5/6/6E/7), since CoreWLAN doesn't expose MCS.
+- **Tabs keep running and remember their state** — switching tabs used to destroy the tool you left, stopping a running ping, scan, or capture and clearing its results. Every tab you open now stays alive in the background. Automatic background work (Dashboard refreshes, Wi-Fi Analyzer live scans) pauses while its tab is hidden; info tabs (Network Info, ARP, DHCP, Connections, Interface Stats) refresh when you return.
+- **Daylight theme fixed** — the app forced dark mode for every theme, so under Daylight the tables, lists, text fields, and gray labels rendered dark or near-invisible. Light/dark mode now follows the theme everywhere, including the menu bar popover (which had white text on a light background) and the detached Status Board.
+- **Network Map scans real ranges** — it used to scan exactly one /24 (.1–.254) per entry and silently cut `10.0.0.0/16` down to `10.0.0.1–254`. It now takes any CIDR up to a /16, custom start–end ranges, single hosts, or a mix; prefills your actual subnet; shows a live host count; and asks before big scans, offering your own /24 as a quick alternative. Bulk Discovery uses the same parser, and its label now matches its real 8,192-address limit.
 - **Menu bar dot judges the last 5 minutes** — it used to go green or red on a single ping. It now uses the same model as the Status Board, so all three agree. It still turns red ~20 s into an outage, and its tooltip explains the color.
 - **Status Board "Run Now" actually runs a test now** — it previously only switched tabs *underneath a board that was still covering them*, so nothing happened. Added an autostart handoff token, made board dismissal mode-aware (in-window boards come down, detached second-monitor boards stay up), and forced the internet pane so the test isn't run behind the iPerf3 view.
 - **All cross-tool handoffs fixed, not just Speed Test** — `ConsumeHandoffModifier` only fired on `.onAppear`, so a handoff to a tab you were *already* on was never consumed. "Send to Ping" while sitting on the Ping tab was silently broken too. Root cause was a missing `@ObservedObject` — the same SwiftUI view-diffing trap as the v1.5.0 theme-propagation bugs.
 - **Swift 6 concurrency (14 warnings → 0)** — marked four pure-computation statics `nonisolated` (`dnsPing`, `runNettop`, `parse`, `ping`) since a `@MainActor` class also isolates its statics, and wrapped four `Timer`/`asyncAfter` callbacks in `Task { @MainActor in … }`.
 - **Missing `Combine` import (4 → 0)** — `SidebarFooter`'s `Timer.publish(…).autoconnect()` property exposes a Combine type in a file that never imported Combine.
 - **`ViewBuilder` limited-availability (2 → 0)** — `GeoIPView.mapPane` leaked the macOS-14-only `GeoIPMapView` into its opaque return type; both branches now type-erase through `AnyView`.
-- **Left deliberately:** 20 `onChange(of:perform:)` deprecation warnings across 11 files. The replacement API is macOS 14+ and SNAP still targets macOS 13. Deprecated ≠ removed; revisit when macOS 13 support is dropped. (An earlier draft said 13 across 10 files — that was a miscount of a clean build's output, which logs each site twice.)
+- **Left deliberately:** 22 `onChange(of:perform:)` deprecation warnings across 11 files. The replacement API is macOS 14+ and SNAP still targets macOS 13. Deprecated ≠ removed; revisit when macOS 13 support is dropped. (An earlier draft said 13 across 10 files — that was a miscount of a clean build's output, which logs each site twice.)
 
 ### What's new in v1.5.2 — Status Board rework
 Full visual + functional pass on the Status Board:
@@ -241,7 +249,7 @@ A maintenance release focused on robustness and consistency (no new features):
 ## Roadmap
 - **v1.5** — HTTP/2+3 inspector, TLS fingerprinting + cert chain extraction on mgmt portals (cert expiry monitoring), DNSSEC validation, SNMPv3 (USM auth+priv), SNMP trap receiver, Sparkle auto-update
 - **v2.0 Pro** — Multi-site uptime dashboard, LaunchAgent daemon, Widgets, anomaly-baseline alerts, NetFlow/sFlow collector
-- **Lite** — App Store sandboxed variant with IAP
+- **Lite** — App Store sandboxed variant
 
 ## License
 Proprietary — © 2025–2026 Sevag Bardakjian. All rights reserved. SNAP is free to download and use; the source code is not open source. See [LICENSE](LICENSE).

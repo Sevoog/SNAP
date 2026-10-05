@@ -153,10 +153,51 @@ enum SNAPTab: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Tab lifecycle
+
+private struct ActiveTabKey: EnvironmentKey { static let defaultValue = true }
+
+extension EnvironmentValues {
+    /// False while this tool's tab is open in the background. Tabs stay
+    /// alive after you switch away (see `ContentView.detailView`), so
+    /// `.onDisappear` no longer fires on a tab switch.
+    var isActiveTab: Bool {
+        get { self[ActiveTabKey.self] }
+        set { self[ActiveTabKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// For automatic work a tab does while on screen — polling, live Wi-Fi
+    /// scans, reloading a snapshot: `hidden` runs when the user switches to
+    /// another tab, `shown` when they come back. Work the user started (a
+    /// ping, a scan, a capture) should not use this; it's meant to keep
+    /// running in the background.
+    func onTabVisibilityChange(shown: @escaping () -> Void,
+                               hidden: @escaping () -> Void = {}) -> some View {
+        modifier(TabVisibilityModifier(shown: shown, hidden: hidden))
+    }
+}
+
+private struct TabVisibilityModifier: ViewModifier {
+    @Environment(\.isActiveTab) private var isActive
+    let shown: () -> Void
+    let hidden: () -> Void
+
+    func body(content: Content) -> some View {
+        content.onChange(of: isActive) { active in
+            if active { shown() } else { hidden() }
+        }
+    }
+}
+
 // MARK: - Root Content View
 
 struct ContentView: View {
     @State private var selectedTab: SNAPTab = .dashboard
+    /// Tabs opened so far. They stay alive, hidden, after you switch away —
+    /// see `detailView`.
+    @State private var openedTabs: Set<SNAPTab> = []
     @State private var searchText = ""
     @ObservedObject private var themeMgr = ThemeManager.shared
     @ObservedObject private var onboarding = OnboardingManager.shared
@@ -182,7 +223,9 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(NS.bg0)
-        .preferredColorScheme(.dark)
+        // Follows the theme (was hard-coded .dark, which broke Daylight's
+        // tables, text fields, and secondary text).
+        .preferredColorScheme(themeMgr.current.colorScheme)
         .onReceive(NotificationCenter.default.publisher(for: .exportSessionReport)) { _ in
             SessionReporter.writeReport()
         }
@@ -232,9 +275,34 @@ struct ContentView: View {
         )
     }
 
-    @ViewBuilder
+    /// Every tab opened this session stays mounted, hidden when it isn't
+    /// selected, so work you started — a ping, a scan, a capture — keeps
+    /// running, and inputs and results are still there when you come back.
+    /// (Before v1.5.3 switching tabs destroyed the tool, which stopped and
+    /// cleared it.) Automatic background work pauses while hidden via
+    /// `onTabVisibilityChange`.
     private var detailView: some View {
-        switch selectedTab {
+        ZStack {
+            ForEach(SNAPTab.allCases.filter { openedTabs.contains($0) || $0 == selectedTab }) { tab in
+                let active = tab == selectedTab
+                toolView(for: tab)
+                    .opacity(active ? 1 : 0)
+                    .allowsHitTesting(active)
+                    // Disabled while hidden so a hidden tab's keyboard
+                    // shortcuts (Return-to-scan, etc.) can't fire from here.
+                    .disabled(!active)
+                    .accessibilityHidden(!active)
+                    .zIndex(active ? 1 : 0)
+                    .environment(\.isActiveTab, active)
+            }
+        }
+        .onAppear { openedTabs.insert(selectedTab) }
+        .onChange(of: selectedTab) { openedTabs.insert($0) }
+    }
+
+    @ViewBuilder
+    private func toolView(for tab: SNAPTab) -> some View {
+        switch tab {
         case .dashboard:       DashboardView(selectedTab: $selectedTab)
         case .info:            InfoView()
         case .ping:            PingView()
@@ -343,7 +411,7 @@ struct RailButton: View {
                 .frame(width: 36, height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(isSelected ? NS.amber.opacity(0.12) : (isHovered ? Color.white.opacity(0.04) : Color.clear))
+                        .fill(isSelected ? NS.amber.opacity(0.12) : (isHovered ? NS.text1.opacity(0.04) : Color.clear))
                 )
         }
         .buttonStyle(.plain)
@@ -414,7 +482,7 @@ struct DarkSidebar: View {
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 6)
-            .background(Color.white.opacity(0.04))
+            .background(NS.text1.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 7))
             .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(NS.border, lineWidth: 0.5))
             .padding(.horizontal, 10)
@@ -549,6 +617,7 @@ struct SidebarFooter: View {
 
 struct AboutSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -607,7 +676,7 @@ struct AboutSheet: View {
         }
         .frame(width: 320)
         .background(NS.bg2)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(themeMgr.current.colorScheme)
     }
 
     private func aboutRow(icon: String, label: String, value: String) -> some View {
@@ -651,7 +720,7 @@ struct DarkNavRow: View {
                 RoundedRectangle(cornerRadius: 7)
                     .fill(isSelected
                           ? NS.amber.opacity(0.10)
-                          : (isHovered ? Color.white.opacity(0.03) : Color.clear))
+                          : (isHovered ? NS.text1.opacity(0.03) : Color.clear))
             )
         }
         .buttonStyle(.plain)
@@ -721,6 +790,10 @@ struct DashboardView: View {
             mapModel.restoreLastScan()
         }
         .onDisappear { bwMonitor.stop() }
+        // The Dashboard stays alive in the background; its live bandwidth
+        // card only needs to sample while it's on screen.
+        .onTabVisibilityChange(shown: { bwMonitor.start() },
+                               hidden: { bwMonitor.stop() })
         .sheet(isPresented: $showAddSheet) {
             AddToolsSheet(layout: layout)
         }

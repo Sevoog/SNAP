@@ -189,6 +189,9 @@ struct InterfaceStatsView: View {
         .navigationTitle("Interface Stats")
         .onAppear { if model.infos.isEmpty { model.refresh() } }
         .onDisappear { model.stopLive() }
+        // Live sampling (if you started it) keeps running in the background;
+        // the counters table refreshes on return.
+        .onTabVisibilityChange(shown: { model.refresh() })
     }
 
     // MARK: Toolbar

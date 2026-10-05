@@ -345,7 +345,7 @@ struct SyslogReceiverView: View {
             logTable
         }
         .navigationTitle("Syslog")
-        // Tab switching recreates this view and its model — stop the
+        // Runs when the window closes (tabs now stay alive across switches) — stop the
         // listener instead of leaking the bound UDP socket
         .onDisappear { model.stop() }
     }

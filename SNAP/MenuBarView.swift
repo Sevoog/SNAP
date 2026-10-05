@@ -8,16 +8,20 @@ import Network
 import Darwin
 import CoreWLAN
 
-// MARK: - Force dark appearance on the hosting NSWindow
+// MARK: - Match the hosting NSWindow's appearance to the theme
+// (The menu bar popover's window doesn't pick up the app-wide setting on
+// its own; this used to force dark for every theme.)
 
-private struct DarkAppearanceEnforcer: NSViewRepresentable {
+private struct AppearanceEnforcer: NSViewRepresentable {
+    let name: NSAppearance.Name
     func makeNSView(context: Context) -> NSView {
         let v = NSView()
-        DispatchQueue.main.async { v.window?.appearance = NSAppearance(named: .darkAqua) }
+        let name = self.name
+        DispatchQueue.main.async { v.window?.appearance = NSAppearance(named: name) }
         return v
     }
     func updateNSView(_ nsView: NSView, context: Context) {
-        nsView.window?.appearance = NSAppearance(named: .darkAqua)
+        nsView.window?.appearance = NSAppearance(named: name)
     }
 }
 
@@ -408,6 +412,14 @@ struct MenuBarView: View {
     private var bg2: Color { NS.bg3 }
     private var bg3: Color { NS.bg3.opacity(0.9) }
 
+    /// Text and hairline color at a given strength: white on dark themes
+    /// (the original design), black on Daylight. The backgrounds above
+    /// already follow the theme, so the fixed white text this replaces
+    /// vanished on Daylight's light surfaces.
+    private func ink(_ alpha: Double) -> Color {
+        themeMgr.current.isLight ? Color.black.opacity(alpha) : Color.white.opacity(alpha)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -421,7 +433,7 @@ struct MenuBarView: View {
         }
         .frame(width: 300)
         .background(bg0)
-        .background(DarkAppearanceEnforcer())
+        .background(AppearanceEnforcer(name: themeMgr.current.appearanceName))
         .onAppear { refreshAll() }
     }
 
@@ -439,9 +451,9 @@ struct MenuBarView: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text("SNAP").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.88))
+                    .foregroundStyle(ink(0.88))
                 Text("Live Monitor").font(.system(size: 9))
-                    .foregroundStyle(Color.white.opacity(0.3))
+                    .foregroundStyle(ink(0.3))
             }
             Spacer()
             HStack(spacing: 4) {
@@ -463,13 +475,13 @@ struct MenuBarView: View {
         HStack(spacing: 0) {
             rateCell(label: "DOWNLOAD", value: monitor.rxStr,
                      peak: monitor.formatPeak(monitor.peakRx), color: NS.green)
-            Divider().background(Color.white.opacity(0.05))
+            Divider().background(ink(0.05))
             rateCell(label: "UPLOAD", value: monitor.txStr,
                      peak: monitor.formatPeak(monitor.peakTx), color: NS.blue)
         }
         .background(bg1)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5)
+            Rectangle().fill(ink(0.06)).frame(height: 0.5)
         }
     }
 
@@ -477,13 +489,13 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(.system(size: 8, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.25))
+                .foregroundStyle(ink(0.25))
             Text(value)
                 .font(.system(size: 15, weight: .medium, design: .monospaced))
                 .foregroundStyle(color)
             Text("peak \(peak)")
                 .font(.system(size: 8))
-                .foregroundStyle(Color.white.opacity(0.2))
+                .foregroundStyle(ink(0.2))
         }
         .padding(.horizontal, 13).padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -495,13 +507,13 @@ struct MenuBarView: View {
         VStack(spacing: 0) {
             sparkBar(history: monitor.rxHistory, color: NS.green,
                      label: "↓ RX", rateStr: monitor.rxStr, isTop: true)
-            Rectangle().fill(Color.white.opacity(0.04)).frame(height: 0.5)
+            Rectangle().fill(ink(0.04)).frame(height: 0.5)
             sparkBar(history: monitor.txHistory, color: NS.blue,
                      label: "↑ TX", rateStr: monitor.txStr, isTop: false)
         }
         .background(bg1)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5)
+            Rectangle().fill(ink(0.06)).frame(height: 0.5)
         }
     }
 
@@ -511,14 +523,14 @@ struct MenuBarView: View {
             HStack {
                 Text(label)
                     .font(.system(size: 8, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.25))
+                    .foregroundStyle(ink(0.25))
                 Text(rateStr)
                     .font(.system(size: 8, weight: .medium, design: .monospaced))
                     .foregroundStyle(color.opacity(0.8))
                 Spacer()
                 Text(isTop ? "\(monitor.activeInterface) · 2s" : "last 30 samples")
                     .font(.system(size: 8))
-                    .foregroundStyle(Color.white.opacity(0.15))
+                    .foregroundStyle(ink(0.15))
             }
             GeometryReader { geo in
                 let peakVal = Swift.max(1.0, history.max() ?? 1.0)
@@ -558,7 +570,7 @@ struct MenuBarView: View {
                     HStack {
                         Text(wifiInfo.ssid)
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.85))
+                            .foregroundStyle(ink(0.85))
                         Spacer()
                         signalBars(rssi: wifiInfo.rssi)
                         Text(wifiInfo.security)
@@ -570,13 +582,13 @@ struct MenuBarView: View {
                         infoCell(label: "RSSI", value: "\(wifiInfo.rssi) dBm",
                                  color: wifiInfo.rssi > -60 ? NS.green : wifiInfo.rssi > -75 ? NS.amber : NS.red)
                         infoCell(label: "TX RATE", value: "\(Int(wifiInfo.txRate)) Mbps",
-                                 color: Color.white.opacity(0.75))
+                                 color: ink(0.75))
                     }
                 }
                 .padding(.horizontal, 13).padding(.vertical, 8)
                 .background(bg0)
                 .overlay(alignment: .bottom) {
-                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5)
+                    Rectangle().fill(ink(0.06)).frame(height: 0.5)
                 }
             }
         }
@@ -611,7 +623,7 @@ struct MenuBarView: View {
                 .padding(.horizontal, 13).padding(.vertical, 8)
                 .background(bg0)
                 .overlay(alignment: .bottom) {
-                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5)
+                    Rectangle().fill(ink(0.06)).frame(height: 0.5)
                 }
             }
         }
@@ -635,11 +647,11 @@ struct MenuBarView: View {
                             Circle().fill(NS.amber).frame(width: 5, height: 5)
                             Text(vpn.name)
                                 .font(.system(size: 10))
-                                .foregroundStyle(Color.white.opacity(0.7))
+                                .foregroundStyle(ink(0.7))
                             Spacer()
                             Text(vpn.ip)
                                 .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(Color.white.opacity(0.5))
+                                .foregroundStyle(ink(0.5))
                             Text("Active")
                                 .font(.system(size: 8)).padding(.horizontal, 5).padding(.vertical, 2)
                                 .background(NS.amber.opacity(0.12)).cornerRadius(3)
@@ -650,7 +662,7 @@ struct MenuBarView: View {
                 .padding(.horizontal, 13).padding(.vertical, 8)
                 .background(bg0)
                 .overlay(alignment: .bottom) {
-                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5)
+                    Rectangle().fill(ink(0.06)).frame(height: 0.5)
                 }
             }
         }
@@ -670,21 +682,21 @@ struct MenuBarView: View {
                         TextField("Host or IP", text: $quickHost)
                             .textFieldStyle(.plain)
                             .font(.system(size: 11))
-                            .foregroundStyle(Color.white.opacity(0.75))
+                            .foregroundStyle(ink(0.75))
                             .padding(.horizontal, 8).padding(.vertical, 5)
-                            .background(Color.white.opacity(0.06))
+                            .background(ink(0.06))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
+                                .strokeBorder(ink(0.1), lineWidth: 0.5))
                         Button("Ping") { quickPing() }
                             .font(.system(size: 11))
                             .buttonStyle(.plain)
                             .padding(.horizontal, 10).padding(.vertical, 5)
-                            .background(Color.white.opacity(0.08))
+                            .background(ink(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
-                            .foregroundStyle(Color.white.opacity(0.65))
+                                .strokeBorder(ink(0.12), lineWidth: 0.5))
+                            .foregroundStyle(ink(0.65))
                             .disabled(quickHost.isEmpty)
                     }
                     if !pingResult.isEmpty {
@@ -699,34 +711,34 @@ struct MenuBarView: View {
                         TextField("Domain", text: $dnsHost)
                             .textFieldStyle(.plain)
                             .font(.system(size: 11))
-                            .foregroundStyle(Color.white.opacity(0.75))
+                            .foregroundStyle(ink(0.75))
                             .padding(.horizontal, 8).padding(.vertical, 5)
-                            .background(Color.white.opacity(0.06))
+                            .background(ink(0.06))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
+                                .strokeBorder(ink(0.1), lineWidth: 0.5))
                         Button("Look up") { quickDNS() }
                             .font(.system(size: 11))
                             .buttonStyle(.plain)
                             .padding(.horizontal, 10).padding(.vertical, 5)
-                            .background(Color.white.opacity(0.08))
+                            .background(ink(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
-                            .foregroundStyle(Color.white.opacity(0.65))
+                                .strokeBorder(ink(0.12), lineWidth: 0.5))
+                            .foregroundStyle(ink(0.65))
                             .disabled(dnsHost.isEmpty)
                     }
                     if !dnsResult.isEmpty {
                         Text(dnsResult)
                             .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(Color.white.opacity(0.5))
+                            .foregroundStyle(ink(0.5))
                             .lineLimit(3)
                     }
                 }
                 .padding(.horizontal, 13).padding(.vertical, 8)
                 .background(bg0)
                 .overlay(alignment: .bottom) {
-                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5)
+                    Rectangle().fill(ink(0.06)).frame(height: 0.5)
                 }
             }
         }
@@ -753,11 +765,11 @@ struct MenuBarView: View {
             Spacer()
             Text("v\(AppInfo.version)")
                 .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.18))
+                .foregroundStyle(ink(0.18))
             Button { refreshAll() } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.white.opacity(isRefreshing ? 0.2 : 0.3))
+                    .foregroundStyle(ink(isRefreshing ? 0.2 : 0.3))
             }
             .buttonStyle(.plain)
             .disabled(isRefreshing)
@@ -774,10 +786,10 @@ struct MenuBarView: View {
             HStack(spacing: 6) {
                 Image(systemName: expanded.wrappedValue ? "chevron.down" : "chevron.right")
                     .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.2))
+                    .foregroundStyle(ink(0.2))
                 Text(label)
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.4))
+                    .foregroundStyle(ink(0.4))
                 if let badge = badge {
                     Text(badge)
                         .font(.system(size: 8)).padding(.horizontal, 5).padding(.vertical, 1)
@@ -788,7 +800,7 @@ struct MenuBarView: View {
                 if let trailing = trailing {
                     Text(trailing)
                         .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.2))
+                        .foregroundStyle(ink(0.2))
                 }
             }
             .padding(.horizontal, 13).padding(.vertical, 7)
@@ -797,7 +809,7 @@ struct MenuBarView: View {
         }
         .buttonStyle(.plain)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5)
+            Rectangle().fill(ink(0.06)).frame(height: 0.5)
         }
     }
 
@@ -806,11 +818,11 @@ struct MenuBarView: View {
             Image(systemName: icon)
                 .font(.system(size: 10)).foregroundStyle(NS.blue).frame(width: 12)
             Text(label)
-                .font(.system(size: 10)).foregroundStyle(Color.white.opacity(0.28))
+                .font(.system(size: 10)).foregroundStyle(ink(0.28))
                 .frame(width: 76, alignment: .leading)
             Text(value)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.75))
+                .foregroundStyle(ink(0.75))
                 .textSelection(.enabled)
                 .lineLimit(1)
             Spacer()
@@ -820,7 +832,7 @@ struct MenuBarView: View {
                     NSPasteboard.general.setString(value, forType: .string)
                 } label: {
                     Image(systemName: "doc.on.doc")
-                        .font(.system(size: 9)).foregroundStyle(Color.white.opacity(0.25))
+                        .font(.system(size: 9)).foregroundStyle(ink(0.25))
                 }
                 .buttonStyle(.plain)
             }
@@ -830,7 +842,7 @@ struct MenuBarView: View {
 
     private func infoCell(label: String, value: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(label).font(.system(size: 8)).foregroundStyle(Color.white.opacity(0.22))
+            Text(label).font(.system(size: 8)).foregroundStyle(ink(0.22))
             Text(value).font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(color)
         }
@@ -842,7 +854,7 @@ struct MenuBarView: View {
                 let active = rssi > -90 && (h == 4 || (rssi > -75 && h == 7) ||
                              (rssi > -65 && h == 10) || (rssi > -55 && h == 13))
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(active ? NS.green : Color.white.opacity(0.15))
+                    .fill(active ? NS.green : ink(0.15))
                     .frame(width: 3, height: CGFloat(h))
             }
         }
@@ -851,7 +863,7 @@ struct MenuBarView: View {
     private func toolLabel(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 8, design: .monospaced))
-            .foregroundStyle(Color.white.opacity(0.22))
+            .foregroundStyle(ink(0.22))
     }
 
     // MARK: - Actions

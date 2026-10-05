@@ -50,6 +50,7 @@
 		AA39000000000000000000AA /* ConnectionHealthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3A000000000000000000AA /* ConnectionHealthTests.swift */; };
 		AA3B000000000000000000AA /* PublicLookupPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3C000000000000000000AA /* PublicLookupPolicyTests.swift */; };
 		AA3D000000000000000000AA /* StatusBoardWiFiTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3E000000000000000000AA /* StatusBoardWiFiTests.swift */; };
+		AA41000000000000000000AA /* ScanRangeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA42000000000000000000AA /* ScanRangeTests.swift */; };
 		AA0F000000000000000000AA /* OUIEnterpriseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10000000000000000000AA /* OUIEnterpriseTests.swift */; };
 		AA11000000000000000000AA /* BGPLookupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA12000000000000000000AA /* BGPLookupView.swift */; };
 		AA13000000000000000000AA /* UniFiControllerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA14000000000000000000AA /* UniFiControllerView.swift */; };
@@ -69,6 +70,7 @@
 		AA33000000000000000000AA /* StatusBoardWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA34000000000000000000AA /* StatusBoardWindow.swift */; };
 		AA35000000000000000000AA /* StatusBoardTiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA36000000000000000000AA /* StatusBoardTiles.swift */; };
 		AA37000000000000000000AA /* StatusBoardMonitors.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA38000000000000000000AA /* StatusBoardMonitors.swift */; };
+		AA3F000000000000000000AA /* ScanRange.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA40000000000000000000AA /* ScanRange.swift */; };
 		AFA530393E79F4AC54C3BB1E /* InterfaceStatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DAAD1976B90435921F26E74 /* InterfaceStatsView.swift */; };
 		B723C9D67B7708FA1B5B4F1D /* WakeOnLANView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA6865C4D593A181A1035BBE /* WakeOnLANView.swift */; };
 		BC490D655BE3E273E2036226 /* BonjourView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 673813A778890D2526429140 /* BonjourView.swift */; };
@@ -140,6 +142,7 @@
 		AA3A000000000000000000AA /* ConnectionHealthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionHealthTests.swift; sourceTree = "<group>"; };
 		AA3C000000000000000000AA /* PublicLookupPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicLookupPolicyTests.swift; sourceTree = "<group>"; };
 		AA3E000000000000000000AA /* StatusBoardWiFiTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBoardWiFiTests.swift; sourceTree = "<group>"; };
+		AA42000000000000000000AA /* ScanRangeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanRangeTests.swift; sourceTree = "<group>"; };
 		AA10000000000000000000AA /* OUIEnterpriseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OUIEnterpriseTests.swift; sourceTree = "<group>"; };
 		AA12000000000000000000AA /* BGPLookupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BGPLookupView.swift; sourceTree = "<group>"; };
 		AA14000000000000000000AA /* UniFiControllerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UniFiControllerView.swift; sourceTree = "<group>"; };
@@ -159,6 +162,7 @@
 		AA34000000000000000000AA /* StatusBoardWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBoardWindow.swift; sourceTree = "<group>"; };
 		AA36000000000000000000AA /* StatusBoardTiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBoardTiles.swift; sourceTree = "<group>"; };
 		AA38000000000000000000AA /* StatusBoardMonitors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBoardMonitors.swift; sourceTree = "<group>"; };
+		AA40000000000000000000AA /* ScanRange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanRange.swift; sourceTree = "<group>"; };
 		B18A787B259BA39C427CF814 /* DNSWireTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DNSWireTests.swift; sourceTree = "<group>"; };
 		B39B1CB309EACA7488B326B1 /* PortScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortScanView.swift; sourceTree = "<group>"; };
 		B46467214B049C38C5A93883 /* SSLCheckerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSLCheckerView.swift; sourceTree = "<group>"; };
@@ -221,6 +225,7 @@
 				AA3A000000000000000000AA /* ConnectionHealthTests.swift */,
 				AA3C000000000000000000AA /* PublicLookupPolicyTests.swift */,
 				AA3E000000000000000000AA /* StatusBoardWiFiTests.swift */,
+				AA42000000000000000000AA /* ScanRangeTests.swift */,
 				AA10000000000000000000AA /* OUIEnterpriseTests.swift */,
 				AA1C000000000000000000AA /* ParserTests.swift */,
 			);
@@ -306,6 +311,7 @@
 				AA34000000000000000000AA /* StatusBoardWindow.swift */,
 				AA36000000000000000000AA /* StatusBoardTiles.swift */,
 				AA38000000000000000000AA /* StatusBoardMonitors.swift */,
+				AA40000000000000000000AA /* ScanRange.swift */,
 				AA18000000000000000000AA /* PrivacyInfo.xcprivacy */,
 			);
 			path = SNAP;
@@ -463,6 +469,7 @@
 				AA33000000000000000000AA /* StatusBoardWindow.swift in Sources */,
 				AA35000000000000000000AA /* StatusBoardTiles.swift in Sources */,
 				AA37000000000000000000AA /* StatusBoardMonitors.swift in Sources */,
+				AA3F000000000000000000AA /* ScanRange.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -479,6 +486,7 @@
 				AA39000000000000000000AA /* ConnectionHealthTests.swift in Sources */,
 				AA3B000000000000000000AA /* PublicLookupPolicyTests.swift in Sources */,
 				AA3D000000000000000000AA /* StatusBoardWiFiTests.swift in Sources */,
+				AA41000000000000000000AA /* ScanRangeTests.swift in Sources */,
 				AA0F000000000000000000AA /* OUIEnterpriseTests.swift in Sources */,
 				AA1B000000000000000000AA /* ParserTests.swift in Sources */,
 			);

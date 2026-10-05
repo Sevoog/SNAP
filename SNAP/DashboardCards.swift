@@ -1019,6 +1019,9 @@ private struct WiFiDashCard: View {
         }
         .onAppear { refresh(); start() }
         .onDisappear { timer?.invalidate(); timer = nil }
+        // Automatic polling: pause while the Dashboard is in the background.
+        .onTabVisibilityChange(shown: { refresh(); start() },
+                               hidden: { timer?.invalidate(); timer = nil })
     }
 
     private var rssiColor: Color {

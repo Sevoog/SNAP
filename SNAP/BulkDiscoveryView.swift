@@ -63,13 +63,19 @@ final class BulkDiscoveryModel: ObservableObject {
 
     private var task: Task<Void, Never>?
 
+    /// Bulk Discovery does far more per host than the Network Map (optional
+    /// port scan + SNMP), so it keeps a lower ceiling: 8,192 addresses (a /19).
+    nonisolated static let maxHosts = 8_192
+
     init() {
-        // Default CIDR = local /24 if we can determine it. Deferred off the
-        // initializer so we never publish `cidr` during the view-creation pass
-        // (the "Publishing changes from within view updates" warning class).
+        // Default = this Mac's subnet, or its /24 if the subnet is bigger
+        // (per-host work here is heavy). Deferred off the initializer so we
+        // never publish `cidr` during the view-creation pass (the
+        // "Publishing changes from within view updates" warning class).
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.cidr.isEmpty, let net = primaryIPv4Network() else { return }
-            self.cidr = "\(net.prefix).0/24"
+            guard let self, self.cidr.isEmpty, let net = ScanRange.localNetwork() else { return }
+            let prefix = Int(net.cidr.split(separator: "/").last ?? "") ?? 0
+            self.cidr = prefix >= 24 ? net.cidr : net.slash24
         }
     }
 
@@ -78,8 +84,12 @@ final class BulkDiscoveryModel: ObservableObject {
         assets.removeAll()
         alive = 0
         scanned = 0
-        guard let hosts = expandCIDR(cidr) else {
-            errorMessage = "Invalid CIDR — try 192.168.1.0/24"
+        // Same parser as the Network Map: CIDR, ranges, /24 shorthand, lists.
+        let hosts: [String]
+        switch ScanRange.parse(cidr, maxHosts: Self.maxHosts) {
+        case .success(let range): hosts = range.addresses()
+        case .failure(let e):
+            errorMessage = e.message
             return
         }
         total = hosts.count
@@ -404,34 +414,7 @@ final class BulkDiscoveryModel: ObservableObject {
 }
 
 // MARK: - Helpers
-
-/// Expand a CIDR (IPv4 only for this version) into the list of usable host
-/// addresses. /24 returns 254 IPs (skips network + broadcast).
-func expandCIDR(_ cidr: String) -> [String]? {
-    let parts = cidr.split(separator: "/")
-    guard parts.count == 2,
-          let prefixLen = UInt8(parts[1]), prefixLen <= 32 else { return nil }
-    let octets = parts[0].split(separator: ".").compactMap { UInt8($0) }
-    guard octets.count == 4 else { return nil }
-    let baseInt: UInt32 = (UInt32(octets[0]) << 24)
-                        | (UInt32(octets[1]) << 16)
-                        | (UInt32(octets[2]) << 8)
-                        |  UInt32(octets[3])
-    let mask: UInt32 = prefixLen == 0 ? 0 : (UInt32.max << (32 - UInt32(prefixLen)))
-    let network = baseInt & mask
-    let broadcast = network | ~mask
-    let hostCount = (broadcast > network + 1) ? Int(broadcast - network - 1) : 1
-    // Safety cap to avoid an accidental /16 spinning forever in UI.
-    if hostCount > 8192 { return nil }
-    var out: [String] = []
-    out.reserveCapacity(hostCount)
-    let first = (prefixLen >= 31) ? network : (network + 1)
-    let last  = (prefixLen >= 31) ? broadcast : (broadcast - 1)
-    for n in first...last {
-        out.append("\((n >> 24) & 0xFF).\((n >> 16) & 0xFF).\((n >> 8) & 0xFF).\(n & 0xFF)")
-    }
-    return out
-}
+// (CIDR / range expansion lives in ScanRange.swift, shared with the Network Map.)
 
 private func ipLessThan(_ a: String, _ b: String) -> Bool {
     let ao = a.split(separator: ".").compactMap { UInt32($0) }
@@ -474,33 +457,6 @@ private func readARPCache() -> [String: String] {
     return map
 }
 
-private func primaryIPv4Network() -> (prefix: String, iface: String)? {
-    var ifaddr: UnsafeMutablePointer<ifaddrs>?
-    guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return nil }
-    defer { freeifaddrs(ifaddr) }
-    var cur = Optional(first)
-    while let c = cur {
-        defer { cur = c.pointee.ifa_next }
-        guard let addr = c.pointee.ifa_addr else { continue }
-        guard Int32(addr.pointee.sa_family) == AF_INET else { continue }
-        let flags = Int32(c.pointee.ifa_flags)
-        if (flags & IFF_LOOPBACK) != 0 { continue }
-        if (flags & IFF_UP) == 0 { continue }
-        let name = String(cString: c.pointee.ifa_name)
-        if !["en0", "en1", "en2", "en3"].contains(name) { continue }
-        var buf = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-        if getnameinfo(addr, socklen_t(addr.pointee.sa_len),
-                       &buf, socklen_t(buf.count),
-                       nil, 0, NI_NUMERICHOST) == 0 {
-            let ip = String(cString: buf)
-            let parts = ip.split(separator: ".")
-            if parts.count == 4 {
-                return ("\(parts[0]).\(parts[1]).\(parts[2])", name)
-            }
-        }
-    }
-    return nil
-}
 
 // MARK: - View
 
@@ -518,7 +474,7 @@ struct BulkDiscoveryView: View {
             results
         }
         .navigationTitle("Bulk Discovery")
-        // Tab switching recreates this view and its model — cancel the
+        // Runs when the window closes (tabs now stay alive across switches) — cancel the
         // two-phase sweep instead of orphaning it
         .onDisappear { if model.isRunning { model.cancel() } }
     }
@@ -555,10 +511,11 @@ struct BulkDiscoveryView: View {
 
     private var configBar: some View {
         HStack(spacing: 8) {
-            Text("CIDR:").font(.system(size: 11)).foregroundStyle(NS.text3)
+            Text("Range:").font(.system(size: 11)).foregroundStyle(NS.text3)
             TextField("192.168.1.0/24", text: $model.cidr)
-                .textFieldStyle(.roundedBorder).frame(width: 160)
+                .textFieldStyle(.roundedBorder).frame(width: 200)
                 .disabled(model.isRunning)
+                .help("A subnet (10.0.0.0/22), a range (10.0.0.1-10.0.3.254 or 192.168.1.100-150), a /24 shorthand (192.168.1), or a single address — several separated by commas.")
             Toggle("Port scan", isOn: $model.includePortScan).toggleStyle(.checkbox).font(.system(size: 11))
                 .disabled(model.isRunning)
             Toggle("SNMP probe", isOn: $model.probeSNMP).toggleStyle(.checkbox).font(.system(size: 11))
@@ -569,7 +526,8 @@ struct BulkDiscoveryView: View {
                     .disabled(model.isRunning)
             }
             Spacer()
-            Text("Max /22 (1024 hosts) — keep scans focused")
+            // Previously read "Max /22 (1024 hosts)" while the code allowed 8,192.
+            Text("Up to \(BulkDiscoveryModel.maxHosts.formatted()) addresses (a /19) — keep scans focused")
                 .font(.system(size: 10)).foregroundStyle(NS.text3)
         }
         .padding(.horizontal, 16).padding(.vertical, 6)
