@@ -671,10 +671,22 @@ struct AboutSheet: View {
 
                 Divider().background(NS.border)
 
-                Text("© 2025–2026 Sevag Bardakjian · All rights reserved")
-                    .font(.system(size: 10))
-                    .foregroundStyle(NS.text4)
-                    .padding(.bottom, 20)
+                // GPL-3.0 "Appropriate Legal Notices": copyright, no warranty,
+                // that it may be redistributed under the license, and where to
+                // read the license.
+                VStack(spacing: 4) {
+                    Text("© 2025–2026 Sevag Bardakjian · GNU GPL v3")
+                    Text("Free software with ABSOLUTELY NO WARRANTY. You may redistribute it under the terms of the GPL v3.")
+                        .multilineTextAlignment(.center)
+                    if let source = URL(string: "https://github.com/Sevoog/SNAP") {
+                        Link("Source code and license", destination: source)
+                            .foregroundStyle(NS.blue)
+                    }
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(NS.text4)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 20)
             }
         }
         .frame(width: 320)

@@ -1,7 +1,8 @@
 // HostContextMenu.swift
 // SNAP — Right-click menu shared by every view that shows a host or IP
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Attach via `.hostMenu(host)`. The menu offers Copy, send-to-tool actions
 // (Ping / Traceroute / Port Scan / Lookup / Whois), and "Find in Network Map"

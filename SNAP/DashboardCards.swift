@@ -1,7 +1,8 @@
 // DashboardCards.swift
 // SNAP — Customizable Dashboard (v1.5.0)
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Lets the user pin tools onto the Dashboard as cards. Three buckets:
 //   Functional — full mini form + results inline (Ping, Lookup, Subnet, BGP, Port Scan)

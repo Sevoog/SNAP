@@ -1,7 +1,8 @@
 // BulkDiscoveryView.swift
 // SNAP — Bulk subnet sweep + asset inventory
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // "Network Map but exhaustive": take a CIDR, sweep every host, then for
 // each live host run port-scan + SNMP-public + reverse DNS + OUI in

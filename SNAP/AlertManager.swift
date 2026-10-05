@@ -1,7 +1,8 @@
 // AlertManager.swift
 // SNAP — Threshold alerts for Bandwidth Monitor
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Watches Bandwidth Monitor samples and fires a macOS UserNotification when a
 // metric crosses a user-configured threshold for N consecutive samples. The

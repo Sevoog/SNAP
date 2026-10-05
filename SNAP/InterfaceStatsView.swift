@@ -1,7 +1,8 @@
 // InterfaceStatsView.swift
 // SNAP — Interface Stats (full rewrite in v1.2.4)
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Replaces the previous netstat-shell-out version with:
 //   • Single sortable Table over getifaddrs (sub-millisecond, no process spawn)

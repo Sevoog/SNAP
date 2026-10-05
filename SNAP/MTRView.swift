@@ -1,7 +1,8 @@
 // MTRView.swift
 // SNAP — mtr-style combined traceroute + per-hop continuous ping
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Two phases:
 //   1. Discover the path with one traceroute (`/usr/sbin/traceroute -n -q1 -m N`)

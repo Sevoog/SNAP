@@ -1,7 +1,8 @@
 // OnboardingView.swift
 // SNAP — First-launch welcome tour (v1.5.0)
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Shown automatically on first launch (gated by a UserDefaults flag), and
 // re-openable from the Help menu via "Quick Tour…". Five slides cover what

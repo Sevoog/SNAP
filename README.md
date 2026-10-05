@@ -3,7 +3,7 @@
 
 A professional macOS network utility — sandboxless, built for speed, with ten themes.
 
-No accounts, analytics, telemetry, or crash reporting. See [Privacy & Security](#privacy--security) for every service SNAP contacts, what it stores, and what it can do on your network.
+Free and open source under the [GNU GPL v3](LICENSE). No accounts, analytics, telemetry, or crash reporting. See [Privacy & Security](#privacy--security) for every service SNAP contacts, what it stores, and what it can do on your network.
 
 ## Screenshots
 
@@ -201,7 +201,7 @@ Builds clean; all 124 tests pass. Requires macOS 14.0 or later.
 ### What's new in v1.5.3 — macOS 27 / Xcode 27 compatibility, UniFi pinning, release prep
 Mostly a warning cleanup, plus five behavioral fixes, a security hardening, and release prep. Builds clean against the macOS 27 SDK with Swift 6.4; all 122 tests pass. Requires macOS 14.0 or later (these notes originally said 13.0; see the CHANGELOG).
 - **UniFi certificate pinning** — the UniFi login used to accept any certificate on the connection carrying your admin credentials. Now a self-signed controller certificate is shown and approved once, then pinned; a changed certificate is refused inside the TLS handshake, before credentials are sent. Plain-HTTP controller URLs are refused.
-- **[LICENSE](LICENSE) + [Privacy & Security](#privacy--security)** — proprietary license (free to use, source not open), and an audited list of everything SNAP contacts, stores, and can do on your network.
+- **[LICENSE](LICENSE) + [Privacy & Security](#privacy--security)** — proprietary license (free to use, source not open; since replaced by GPL-3.0), and an audited list of everything SNAP contacts, stores, and can do on your network.
 - **Credited to Sevag Bardakjian** — About window, file headers, session-report footer, and copyright string.
 - **Dashboard stops hammering ipinfo.io** — it used to repeat the public-IP and ISP lookups on every 30-second refresh, about 2,900 ipinfo requests a day, enough to get rate-limited. Now the public IP is re-checked every 10 min or when your network changes, and ISP details are fetched once per IP per day. Latency pings still run every 30 s.
 - **System Health tells the truth** — the score now counts jitter, packet loss, and Wi-Fi signal on router-scale thresholds, and the Gateway Latency label uses the same model over the whole sample window instead of the latest ping. A connection that used to score 98 "Excellent" next to 64 ms of jitter now reads 43 "Degraded".
@@ -274,5 +274,14 @@ A maintenance release focused on robustness and consistency (no new features):
 - **v2.0 Pro** — Multi-site uptime dashboard, LaunchAgent daemon, Widgets, anomaly-baseline alerts, NetFlow/sFlow collector
 - **Lite** — App Store sandboxed variant
 
+## Contributing
+Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build and test, and the [Contributor License Agreement](CLA.md) you'll be asked to sign on your first pull request. Please report security issues privately; see [SECURITY.md](SECURITY.md).
+
 ## License
-Proprietary — © 2025–2026 Sevag Bardakjian. All rights reserved. SNAP is free to download and use; the source code is not open source. See [LICENSE](LICENSE).
+SNAP is free software, licensed under the [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`). You can use, study, change, and share it. If you distribute a modified version, you must release its source code under the same license.
+
+SNAP comes with **absolutely no warranty**. Copyright © 2025–2026 Sevag Bardakjian.
+
+If you'd like to use SNAP under terms other than the GPL, for example in a closed-source product, open an issue or get in touch through GitHub.
+
+Bundled data: the IEEE MA-L OUI registry (`SNAP/oui_registry.txt`), published by the IEEE Registration Authority.

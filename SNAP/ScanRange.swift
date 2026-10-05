@@ -1,7 +1,8 @@
 // ScanRange.swift
 // SNAP — IPv4 scan targets: CIDR, custom ranges, and the /24 shorthand
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Shared by the Network Map and Bulk Discovery so both accept the same
 // forms and agree on host counts. Before v1.5.4 the Network Map only ever

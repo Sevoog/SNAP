@@ -1,7 +1,8 @@
 // OUIDatabase.swift
 // SNAP — OUI vendor lookup (curated role-hinted map + full IEEE registry)
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Layered lookup:
 //

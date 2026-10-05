@@ -1,7 +1,8 @@
 // ConnectionSummaryCard.swift
 // SNAP — Network Info "at a glance" hero card (v1.2.4 PoC)
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // The InfoView previously required clicking an interface and reading a
 // sparse detail pane. This card sits at the top and answers the *one*

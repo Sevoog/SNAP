@@ -1,7 +1,8 @@
 // DNSPropagationView.swift
 // SNAP — DNS Propagation Tool
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Queries the same record across many public resolvers and surfaces which
 // ones agree. When you change a DNS record, propagation across recursive

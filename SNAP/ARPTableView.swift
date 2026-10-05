@@ -1,7 +1,8 @@
 // ARPTableView.swift
 // SNAP — ARP Table Viewer (Local Device Discovery)
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Reads the local ARP cache via `arp -an` and surfaces every L2 neighbor on
 // the subnet with vendor lookup (OUI), hostname (reverse DNS), and a hint

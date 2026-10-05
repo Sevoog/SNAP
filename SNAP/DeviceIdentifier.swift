@@ -1,7 +1,8 @@
 // DeviceIdentifier.swift
 // SNAP — Multi-signal LAN device identification (orchestrator)
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Best-effort identification of every device on the local network using:
 //   • mDNS / Bonjour service announcements + TXT records  (LAN sweep — see DiscoveryProbes.swift)

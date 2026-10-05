@@ -1,7 +1,8 @@
 // MTUDiscoveryView.swift
 // SNAP — Path MTU Discovery
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Binary-searches the largest ICMP echo payload that traverses the path with
 // the Don't-Fragment bit set. The path MTU is payload + 28 (IPv4 + ICMP

@@ -1,7 +1,8 @@
 // DNSWire.swift
 // SNAP — Minimal DNS-over-UDP query/parse used by DNS Propagation + Benchmark
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 
 import Foundation
 import Darwin

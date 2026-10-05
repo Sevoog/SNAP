@@ -1,7 +1,8 @@
 // BGPLookupView.swift
 // SNAP — BGP / ASN Lookup (Team Cymru DNS service)
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Uses Team Cymru's IP-to-ASN service over plain DNS — no HTTP API key,
 // no rate limits to speak of, no third-party dependency. Two TXT queries:

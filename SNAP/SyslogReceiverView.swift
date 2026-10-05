@@ -1,7 +1,8 @@
 // SyslogReceiverView.swift
 // SNAP — Syslog Receiver (UDP, RFC 3164 + RFC 5424)
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Binds a UDP listener and receives syslog messages from network gear.
 // Point your switch / firewall / router at `<your-IP>:<port>` and watch

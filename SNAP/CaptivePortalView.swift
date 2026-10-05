@@ -1,7 +1,8 @@
 // CaptivePortalView.swift
 // SNAP — Network Health (Captive Portal + DNS Hijacking + Transparent Proxy + Port Blocking)
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // What started as a captive-portal detector grew (v1.2.2) into a small
 // suite of "is this network restricting me?" checks. Four categories run

@@ -1,7 +1,8 @@
 // InfoView.swift
 // SNAP — Network Info tab (full redesign in v1.2.4)
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Two-pane layout:
 //   • Left: custom dark-themed interface picker (replaces the translucent

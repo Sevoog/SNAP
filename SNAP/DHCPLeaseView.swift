@@ -1,7 +1,8 @@
 // DHCPLeaseView.swift
 // SNAP — DHCP Lease Inspector
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Surfaces the current DHCP lease on each network interface using
 // `ipconfig getpacket` — same data macOS itself uses. Useful for confirming

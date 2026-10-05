@@ -44,7 +44,7 @@
 		<string>_ipp._tcp</string>
 	</array>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2025–2026 Sevag Bardakjian. All rights reserved.</string>
+	<string>Copyright © 2025–2026 Sevag Bardakjian. Licensed under the GNU GPL v3.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>SNAP needs access to the local network for network scanning, Bonjour service discovery, and diagnostics.</string>
 	<key>NSLocationUsageDescription</key>

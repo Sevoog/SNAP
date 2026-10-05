@@ -1,7 +1,8 @@
 // SNMPView.swift
 // SNAP — SNMP v2c Query Tool (Advanced)
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Read-only SNMP v2c client UI. Three modes:
 //

@@ -1,7 +1,8 @@
 // SNMPClient.swift
 // SNAP — SNMP v2c client (ASN.1 BER encoder/decoder + GET/GETNEXT/GETBULK/WALK)
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Self-contained SNMP v2c implementation. No external dependencies.
 //

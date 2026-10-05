@@ -1,7 +1,8 @@
 // ToolHandoff.swift
 // SNAP — Cross-tool host handoff + per-tool input history
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Two small singletons that power the "Send to Ping/Traceroute/..." right-click
 // menus, the ⌘K command bar's `ping HOST` inline actions, and the recent-inputs

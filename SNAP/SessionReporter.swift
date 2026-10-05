@@ -1,7 +1,8 @@
 // SessionReporter.swift
 // SNAP — Session Report exporter (single HTML file)
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Captures a snapshot of the current network state (interfaces, external IP,
 // gateway, DNS, recent alerts) and writes a self-contained HTML report. The

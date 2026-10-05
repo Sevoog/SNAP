@@ -1,7 +1,8 @@
 // StatusBoardView.swift
 // SNAP — Fullscreen ambient display (#6 from the v1.5.x combo)
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // A kiosk-style overlay you can throw on a spare monitor: big bandwidth
 // sparkline, current Wi-Fi RSSI, recent-alerts panel, and a live clock.

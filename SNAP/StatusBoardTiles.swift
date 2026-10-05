@@ -1,7 +1,8 @@
 // StatusBoardTiles.swift
 // SNAP — Customizable Status Board tile catalog + layout (v1.5.x)
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Mirrors the Dashboard's customizable-card pattern, but scoped to the
 // Status Board's fullscreen / detachable display. The layout (which tiles

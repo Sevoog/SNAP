@@ -1,7 +1,8 @@
 // CommandPalette.swift
 // SNAP — ⌘K fuzzy launcher + quick actions
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Press ⌘K from anywhere in SNAP to open a Spotlight-style modal. Categorized
 // list of every tool, every theme, and the common actions. Type to filter.

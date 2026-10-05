@@ -1,7 +1,8 @@
 // NetworkMapView.swift
 // SNAP — Network Map (rewritten in v1.2.1)
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Three view modes share the same model:
 //   • Grid    — info-dense device cards (status, model, MAC, ping, ports)

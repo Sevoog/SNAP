@@ -1,7 +1,8 @@
 // ParserTests.swift
 // SNAP — Tests for pure parsing / range helpers that back several tools.
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // These cover the kind of logic most likely to silently break on an OS
 // update (CLI-output parsing) or off-by-one mistakes (CIDR math, channel

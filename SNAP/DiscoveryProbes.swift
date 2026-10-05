@@ -1,7 +1,8 @@
 // DiscoveryProbes.swift
 // SNAP — Network discovery probes (NetBIOS / SSDP / UBNT family / mDNS)
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Extracted from DeviceIdentifier.swift in v1.5.1 as part of the god-file split.
 // Contains the LAN-sweep probes — each returns IdentitySignal values that the

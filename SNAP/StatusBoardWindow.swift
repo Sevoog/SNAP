@@ -1,7 +1,8 @@
 // StatusBoardWindow.swift
 // SNAP — Detached Status Board window (v1.5.x)
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Spawns a separate `NSWindow` containing the same `StatusBoardView`. Used
 // for the "throw it on a spare monitor" workflow — if a secondary screen is

@@ -1,7 +1,8 @@
 // StatusBoardMonitors.swift
 // SNAP — Data-fetch singletons for the v1.5.2 Status Board tiles
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Four singletons feeding the v1.5.2 tiles that didn't have a data source
 // before:

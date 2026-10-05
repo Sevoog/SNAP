@@ -5,6 +5,16 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ## [Unreleased]
 
+### Changed — SNAP is now open source (GPL-3.0)
+
+SNAP's source is now published under the **GNU General Public License v3.0** (`GPL-3.0-only`), replacing the previous proprietary license.
+
+- **[LICENSE](LICENSE)** is the official GPL-3.0 text from gnu.org, unmodified.
+- **Every source file** carries `// SPDX-License-Identifier: GPL-3.0-only` under its copyright line, in place of "All rights reserved" (53 files).
+- **In the app:** the About window and About alert show the GPL's required notices: the copyright, that SNAP comes with no warranty, that it may be redistributed under the GPL, and where to find the source and license. The app's copyright string says the same.
+- **Contributions require signing the [Contributor License Agreement](CLA.md).** It lets SNAP also be offered under other licenses (dual licensing), while contributors keep their copyright and every GPL release stays GPL. A GitHub Action (CLA Assistant Lite, pinned to the commit behind v2.6.1) asks for signatures on pull requests and records them on the `cla-signatures` branch.
+- New **[CONTRIBUTING.md](CONTRIBUTING.md)** (building, guidelines, the CLA) and **[SECURITY.md](SECURITY.md)** (private vulnerability reporting).
+
 ### Fixed — minimum macOS is now pinned to 14.0 (it silently depended on the Xcode version)
 
 The project-level setting said macOS 13.0, but the SNAP app and test targets overrode it with `$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)`, a value each Xcode release picks for itself. Two consequences:

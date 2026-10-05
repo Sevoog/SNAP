@@ -1,7 +1,8 @@
 // RoutingHelloView.swift
 // SNAP — Passive Routing / First-Hop Redundancy listener
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Passive multicast listener for the FHRP/routing protocols we can see
 // without privileged raw-socket access (UDP-encapsulated only):

@@ -1,7 +1,8 @@
 // WiFiAnalyzerView.swift
 // SNAP — WiFi Analyzer (v1.4.2 revamp)
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // A professional, root-free WiFi analyzer modeled on WiFi Explorer: Scanner
 // (the sandboxed App Store build) — i.e. everything achievable through public

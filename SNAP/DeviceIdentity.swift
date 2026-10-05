@@ -1,7 +1,8 @@
 // DeviceIdentity.swift
 // SNAP — Device identity types + role classification heuristics
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Extracted from DeviceIdentifier.swift in v1.5.1 as part of the god-file split.
 // Contains:

@@ -1,7 +1,8 @@
 // ConnectionHealthTests.swift
 // SNAP — Tests for the shared System Health / Gateway Latency scoring.
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 
 import XCTest
 @testable import SNAP

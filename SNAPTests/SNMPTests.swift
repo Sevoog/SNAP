@@ -2,7 +2,8 @@
 // SNAP — Tests for ASN.1 BER encoding/decoding, SNMP message round-trip,
 //        and sysObjectID lookup.
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 
 import XCTest
 @testable import SNAP

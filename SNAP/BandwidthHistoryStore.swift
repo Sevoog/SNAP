@@ -1,7 +1,8 @@
 // BandwidthHistoryStore.swift
 // SNAP — Persistent bandwidth + quality sample store
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // SQLite-backed rolling history of bandwidth + quality samples (RX/TX bps,
 // latency, jitter, packet loss, retransmit rate, DNS latency, quality

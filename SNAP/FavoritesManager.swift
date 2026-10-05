@@ -1,7 +1,8 @@
 // FavoritesManager.swift
 // SNAP — Pinned hosts with periodic liveness check
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Stores up to 10 favorite hosts (label + host string) and re-pings each one
 // every 30 seconds via a single shared `/sbin/ping -c 1 -W 1` invocation pool.

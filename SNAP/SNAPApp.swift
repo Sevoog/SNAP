@@ -1,7 +1,8 @@
 // SNAPApp.swift
 // SNAP — Advanced Network Analysis Platform for macOS
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 
 import SwiftUI
 import AppKit
@@ -135,7 +136,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
         Advanced Network Analysis Platform for macOS
 
         Created by Sevag Bardakjian
-        Copyright © 2026 Sevag Bardakjian. All rights reserved.
+        Copyright © 2025–2026 Sevag Bardakjian
+
+        SNAP is free software, licensed under the GNU GPL v3, and comes
+        with ABSOLUTELY NO WARRANTY. Source code and license:
+        https://github.com/Sevoog/SNAP
 
         Inspired by the classic macOS Network Analysis Platform.
         Built with SwiftUI for macOS \(Bundle.main.object(forInfoDictionaryKey: "LSMinimumSystemVersion") as? String ?? "14.0")+.

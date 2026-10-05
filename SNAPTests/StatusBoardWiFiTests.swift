@@ -1,7 +1,8 @@
 // StatusBoardWiFiTests.swift
 // SNAP — Tests for the Status Board Wi-Fi tile's live-value helpers.
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 
 import XCTest
 import CoreWLAN

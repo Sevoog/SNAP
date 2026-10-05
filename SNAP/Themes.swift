@@ -1,7 +1,8 @@
 // Themes.swift
 // SNAP — Themed appearance system (v1.5.0)
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // The `NS` palette in ContentView.swift now forwards to ThemeManager.shared.current,
 // so changing the active theme cascades to every view that already uses NS tokens.

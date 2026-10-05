@@ -1,7 +1,8 @@
 // DNSBenchmarkView.swift
 // SNAP — DNS Resolver Benchmark
 // Created by Sevag Bardakjian
-// Copyright © 2025 Sevag Bardakjian. All rights reserved.
+// Copyright © 2025 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Races a configurable set of public resolvers across N queries to a basket
 // of domains. Reports per-resolver mean / median / p95 / failure rate so you

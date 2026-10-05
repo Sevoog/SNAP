@@ -1,7 +1,8 @@
 // UniFiControllerView.swift
 // SNAP — UniFi Network Controller API integration
 // Created by Sevag Bardakjian
-// Copyright © 2026 Sevag Bardakjian. All rights reserved.
+// Copyright © 2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
 //
 // Connects to a UniFi controller (modern UDM/UDM-Pro/Cloud Key running the
 // Network application, or a legacy standalone controller) and pulls the
