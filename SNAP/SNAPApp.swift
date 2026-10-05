@@ -138,7 +138,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
         Copyright © 2026 Sevag Bardakjian. All rights reserved.
 
         Inspired by the classic macOS Network Analysis Platform.
-        Built with SwiftUI for macOS 13+.
+        Built with SwiftUI for macOS \(Bundle.main.object(forInfoDictionaryKey: "LSMinimumSystemVersion") as? String ?? "14.0")+.
         Supports Intel and Apple Silicon.
         """
         alert.alertStyle = .informational

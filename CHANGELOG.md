@@ -3,9 +3,27 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ---
 
+## [Unreleased]
+
+### Fixed — minimum macOS is now pinned to 14.0 (it silently depended on the Xcode version)
+
+The project-level setting said macOS 13.0, but the SNAP app and test targets overrode it with `$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)`, a value each Xcode release picks for itself. Two consequences:
+
+- **Builds made with Xcode 27 — including v1.5.3 and v1.5.4 — actually require macOS 14.0**, not the 13.0 the README, the About window, and these notes claimed.
+- **Xcode 26.2 picks a minimum below macOS 12**, so the same project failed to compile there (on an Intel Mac mini running Sequoia) with errors like "'dismiss' is only available in macOS 12.0 or newer" for `dismiss`, `KeyPathComparator`, `GraphicsContext`, `FocusState`, and `ProposedViewSize`. Nothing on that Mac was outdated; the project was asking it to build for an older macOS than SNAP supports.
+
+Changes:
+
+- `MACOSX_DEPLOYMENT_TARGET` is **14.0** at the project level and for both targets, so every Xcode builds the same app. No change for Xcode 27 builds, which already resolved to 14.0.
+- Docs corrected to **macOS 14.0 or later**: README Requirements, and the v1.5.3 / v1.5.4 notes (corrected in place below).
+- The About window and the About alert now read the minimum from the built app (`LSMinimumSystemVersion`) instead of hard-coding "13", so they can't drift again.
+- Now possible as a follow-up: the 22 `onChange(of:perform:)` deprecation warnings, and the macOS 13 fallbacks (`EmptyStateView`, the GeoIP and Visual Trace map fallbacks), exist only for macOS 13 and can be removed.
+
+---
+
 ## [1.5.4] — 2026-10-05
 
-**Persistent tabs, a Daylight theme repair, and real scan ranges.** Tabs now keep running and keep their state when you switch away; the Daylight theme renders correctly everywhere; and the Network Map and Bulk Discovery scan any range instead of a single /24. Build, Release build, and all 124 tests pass clean. Deployment target stays at **macOS 13.0**.
+**Persistent tabs, a Daylight theme repair, and real scan ranges.** Tabs now keep running and keep their state when you switch away; the Daylight theme renders correctly everywhere; and the Network Map and Bulk Discovery scan any range instead of a single /24. Build, Release build, and all 124 tests pass clean. Requires **macOS 14.0** (this entry originally said 13.0 — see [Unreleased]).
 
 ### Added — tabs keep running and keep their state
 
@@ -62,13 +80,13 @@ The Grid / List / Visual picker sat in a fixed 220 pt frame, and its natural wid
 
 ### Known / deliberately unaddressed
 
-- **22 `onChange(of:perform:)` deprecation warnings**, up from 20 in 1.5.3: two new sites in `ContentView` for persistent tabs (recording opened tabs, and the tab-visibility modifier). Same reason as before — the replacement API is macOS 14+ and SNAP targets macOS 13.0.
+- **22 `onChange(of:perform:)` deprecation warnings**, up from 20 in 1.5.3: two new sites in `ContentView` for persistent tabs (recording opened tabs, and the tab-visibility modifier). These were kept on the assumption that SNAP targets macOS 13.0; it actually requires 14.0 (see [Unreleased]), so the newer API is usable.
 
 ---
 
 ## [1.5.3] — 2026-09-30
 
-**macOS 27 / Xcode 27 compatibility pass, five behavioral fixes, UniFi certificate pinning, and public-release prep.** Mostly a warning cleanup surfaced by building against the macOS 27 SDK with Swift 6.4. On top of that: five behavioral fixes (the board's "Run Now" button, the Dashboard over-polling ipinfo.io, a System Health score that could read "Excellent" on a bad connection, hard-coded values in the Status Board Wi-Fi tile, and a menu bar status dot that judged a single ping), a security hardening of the UniFi login, and the licensing and privacy documentation needed before SNAP is shared publicly. Build, Release build, and all 122 tests (90 existing + 32 new) pass clean. Deployment target stays at **macOS 13.0**.
+**macOS 27 / Xcode 27 compatibility pass, five behavioral fixes, UniFi certificate pinning, and public-release prep.** Mostly a warning cleanup surfaced by building against the macOS 27 SDK with Swift 6.4. On top of that: five behavioral fixes (the board's "Run Now" button, the Dashboard over-polling ipinfo.io, a System Health score that could read "Excellent" on a bad connection, hard-coded values in the Status Board Wi-Fi tile, and a menu bar status dot that judged a single ping), a security hardening of the UniFi login, and the licensing and privacy documentation needed before SNAP is shared publicly. Build, Release build, and all 122 tests (90 existing + 32 new) pass clean. Requires **macOS 14.0** (this entry originally said 13.0 — see [Unreleased]).
 
 ### Security — UniFi login uses certificate pinning (trust on first use)
 
@@ -170,7 +188,7 @@ Fixed by type-erasing both branches through `AnyView` and extracting the Ventura
 
 ### Known / deliberately unaddressed
 
-- **20 `onChange(of:perform:)` deprecation warnings** across 11 files: `AlertManager` (3), `SubnetCalculatorView` (3), `BandwidthMonitorView` (2), `CommandPalette` (2), `InfoView` (2), `PortScanView` (2), `VisualTraceRouteView` (2), and one each in `ContentView`, `StatusBoardTiles`, `SyslogReceiverView`, and `ToolHandoff`. The replacement two-or-zero-parameter `onChange` is **macOS 14+**, and SNAP's deployment target is macOS 13.0 (with deliberate `#available(macOS 14, *)` map fallbacks in GeoIP and Visual Trace backing that up). Deprecated is not removed — the old API still works identically. Left as-is rather than bumping the deployment target or introducing a compatibility shim. Revisit if Apple ever actually removes the API, or whenever macOS 13 support is dropped.
+- **20 `onChange(of:perform:)` deprecation warnings** across 11 files: `AlertManager` (3), `SubnetCalculatorView` (3), `BandwidthMonitorView` (2), `CommandPalette` (2), `InfoView` (2), `PortScanView` (2), `VisualTraceRouteView` (2), and one each in `ContentView`, `StatusBoardTiles`, `SyslogReceiverView`, and `ToolHandoff`. The replacement two-or-zero-parameter `onChange` is **macOS 14+**, and SNAP's deployment target is macOS 13.0 (with deliberate `#available(macOS 14, *)` map fallbacks in GeoIP and Visual Trace backing that up). Deprecated is not removed — the old API still works identically. Left as-is rather than bumping the deployment target or introducing a compatibility shim. Revisit if Apple ever actually removes the API, or whenever macOS 13 support is dropped. **Correction:** builds actually required macOS 14.0, not 13.0 (see [Unreleased]), so the replacement API was usable all along.
 
   Two corrections to what an earlier draft of this entry claimed: the count is **20 sites across 11 files, not 13 across 10**. A clean build emits 40 of these lines because each site is logged twice (two compile passes), and the original figure came from miscounting that output. The `ToolHandoff` site is new in this release — it's the `onChange` added by the "Run Now" fix above, and it's unavoidable at deployment target 13.0 for the same reason as the other 19.
 

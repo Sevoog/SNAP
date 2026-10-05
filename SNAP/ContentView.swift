@@ -661,7 +661,10 @@ struct AboutSheet: View {
 
                 VStack(spacing: 8) {
                     aboutRow(icon: "person.fill",    label: "Developer", value: "Sevag Bardakjian")
-                    aboutRow(icon: "laptopcomputer", label: "Platform",  value: "macOS 13.0+")
+                    // Read from the built app (LSMinimumSystemVersion = the
+                    // deployment target) so it can't drift from reality again.
+                    aboutRow(icon: "laptopcomputer", label: "Platform",
+                             value: "macOS \(Bundle.main.object(forInfoDictionaryKey: "LSMinimumSystemVersion") as? String ?? "14.0")+")
                     aboutRow(icon: "cpu",            label: "Runtime",   value: "Swift · SwiftUI")
                 }
                 .padding(.horizontal, 24)

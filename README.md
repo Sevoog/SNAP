@@ -71,7 +71,7 @@ No accounts, analytics, telemetry, or crash reporting. See [Privacy & Security](
 - **XCTest target** — 124 unit tests across SubnetCalculator, DNSWire, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip + sysObjectID), Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, WiFi band/channel helpers, connection-health scoring (incl. menu bar dot outage timelines), public-lookup caching, Status Board Wi-Fi readings, and scan-range parsing (CIDR, ranges, limits) — *added in v1.2.3, expanded through v1.5.4*
 
 ## Requirements
-- macOS 13.0+
+- macOS 14.0 (Sonoma) or later
 - Xcode 15+
 - Universal binary (Apple Silicon + Intel)
 
@@ -173,14 +173,14 @@ open SNAP.xcodeproj
 Current: **v1.5.4** — see [CHANGELOG.md](CHANGELOG.md)
 
 ### What's new in v1.5.4 — persistent tabs, Daylight fix, real scan ranges
-Builds clean; all 124 tests pass. Deployment target stays at macOS 13.0.
+Builds clean; all 124 tests pass. Requires macOS 14.0 or later.
 - **Tabs keep running and remember their state** — switching tabs used to destroy the tool you left, stopping a running ping, scan, or capture and clearing its results. Every tab you open now stays alive in the background. Automatic background work (Dashboard refreshes, Wi-Fi Analyzer live scans) pauses while its tab is hidden; info tabs (Network Info, ARP, DHCP, Connections, Interface Stats) refresh when you return.
 - **Daylight theme fixed** — the app forced dark mode for every theme, so under Daylight the tables, lists, text fields, and gray labels rendered dark or near-invisible. Light/dark mode now follows the theme everywhere, including the menu bar popover (which had white text on a light background) and the detached Status Board.
 - **Network Map scans real ranges** — it used to scan exactly one /24 (.1–.254) per entry and silently cut `10.0.0.0/16` down to `10.0.0.1–254`. It now takes any CIDR up to a /16, custom start–end ranges, single hosts, or a mix; prefills your actual subnet; shows a live host count; and asks before big scans, offering your own /24 as a quick alternative. Bulk Discovery uses the same parser, and its label now matches its real 8,192-address limit.
 - **Picker labels no longer squeezed** — the Network Map's "View" label wrapped onto two lines when the device count changed width, and the Subnet Calculator's "Input Mode" picker was 43 pt too narrow. Both now size to their content.
 
 ### What's new in v1.5.3 — macOS 27 / Xcode 27 compatibility, UniFi pinning, release prep
-Mostly a warning cleanup, plus five behavioral fixes, a security hardening, and release prep. Builds clean against the macOS 27 SDK with Swift 6.4; all 122 tests pass. Deployment target stays at macOS 13.0.
+Mostly a warning cleanup, plus five behavioral fixes, a security hardening, and release prep. Builds clean against the macOS 27 SDK with Swift 6.4; all 122 tests pass. Requires macOS 14.0 or later (these notes originally said 13.0; see the CHANGELOG).
 - **UniFi certificate pinning** — the UniFi login used to accept any certificate on the connection carrying your admin credentials. Now a self-signed controller certificate is shown and approved once, then pinned; a changed certificate is refused inside the TLS handshake, before credentials are sent. Plain-HTTP controller URLs are refused.
 - **[LICENSE](LICENSE) + [Privacy & Security](#privacy--security)** — proprietary license (free to use, source not open), and an audited list of everything SNAP contacts, stores, and can do on your network.
 - **Credited to Sevag Bardakjian** — About window, file headers, session-report footer, and copyright string.
@@ -193,7 +193,7 @@ Mostly a warning cleanup, plus five behavioral fixes, a security hardening, and 
 - **Swift 6 concurrency (14 warnings → 0)** — marked four pure-computation statics `nonisolated` (`dnsPing`, `runNettop`, `parse`, `ping`) since a `@MainActor` class also isolates its statics, and wrapped four `Timer`/`asyncAfter` callbacks in `Task { @MainActor in … }`.
 - **Missing `Combine` import (4 → 0)** — `SidebarFooter`'s `Timer.publish(…).autoconnect()` property exposes a Combine type in a file that never imported Combine.
 - **`ViewBuilder` limited-availability (2 → 0)** — `GeoIPView.mapPane` leaked the macOS-14-only `GeoIPMapView` into its opaque return type; both branches now type-erase through `AnyView`.
-- **Left deliberately:** 20 `onChange(of:perform:)` deprecation warnings across 11 files (22 as of v1.5.4). The replacement API is macOS 14+ and SNAP still targets macOS 13. Deprecated ≠ removed; revisit when macOS 13 support is dropped. (An earlier draft said 13 across 10 files — that was a miscount of a clean build's output, which logs each site twice.)
+- **Left deliberately:** 20 `onChange(of:perform:)` deprecation warnings across 11 files (22 as of v1.5.4). These were left on the assumption that SNAP targets macOS 13, where the replacement API doesn't exist. It actually requires macOS 14, so they can now be switched to the newer API. (An earlier draft said 13 across 10 files — that was a miscount of a clean build's output, which logs each site twice.)
 
 ### What's new in v1.5.2 — Status Board rework
 Full visual + functional pass on the Status Board:
