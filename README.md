@@ -1,9 +1,28 @@
 # SNAP — Sev's Network Analysis Platform
 **by Sevag Bardakjian**
 
-A professional macOS network utility — dark-only, sandboxless, built for speed.
+A professional macOS network utility — sandboxless, built for speed, with ten themes.
 
 No accounts, analytics, telemetry, or crash reporting. See [Privacy & Security](#privacy--security) for every service SNAP contacts, what it stores, and what it can do on your network.
+
+## Screenshots
+
+![Dashboard: live cards and quick tools](marketing/linkedin/framed/01-dashboard.png)
+![Network Map: find out what's on your network](marketing/linkedin/framed/02-network-map.png)
+![Wi-Fi Analyzer: every nearby network with vendor, band, channel, and security](marketing/linkedin/framed/03-wifi.png)
+![Status Board: a full-screen view for a second monitor](marketing/linkedin/framed/05-status-board.png)
+
+<details>
+<summary>More screenshots</summary>
+
+![Wi-Fi channel overlap](marketing/linkedin/framed/04-spectrum.png)
+![Bandwidth Monitor: live traffic plus history](marketing/linkedin/framed/06-bandwidth.png)
+![Command bar: press ⌘K to jump to any tool](marketing/linkedin/framed/07-command-bar.png)
+![Ten themes](marketing/linkedin/framed/08-themes.png)
+
+</details>
+
+*Screenshots were taken in SNAP's Demo Mode; every network detail shown is a placeholder.*
 
 ## Features
 
