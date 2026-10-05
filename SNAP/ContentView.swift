@@ -278,7 +278,7 @@ struct ContentView: View {
     /// Every tab opened this session stays mounted, hidden when it isn't
     /// selected, so work you started — a ping, a scan, a capture — keeps
     /// running, and inputs and results are still there when you come back.
-    /// (Before v1.5.3 switching tabs destroyed the tool, which stopped and
+    /// (Before v1.5.4 switching tabs destroyed the tool, which stopped and
     /// cleared it.) Automatic background work pauses while hidden via
     /// `onTabVisibilityChange`.
     private var detailView: some View {

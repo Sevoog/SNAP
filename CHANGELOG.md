@@ -3,9 +3,72 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ---
 
+## [1.5.4] — 2026-10-05
+
+**Persistent tabs, a Daylight theme repair, and real scan ranges.** Tabs now keep running and keep their state when you switch away; the Daylight theme renders correctly everywhere; and the Network Map and Bulk Discovery scan any range instead of a single /24. Build, Release build, and all 124 tests pass clean. Deployment target stays at **macOS 13.0**.
+
+### Added — tabs keep running and keep their state
+
+Switching tabs used to **destroy** the tool you left: a running ping, traceroute, port scan, speed test, packet capture, or Network Map scan was stopped, and its inputs and results were gone when you came back. Every tab you open now stays alive in the background ([ContentView.swift](SNAP/ContentView.swift) `detailView`). The selected tab is shown; the others are hidden, not destroyed.
+
+- **Work you started keeps going**: Ping, Traceroute, Visual Trace, MTR, Port Scan, Speed Test, Packet Capture, Syslog, Routing Hello, Bulk Discovery, Network Map scans, Interface Stats "Live", Connections auto-refresh, and the Dashboard's tool cards. It runs until it finishes or you stop it. Closing the main window still stops everything.
+- **Hidden tabs are disabled**, so their keyboard shortcuts can't fire from another tab (e.g. Return in Ping won't trigger the Network Map's Scan).
+- **Automatic background work pauses while hidden**, via a new `onTabVisibilityChange(shown:hidden:)` modifier fed by an `isActiveTab` environment value:
+  - The Dashboard's 30 s connection refresh, Wi-Fi card, and live bandwidth card.
+  - **Wi-Fi Analyzer "Live"**: it stays on, but its 5 s scans pause while hidden, because each scan briefly takes the radio off-channel and would skew a ping or speed test running in another tab.
+- **Info tabs refresh when you return**, as opening them always did: Network Info, ARP Table, DHCP Leases, Connections (unless auto-refresh is on), and Interface Stats. The Network Map deliberately doesn't, since reloading would overwrite a newer scan with the saved one.
+- **Bandwidth and Bonjour keep running** once opened. They're monitors with their own Stop control (Bandwidth) or negligible cost (Bonjour), so their history survives a tab switch. README § Privacy now documents what Bandwidth sends while running (four TCP connections to 1.1.1.1:80 every 3 s, a DNS lookup every 10 s), which the earlier audit had missed.
+- Verified in a UI test: send `8.8.8.8` to Ping, switch to Subnet Calculator (only Subnet is visible), switch back, and Ping still shows `8.8.8.8`.
+
+### Fixed — Daylight theme rendered system controls dark
+
+The app forced dark mode (`.preferredColorScheme(.dark)` plus a `darkAqua` window override on the menu bar popover) for **every** theme. Under Daylight, macOS's own controls kept their dark look: tables (Interface Stats, Packet Capture), list columns (Bonjour, Multi-Host), text fields and editors (HTTP Probe, Subnet Calculator), and `.secondary` labels rendered light gray on a light background, which is near-invisible.
+
+- `Theme.isLight` (true for Daylight) now drives the appearance: `NSApp.appearance` is set at launch and on every theme switch (`ThemeManager.applyAppearance()`), covering the main window, sheets, alerts, menus, and the detached Status Board. The main window and About sheet use the theme's `colorScheme`.
+- **Menu bar popover**: its backgrounds already followed the theme, but its ~44 text and hairline colors were fixed white, so under Daylight it was white text on a light background. It now uses an `ink(_:)` helper (white on dark themes, unchanged; black on Daylight), and its window appearance follows the theme.
+- Sidebar hover highlights and Bandwidth dividers that were fixed white tints now use the theme's text color, so they show on Daylight.
+- Verified by rendering Bonjour, Wake-on-LAN, Subnet Calculator, HTTP Probe, Interface Stats, Packet Capture, Multi-Host, and the menu bar popover under Daylight: all readable, no dark controls.
+
+### Fixed — Network Map could only scan a single /24
+
+The Network Map scanned exactly **.1–.254 under a three-octet prefix**, one /24 per comma-separated entry. Three consequences:
+- **Prefill ignored the subnet mask.** It took the first three octets of the first Ethernet/Wi-Fi interface with an address, which isn't necessarily the one carrying traffic. On a `10.0.0.0/16` network it scanned ~0.4 % of the hosts. On a /26 it overshot into neighboring subnets.
+- **CIDR input was silently truncated.** Typing `10.0.0.0/16` became `10.0.0` and scanned 10.0.0.1–254, with no warning.
+- **The UI said ".1 – .254"** regardless of what you typed.
+
+Now, via a new shared parser, `ScanRange` ([ScanRange.swift](SNAP/ScanRange.swift)):
+
+- **Any CIDR up to a /16** (65,534 hosts). Host bits are ignored (`192.168.1.50/24` = the /24), and /31 and /32 follow RFC 3021.
+- **Custom ranges**: `10.0.0.50-10.0.3.200`, or last-octet shorthand `192.168.1.100-150`. En and em dashes and surrounding spaces are accepted.
+- **Single hosts** (`192.168.1.20`), and the classic forms still work (`192.168.1`, `192.168.1.x`, `192.168.1.*`). Entries can be separated by commas or newlines, mixed freely, and overlaps are counted once.
+- **Prefilled from the real subnet** of the Ethernet/Wi-Fi interface carrying the default route, using its actual netmask. Networks larger than a /16 are narrowed to the /16 containing this Mac.
+- **A live host count** replaces the fixed ".1 – .254" label. Invalid input shows "Invalid range", with the reason on hover, and disables Scan.
+- **Big scans ask first.** Above 1,024 addresses (bigger than a /22), an alert shows the count and a time estimate, notes that monitoring tools will see the probes, and offers **Scan All**, **Scan <your /24> Only** (when your /24 is inside the range), or **Cancel**. The estimate is calibrated by measurement: 32 pings to dead addresses take ~1.06 s per batch, alongside the UniFi unicast sweep at 1.5 s per 48. That's ~19 s for a /24 and ~38 min for a /16.
+- Size is checked **before** anything is enumerated, so even `0.0.0.0/0` fails instantly instead of hanging. Parsing a /16 takes ~4 µs (it runs on every redraw for the live count); expanding it takes ~7 ms, once per scan.
+
+**Bulk Discovery** now uses the same parser, so both tools accept identical input; its old `expandCIDR` and a duplicate interface-detection helper are removed. It keeps its own **8,192-address** limit, since it port-scans and SNMP-probes each host. Its label previously claimed "Max /22 (1024 hosts)" while the code allowed 8,192; the label now matches the code.
+
+**Behavior change:** a bare address like `192.168.1.0` now means that one host. Before, the Network Map widened it to its /24 and Bulk Discovery rejected it. The live host count makes this visible as you type.
+
+**Tests:** the 19 range tests from `NetworkMapModelTests` (12) and `ParserTests` (7) moved into the new `ScanRangeTests` with the same inputs. Together with the new cases there are 21 tests, covering ranges, dedupe, limits, the /0 guard, netmask-based prefill, and the time estimates.
+
+### Fixed — "View" label wrapping in the Network Map toolbar
+
+The Grid / List / Visual picker sat in a fixed 220 pt frame, and its natural width (label + segments) measures **exactly 220.0 pt**, leaving zero slack. Any fraction-of-a-point shift, such as the device count changing width when toggling **Online only** ("168 of 168" vs "30 of 168"), wrapped the "View" label onto two lines. The picker now sizes to its content. The range field gives up width first on narrow windows, and the toolbar's status texts stay on one line. The **Subnet Calculator's** "Input Mode" picker had the same pattern and was worse: it needs 283 pt but was given 240, so it's fixed the same way.
+
+### Changed — README
+
+- Removed the in-app-purchase mention from the roadmap's Lite entry.
+
+### Known / deliberately unaddressed
+
+- **22 `onChange(of:perform:)` deprecation warnings**, up from 20 in 1.5.3: two new sites in `ContentView` for persistent tabs (recording opened tabs, and the tab-visibility modifier). Same reason as before — the replacement API is macOS 14+ and SNAP targets macOS 13.0.
+
+---
+
 ## [1.5.3] — 2026-09-30
 
-**macOS 27 / Xcode 27 compatibility pass, behavioral fixes, persistent tabs, a Daylight theme repair, UniFi certificate pinning, and public-release prep.** Mostly a warning cleanup surfaced by building against the macOS 27 SDK with Swift 6.4. On top of that: six behavioral fixes (the board's "Run Now" button, the Dashboard over-polling ipinfo.io, a System Health score that could read "Excellent" on a bad connection, hard-coded values in the Status Board Wi-Fi tile, a menu bar status dot that judged a single ping, and a Network Map that could only scan one /24), a security hardening of the UniFi login, and the licensing and privacy documentation needed before SNAP is shared publicly. Build, Release build, and all 124 tests pass clean. Deployment target stays at **macOS 13.0**.
+**macOS 27 / Xcode 27 compatibility pass, five behavioral fixes, UniFi certificate pinning, and public-release prep.** Mostly a warning cleanup surfaced by building against the macOS 27 SDK with Swift 6.4. On top of that: five behavioral fixes (the board's "Run Now" button, the Dashboard over-polling ipinfo.io, a System Health score that could read "Excellent" on a bad connection, hard-coded values in the Status Board Wi-Fi tile, and a menu bar status dot that judged a single ping), a security hardening of the UniFi login, and the licensing and privacy documentation needed before SNAP is shared publicly. Build, Release build, and all 122 tests (90 existing + 32 new) pass clean. Deployment target stays at **macOS 13.0**.
 
 ### Security — UniFi login uses certificate pinning (trust on first use)
 
@@ -65,55 +128,6 @@ The menu bar dot was green whenever the *latest* gateway ping was under 40 ms, a
 - **The tooltip explains the color**, e.g. "SNAP · Gateway unstable · Jitter 20 ms · No packet loss (5 ms gw)".
 - `LatencyStats` gained `trailingTimeouts` and an `init(history:)`, so tests can replay real ping sequences. They replay a full outage-and-recovery timeline (green → one drop stays green → two drops red → recovery amber → green) and a spiky gateway that the old rule showed green because its latest ping was 3 ms.
 
-### Fixed — Network Map could only scan a single /24
-
-The Network Map scanned exactly **.1–.254 under a three-octet prefix**, one /24 per comma-separated entry. Three consequences:
-- **Prefill ignored the subnet mask.** It took the first three octets of the first Ethernet/Wi-Fi interface with an address, which isn't necessarily the one carrying traffic. On a `10.0.0.0/16` network it scanned ~0.4 % of the hosts. On a /26 it overshot into neighboring subnets.
-- **CIDR input was silently truncated.** Typing `10.0.0.0/16` became `10.0.0` and scanned 10.0.0.1–254, with no warning.
-- **The UI said ".1 – .254"** regardless of what you typed.
-
-Now, via a new shared parser, `ScanRange` ([ScanRange.swift](SNAP/ScanRange.swift)):
-
-- **Any CIDR up to a /16** (65,534 hosts). Host bits are ignored (`192.168.1.50/24` = the /24), and /31 and /32 follow RFC 3021.
-- **Custom ranges**: `10.0.0.50-10.0.3.200`, or last-octet shorthand `192.168.1.100-150`. En and em dashes and surrounding spaces are accepted.
-- **Single hosts** (`192.168.1.20`), and the classic forms still work (`192.168.1`, `192.168.1.x`, `192.168.1.*`). Entries can be separated by commas or newlines, mixed freely, and overlaps are counted once.
-- **Prefilled from the real subnet** of the Ethernet/Wi-Fi interface carrying the default route, using its actual netmask. Networks larger than a /16 are narrowed to the /16 containing this Mac.
-- **A live host count** replaces the fixed ".1 – .254" label. Invalid input shows "Invalid range", with the reason on hover, and disables Scan.
-- **Big scans ask first.** Above 1,024 addresses (bigger than a /22), an alert shows the count and a time estimate, notes that monitoring tools will see the probes, and offers **Scan All**, **Scan <your /24> Only** (when your /24 is inside the range), or **Cancel**. The estimate is calibrated by measurement: 32 pings to dead addresses take ~1.06 s per batch, alongside the UniFi unicast sweep at 1.5 s per 48. That's ~19 s for a /24 and ~38 min for a /16.
-- Size is checked **before** anything is enumerated, so even `0.0.0.0/0` fails instantly instead of hanging. Parsing a /16 takes ~4 µs (it runs on every redraw for the live count); expanding it takes ~7 ms, once per scan.
-
-**Bulk Discovery** now uses the same parser, so both tools accept identical input; its old `expandCIDR` and a duplicate interface-detection helper are removed. It keeps its own **8,192-address** limit, since it port-scans and SNMP-probes each host. Its label previously claimed "Max /22 (1024 hosts)" while the code allowed 8,192; the label now matches the code.
-
-**Behavior change:** a bare address like `192.168.1.0` now means that one host. Before, the Network Map widened it to its /24 and Bulk Discovery rejected it. The live host count makes this visible as you type.
-
-**Tests:** the 19 range tests from `NetworkMapModelTests` (12) and `ParserTests` (7) moved into the new `ScanRangeTests` with the same inputs. Together with the new cases there are 21 tests, covering ranges, dedupe, limits, the /0 guard, netmask-based prefill, and the time estimates.
-
-### Fixed — "View" label wrapping in the Network Map toolbar
-
-The Grid / List / Visual picker sat in a fixed 220 pt frame, and its natural width (label + segments) measures **exactly 220.0 pt**, leaving zero slack. Any fraction-of-a-point shift, such as the device count changing width when toggling **Online only** ("168 of 168" vs "30 of 168"), wrapped the "View" label onto two lines. The picker now sizes to its content. The range field gives up width first on narrow windows, and the toolbar's status texts stay on one line. The **Subnet Calculator's** "Input Mode" picker had the same pattern and was worse: it needs 283 pt but was given 240, so it's fixed the same way.
-
-### Added — tabs keep running and keep their state
-
-Switching tabs used to **destroy** the tool you left: a running ping, traceroute, port scan, speed test, packet capture, or Network Map scan was stopped, and its inputs and results were gone when you came back. Every tab you open now stays alive in the background ([ContentView.swift](SNAP/ContentView.swift) `detailView`). The selected tab is shown; the others are hidden, not destroyed.
-
-- **Work you started keeps going**: Ping, Traceroute, Visual Trace, MTR, Port Scan, Speed Test, Packet Capture, Syslog, Routing Hello, Bulk Discovery, Network Map scans, Interface Stats "Live", Connections auto-refresh, and the Dashboard's tool cards. It runs until it finishes or you stop it. Closing the main window still stops everything.
-- **Hidden tabs are disabled**, so their keyboard shortcuts can't fire from another tab (e.g. Return in Ping won't trigger the Network Map's Scan).
-- **Automatic background work pauses while hidden**, via a new `onTabVisibilityChange(shown:hidden:)` modifier fed by an `isActiveTab` environment value:
-  - The Dashboard's 30 s connection refresh, Wi-Fi card, and live bandwidth card.
-  - **Wi-Fi Analyzer "Live"**: it stays on, but its 5 s scans pause while hidden, because each scan briefly takes the radio off-channel and would skew a ping or speed test running in another tab.
-- **Info tabs refresh when you return**, as opening them always did: Network Info, ARP Table, DHCP Leases, Connections (unless auto-refresh is on), and Interface Stats. The Network Map deliberately doesn't, since reloading would overwrite a newer scan with the saved one.
-- **Bandwidth and Bonjour keep running** once opened. They're monitors with their own Stop control (Bandwidth) or negligible cost (Bonjour), so their history survives a tab switch. README § Privacy now documents what Bandwidth sends while running (four TCP connections to 1.1.1.1:80 every 3 s, a DNS lookup every 10 s), which the earlier audit had missed.
-- Verified in a UI test: send `8.8.8.8` to Ping, switch to Subnet Calculator (only Subnet is visible), switch back, and Ping still shows `8.8.8.8`.
-
-### Fixed — Daylight theme rendered system controls dark
-
-The app forced dark mode (`.preferredColorScheme(.dark)` plus a `darkAqua` window override on the menu bar popover) for **every** theme. Under Daylight, macOS's own controls kept their dark look: tables (Interface Stats, Packet Capture), list columns (Bonjour, Multi-Host), text fields and editors (HTTP Probe, Subnet Calculator), and `.secondary` labels rendered light gray on a light background, which is near-invisible.
-
-- `Theme.isLight` (true for Daylight) now drives the appearance: `NSApp.appearance` is set at launch and on every theme switch (`ThemeManager.applyAppearance()`), covering the main window, sheets, alerts, menus, and the detached Status Board. The main window and About sheet use the theme's `colorScheme`.
-- **Menu bar popover**: its backgrounds already followed the theme, but its ~44 text and hairline colors were fixed white, so under Daylight it was white text on a light background. It now uses an `ink(_:)` helper (white on dark themes, unchanged; black on Daylight), and its window appearance follows the theme.
-- Sidebar hover highlights and Bandwidth dividers that were fixed white tints now use the theme's text color, so they show on Daylight.
-- Verified by rendering Bonjour, Wake-on-LAN, Subnet Calculator, HTTP Probe, Interface Stats, Packet Capture, Multi-Host, and the menu bar popover under Daylight: all readable, no dark controls.
-
 ### Changed — credited to Sevag Bardakjian
 
 SNAP is published under Sevag Bardakjian's name; "Bardak Labs" was never a legal entity. Updated file headers (11 files), the About window (the "Studio" row is removed), the footer of exported session reports, `NSHumanReadableCopyright` (now `© 2025–2026`), the privacy manifest comment, and the README. Internal UserDefaults/Keychain keys (`com.bardaklabs.snap.*`) are **unchanged**: renaming them would silently reset existing settings and saved UniFi passwords.
@@ -123,8 +137,6 @@ SNAP is published under Sevag Bardakjian's name; "Bardak Labs" was never a legal
 - **[LICENSE](LICENSE)**: proprietary, all rights reserved. The compiled app is free to use; the source code may not be copied, modified, or redistributed. It also includes a no-warranty clause and a responsible-use clause for the scanning tools, and it reserves the option to change the license in future versions.
 - **README § Privacy & Security**, based on an audit of the source: every host contacted automatically (with its interval) versus only on demand, local-network scanning behavior, system tools launched, permissions requested and why, everything stored on disk (with removal steps), and why SNAP is unsandboxed and allows plain HTTP.
 - **Corrected the privacy manifest comment**, which claimed only user-invoked queries leave the Mac. Connectivity checks, public-IP/ISP lookups, and gateway pings run automatically while their views are open.
-
-### Fixed — Status Board "Run Now" did nothing
 
 ### Fixed — Status Board "Run Now" did nothing
 
@@ -158,9 +170,9 @@ Fixed by type-erasing both branches through `AnyView` and extracting the Ventura
 
 ### Known / deliberately unaddressed
 
-- **22 `onChange(of:perform:)` deprecation warnings** across 11 files: `AlertManager` (3), `ContentView` (3), `SubnetCalculatorView` (3), `BandwidthMonitorView` (2), `CommandPalette` (2), `InfoView` (2), `PortScanView` (2), `VisualTraceRouteView` (2), and one each in `StatusBoardTiles`, `SyslogReceiverView`, and `ToolHandoff`. The replacement two-or-zero-parameter `onChange` is **macOS 14+**, and SNAP's deployment target is macOS 13.0 (with deliberate `#available(macOS 14, *)` map fallbacks in GeoIP and Visual Trace backing that up). Deprecated is not removed — the old API still works identically. Left as-is rather than bumping the deployment target or introducing a compatibility shim. Revisit if Apple ever actually removes the API, or whenever macOS 13 support is dropped.
+- **20 `onChange(of:perform:)` deprecation warnings** across 11 files: `AlertManager` (3), `SubnetCalculatorView` (3), `BandwidthMonitorView` (2), `CommandPalette` (2), `InfoView` (2), `PortScanView` (2), `VisualTraceRouteView` (2), and one each in `ContentView`, `StatusBoardTiles`, `SyslogReceiverView`, and `ToolHandoff`. The replacement two-or-zero-parameter `onChange` is **macOS 14+**, and SNAP's deployment target is macOS 13.0 (with deliberate `#available(macOS 14, *)` map fallbacks in GeoIP and Visual Trace backing that up). Deprecated is not removed — the old API still works identically. Left as-is rather than bumping the deployment target or introducing a compatibility shim. Revisit if Apple ever actually removes the API, or whenever macOS 13 support is dropped.
 
-  Two corrections to what an earlier draft of this entry claimed: the count was **20 sites across 11 files, not 13 across 10** (22 after the later additions below). A clean build emits 40 of these lines because each site is logged twice (two compile passes), and the original figure came from miscounting that output. Three sites are new in this release: `ToolHandoff` (the "Run Now" fix) and two in `ContentView` (persistent tabs: recording opened tabs, and the tab-visibility modifier). All three are unavoidable at deployment target 13.0 for the same reason as the rest.
+  Two corrections to what an earlier draft of this entry claimed: the count is **20 sites across 11 files, not 13 across 10**. A clean build emits 40 of these lines because each site is logged twice (two compile passes), and the original figure came from miscounting that output. The `ToolHandoff` site is new in this release — it's the `onChange` added by the "Run Now" fix above, and it's unavoidable at deployment target 13.0 for the same reason as the other 19.
 
 ### Toolchain note
 

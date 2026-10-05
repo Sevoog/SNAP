@@ -40,7 +40,7 @@ struct Theme: Identifiable, Hashable {
 
     /// Light surfaces. Drives the window appearance so system controls
     /// (tables, lists, text fields, pickers) and `.secondary` text render for
-    /// a light background. Before v1.5.3 the app forced dark mode for every
+    /// a light background. Before v1.5.4 the app forced dark mode for every
     /// theme, so Daylight showed dark tables and near-invisible gray labels.
     var isLight: Bool = false
 

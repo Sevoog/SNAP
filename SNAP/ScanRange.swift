@@ -4,7 +4,7 @@
 // Copyright © 2026 Sevag Bardakjian. All rights reserved.
 //
 // Shared by the Network Map and Bulk Discovery so both accept the same
-// forms and agree on host counts. Before v1.5.3 the Network Map only ever
+// forms and agree on host counts. Before v1.5.4 the Network Map only ever
 // scanned one /24 per entry — typing "10.0.0.0/16" was silently cut to
 // 10.0.0.1–254 — and its prefill ignored the real subnet mask.
 
