@@ -3,14 +3,40 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ---
 
-## [Unreleased]
+## [1.5.5] - 2026-10-06
+
+**First open-source release, two e-ink themes, and fixes.** SNAP is now published under the GNU GPL v3. Two new themes, E-ink and Color e-ink, join the picker. Plain-HTTP requests to public hosts are no longer blocked, the window title and toolbar follow the tab on screen, and the minimum macOS is pinned to 14.0.
+
+### Added: E-ink and Color e-ink themes
+
+Two light themes in a new **E-ink** group in the theme picker and the Appearance menu ([Themes.swift](SNAP/Themes.swift)):
+
+- **E-ink**: paper and ink. Because it's grayscale, the Dashboard and sidebar show state with shape instead of color: the selected sidebar item is inverted; status dots are filled (up), ringed (degraded), or hollow (down); latency and route chips are inverted, outlined, or dashed; a Favorite that's down gets a dashed border and a struck-through "timeout"; card badges are inverted (Live), outlined (Functional), or dashed (Launcher); the Bandwidth card draws RX as a solid line over hatching and TX as a dashed line, with a small legend; Wi-Fi bars are filled or outlined.
+- **Color e-ink**: the same paper with muted pigments (sage, slate, brick, ochre, plum), and the same shapes drawn in those colors.
+- Elsewhere (the Status Board, the menu bar, and the individual tools) both themes use their palette only, so some red-versus-green states read as two shades of the same tone.
+- Logo tiles drew a hard-coded near-black icon on the accent color, which vanished on the e-ink themes' dark accent. The new `Theme.onAmber` fixes all 7 places (sidebar rail, About window, Quick Tour, menu bar, Status Board). Every other theme looks the same as before.
+
+### Fixed: the Status Board's CPU row showed only "%"
+
+The System tile passed the literal "%" as the CPU row's value text, so no number appeared. It now shows the rounded percentage, like the Memory and Battery rows.
+
+### Fixed: the Quick Tour said 38 tools
+
+SNAP has 35 tools plus the Dashboard. Corrected on the Quick Tour's first and third slides and in the README. The Quick Tour's themes slide also now says 12 themes and lists the new E-ink group, instead of "10 ship in v1.5.0".
+
+### Changed: README
+
+- **Privacy & Security rewritten from the code** into a complete inventory, then fact-checked against the code line by line. It now covers what the old version missed or got wrong, including: the Status Board monitors keep running until you quit once the board has been opened (public IP every 10 min, DNS timing every 10 s, `nettop` every 4 s); the Bandwidth monitor's `ipinfo.io` lookup happens on **Start**, not on opening the tab; BGP/ASN lookups go to Google Public DNS (`8.8.8.8`) and on to Team Cymru; Fingerprint resolves through Cloudflare (`1.1.1.1`); Bulk Discovery's TCP sweep, port probes, and SNMP; Apple Maps tiles in GeoIP Lookup and Visual Trace; the Session Report's `api.ipify.org` lookups; ARP Table's Sweep /24 and reverse DNS; Routing Hello's multicast groups; the default User-Agent; and the web cache and cookie files macOS keeps for SNAP (now part of the removal steps).
+- Removed the Roadmap's "v2.0 Pro" and "Lite" (App Store) editions.
+- Added a Buy Me a Coffee link, plus `.github/FUNDING.yml` for GitHub's Sponsor button.
+- Added the v1.5.5 notes.
 
 ### Changed — SNAP is now open source (GPL-3.0)
 
 SNAP's source is now published under the **GNU General Public License v3.0** (`GPL-3.0-only`), replacing the previous proprietary license.
 
 - **[LICENSE](LICENSE)** is the official GPL-3.0 text from gnu.org, unmodified.
-- **Every source file** carries `// SPDX-License-Identifier: GPL-3.0-only` under its copyright line, in place of "All rights reserved" (53 files).
+- **Source files that said "All rights reserved"** now carry `// SPDX-License-Identifier: GPL-3.0-only` under their copyright line instead (52 Swift files).
 - **In the app:** the About window and About alert show the GPL's required notices: the copyright, that SNAP comes with no warranty, that it may be redistributed under the GPL, and where to find the source and license. The app's copyright string says the same.
 - **Contributions require signing the [Contributor License Agreement](CLA.md).** It lets SNAP also be offered under other licenses (dual licensing), while contributors keep their copyright and every GPL release stays GPL. A GitHub Action (CLA Assistant Lite, pinned to the commit behind v2.6.1) asks for signatures on pull requests and records them on the `cla-signatures` branch.
 - New **[CONTRIBUTING.md](CONTRIBUTING.md)** (building, guidelines, the CLA) and **[SECURITY.md](SECURITY.md)** (private vulnerability reporting).
@@ -50,7 +76,7 @@ Since 1.5.4, tabs stay alive in the background after you leave them, and SwiftUI
 
 ## [1.5.4] — 2026-10-05
 
-**Persistent tabs, a Daylight theme repair, and real scan ranges.** Tabs now keep running and keep their state when you switch away; the Daylight theme renders correctly everywhere; and the Network Map and Bulk Discovery scan any range instead of a single /24. Build, Release build, and all 124 tests pass clean. Requires **macOS 14.0** (this entry originally said 13.0 — see [Unreleased]).
+**Persistent tabs, a Daylight theme repair, and real scan ranges.** Tabs now keep running and keep their state when you switch away; the Daylight theme renders correctly everywhere; and the Network Map and Bulk Discovery scan any range instead of a single /24. Build, Release build, and all 124 tests pass clean. Requires **macOS 14.0** (this entry originally said 13.0 — see [1.5.5]).
 
 ### Added — tabs keep running and keep their state
 
@@ -107,13 +133,13 @@ The Grid / List / Visual picker sat in a fixed 220 pt frame, and its natural wid
 
 ### Known / deliberately unaddressed
 
-- **22 `onChange(of:perform:)` deprecation warnings**, up from 20 in 1.5.3: two new sites in `ContentView` for persistent tabs (recording opened tabs, and the tab-visibility modifier). These were kept on the assumption that SNAP targets macOS 13.0; it actually requires 14.0 (see [Unreleased]), so the newer API is usable.
+- **22 `onChange(of:perform:)` deprecation warnings**, up from 20 in 1.5.3: two new sites in `ContentView` for persistent tabs (recording opened tabs, and the tab-visibility modifier). These were kept on the assumption that SNAP targets macOS 13.0; it actually requires 14.0 (see [1.5.5]), so the newer API is usable.
 
 ---
 
 ## [1.5.3] — 2026-09-30
 
-**macOS 27 / Xcode 27 compatibility pass, five behavioral fixes, UniFi certificate pinning, and public-release prep.** Mostly a warning cleanup surfaced by building against the macOS 27 SDK with Swift 6.4. On top of that: five behavioral fixes (the board's "Run Now" button, the Dashboard over-polling ipinfo.io, a System Health score that could read "Excellent" on a bad connection, hard-coded values in the Status Board Wi-Fi tile, and a menu bar status dot that judged a single ping), a security hardening of the UniFi login, and the licensing and privacy documentation needed before SNAP is shared publicly. Build, Release build, and all 122 tests (90 existing + 32 new) pass clean. Requires **macOS 14.0** (this entry originally said 13.0 — see [Unreleased]).
+**macOS 27 / Xcode 27 compatibility pass, five behavioral fixes, UniFi certificate pinning, and public-release prep.** Mostly a warning cleanup surfaced by building against the macOS 27 SDK with Swift 6.4. On top of that: five behavioral fixes (the board's "Run Now" button, the Dashboard over-polling ipinfo.io, a System Health score that could read "Excellent" on a bad connection, hard-coded values in the Status Board Wi-Fi tile, and a menu bar status dot that judged a single ping), a security hardening of the UniFi login, and the licensing and privacy documentation needed before SNAP is shared publicly. Build, Release build, and all 122 tests (90 existing + 32 new) pass clean. Requires **macOS 14.0** (this entry originally said 13.0 — see [1.5.5]).
 
 ### Security — UniFi login uses certificate pinning (trust on first use)
 
@@ -215,7 +241,7 @@ Fixed by type-erasing both branches through `AnyView` and extracting the Ventura
 
 ### Known / deliberately unaddressed
 
-- **20 `onChange(of:perform:)` deprecation warnings** across 11 files: `AlertManager` (3), `SubnetCalculatorView` (3), `BandwidthMonitorView` (2), `CommandPalette` (2), `InfoView` (2), `PortScanView` (2), `VisualTraceRouteView` (2), and one each in `ContentView`, `StatusBoardTiles`, `SyslogReceiverView`, and `ToolHandoff`. The replacement two-or-zero-parameter `onChange` is **macOS 14+**, and SNAP's deployment target is macOS 13.0 (with deliberate `#available(macOS 14, *)` map fallbacks in GeoIP and Visual Trace backing that up). Deprecated is not removed — the old API still works identically. Left as-is rather than bumping the deployment target or introducing a compatibility shim. Revisit if Apple ever actually removes the API, or whenever macOS 13 support is dropped. **Correction:** builds actually required macOS 14.0, not 13.0 (see [Unreleased]), so the replacement API was usable all along.
+- **20 `onChange(of:perform:)` deprecation warnings** across 11 files: `AlertManager` (3), `SubnetCalculatorView` (3), `BandwidthMonitorView` (2), `CommandPalette` (2), `InfoView` (2), `PortScanView` (2), `VisualTraceRouteView` (2), and one each in `ContentView`, `StatusBoardTiles`, `SyslogReceiverView`, and `ToolHandoff`. The replacement two-or-zero-parameter `onChange` is **macOS 14+**, and SNAP's deployment target is macOS 13.0 (with deliberate `#available(macOS 14, *)` map fallbacks in GeoIP and Visual Trace backing that up). Deprecated is not removed — the old API still works identically. Left as-is rather than bumping the deployment target or introducing a compatibility shim. Revisit if Apple ever actually removes the API, or whenever macOS 13 support is dropped. **Correction:** builds actually required macOS 14.0, not 13.0 (see [1.5.5]), so the replacement API was usable all along.
 
   Two corrections to what an earlier draft of this entry claimed: the count is **20 sites across 11 files, not 13 across 10**. A clean build emits 40 of these lines because each site is logged twice (two compile passes), and the original figure came from miscounting that output. The `ToolHandoff` site is new in this release — it's the `onChange` added by the "Run Now" fix above, and it's unavoidable at deployment target 13.0 for the same reason as the other 19.
 

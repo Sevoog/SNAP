@@ -118,7 +118,7 @@ struct OnboardingView: View {
             slideCopy(eyebrow: "Welcome",
                       title: "Sev's Network Analysis Platform",
                       body: "A dark, fast, sandboxless macOS network utility. Built for engineers and operators who need real answers, not browser tabs.",
-                      sub: "38 tools · 0 dependencies · zero telemetry · all native Swift")
+                      sub: "35 tools · 0 dependencies · zero telemetry · all native Swift")
 
         case 2:
             slideCopy(eyebrow: "Your Dashboard",
@@ -132,7 +132,7 @@ struct OnboardingView: View {
 
         case 3:
             slideCopy(eyebrow: "The Sidebar",
-                      title: "38 tools, organized by purpose",
+                      title: "35 tools, organized by purpose",
                       body: "The left sidebar groups every tool by what you'd reach for it for. Search across all of them with the bar at the top, or pin the ones you use most to the Dashboard.",
                       bullets: [
                         "Diagnostics for troubleshooting a target host",
@@ -143,8 +143,8 @@ struct OnboardingView: View {
 
         case 4:
             slideCopy(eyebrow: "Themes",
-                      title: "Pick a vibe. 10 ship in v1.5.0.",
-                      body: "App-wide color theming with instant propagation. Built-in (Midnight, Daylight), developer palettes (Nord, Solarized, Tokyo Night, Dracula), and themed (Matrix, Cyberpunk, DeeX, Synthwave '84).",
+                      title: "Pick a vibe. 12 themes ship with SNAP.",
+                      body: "App-wide color theming with instant propagation. Built-in (Midnight, Daylight), developer palettes (Nord, Solarized, Tokyo Night, Dracula), themed (Matrix, Cyberpunk, DeeX, Synthwave '84), and e-ink (E-ink, Color e-ink).",
                       sub: "Switch anytime from the Appearance menu in the menu bar, or the paintbrush picker on the Dashboard toolbar.")
 
         case 5:

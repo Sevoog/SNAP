@@ -98,78 +98,198 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 
 ## Privacy & Security
 
-SNAP has no accounts, analytics, telemetry, ads, or crash reporting, and contains no third-party code. It never sends anything to me. This section lists everything SNAP itself does. If you find something it doesn't cover, please report it.
+SNAP has no accounts, analytics, telemetry, ads, or crash reporting, and contains no third-party code. It never sends anything to me. This section lists everything SNAP itself does, plus what macOS stores on SNAP's behalf. If you find something it doesn't cover, please report it.
+
+Unless a bullet says otherwise, SNAP's web requests carry macOS's default User-Agent (`SNAP/1 CFNetwork/… Darwin/…`), which names SNAP and your macOS (Darwin) version. Each extra main window (File > New Window) runs its own copy of the window-based checks below.
 
 ### Contacted automatically
 
-These happen without a click, while the view in question is open:
+These happen without you starting a tool: at launch, on a timer, or when you open a view. Some also repeat when you press Refresh. SNAP keeps running in the menu bar after you close its window, so anything marked "until you quit" keeps going until you quit SNAP (⌘Q, or SNAP > Quit SNAP).
 
 | When | Destination | What and why |
 |---|---|---|
-| From launch, every 10 s, for as long as SNAP runs (it stays in the menu bar after the window closes) | Your router (default gateway) | Ping, for the menu bar health dot |
-| While the sidebar is visible, every 15 s | `www.apple.com` (falls back to `www.cloudflare.com`, then `www.google.com`) | A small HTTPS request to confirm you're online |
-| While the Dashboard is on screen: when it first opens, every 10 min, whenever your network changes, and when you press Refresh | `api.ipify.org`, `api6.ipify.org` | Your public IPv4/IPv6 address. **These services see your public IP.** |
-| Once per public IP per day (sooner if you press Refresh) | `ipinfo.io` | ISP, ASN, and city for that address. **ipinfo sees your public IP.** |
-| While the Dashboard is on screen, every 30 s | `1.1.1.1` and your router | Ping, for the latency readouts |
-| Once favorites are loaded, every 30 s (10 s while the Status Board is open) | Hosts you added as favorites | Ping |
-| When the menu bar popover opens, or you open or return to the Network Info tab | `api.ipify.org` | Your public IP |
-| When the Bandwidth monitor starts (opening its tab starts it) | `ipinfo.io` | ISP name |
-| While the Bandwidth monitor runs. It keeps running after you switch tabs, until you press **Stop** or close the window | `1.1.1.1` (TCP port 80) and your DNS resolver | Every 3 s, four TCP connections to time latency, jitter, and loss; every 10 s, a lookup of `one.one.one.one` to time DNS |
-| While the Status Board is open: on open, then every 10 min | `ipwho.is` | Public IP, ISP, ASN, and country for the header chip |
-| While the Status Board's DNS Latency tile is shown, every 10 s | Your system DNS resolver, `1.1.1.1`, `8.8.8.8`, `9.9.9.9` | A lookup of `cloudflare.com`, to time each resolver |
+| From launch until you quit, every 10 s | Your router (default gateway) | Ping, for the menu bar health dot. |
+| While a main window is open, including in the background, minimized, or behind the Status Board: when it opens, then every 15 s | `www.apple.com` (falls back to `www.cloudflare.com`, then `www.google.com`) | A small HTTPS request to confirm you're online. The Cloudflare fallback (`/cdn-cgi/trace`) returns your public IP. |
+| While the Dashboard or Network Info tab is selected in an open window, even a minimized or background one, or behind the Status Board. The Dashboard is the default tab, so this starts at launch. | `api.ipify.org`, `api6.ipify.org` | Your public IPv4/IPv6 address, for the connection summary at the top of those tabs. **These services see your public IP.** |
+| Same summary, once it knows your public IPv4: at most once per address per day while SNAP runs, again after every launch, 5 min after a failed attempt, and when you press Refresh | `ipinfo.io` | A request to `ipinfo.io/<your IPv4>/json` for the ISP, ASN, city, region, and country of that address. **ipinfo sees your public IP.** |
+| Same summary, when it appears and then every 30 s while its tab is selected | `1.1.1.1` and your router | Ping, for the latency readouts. Each refresh also reads your router's entry in the ARP table (`arp -n`) to show its vendor. |
+| From launch (the Dashboard loads your favorites) until you quit, every 30 s, or every 10 s while the Status Board is open or detached (including after you close the main window while the board is showing) | Hosts you added as favorites (nothing if you have none) | Ping. |
+| Each time the menu bar popover opens, and when you press its refresh button | `api.ipify.org` | Your public IP. |
+| When the Network Info tab first opens, each time you return to it, and when you press its toolbar Refresh | `api.ipify.org` | Your public IP. This is a separate, uncached lookup, not the summary's. |
+| From the first time you open the Status Board until you quit: 4 s after that first open, then every 10 min. This continues after the board closes and after the main window closes. Opening the board again doesn't add a lookup. | `ipwho.is` | Your public IP, ISP, ASN, city, and country for the header chip. **ipwho.is sees your public IP.** |
+| From the first time the Status Board shows its DNS Latency tile (it's in the default layout) until you quit: 2 s later, then every 10 s. This continues after the board or the main window closes, and after you remove the tile. | The first DNS resolver your Mac uses, `1.1.1.1`, `8.8.8.8`, `9.9.9.9` | A plain UDP/53 lookup of `cloudflare.com` to each resolver in turn, to time them. That is up to 4 queries every 10 s, about 34,560 a day. |
+
+SNAP keeps the public IP in memory only. It looks it up at the first refresh after launch, then at the next 30 s refresh once 10 min have passed or your network changes (interface, local IP, router, Wi-Fi name, or VPN), on every 30 s refresh while both lookups are failing, and when you press Refresh.
+
+Two more Status Board monitors work the same way but send nothing over the network. The Top Talkers tile is in the default layout. From the first time the board shows it until you quit, SNAP runs `/usr/bin/nettop` 3 s later and then every 4 s. Each run takes about 1 s and reads the name, process ID, and byte counts of every process on your Mac with network activity. The top 5 are kept in memory. The System tile, also in the default layout, reads CPU, memory, uptime, and battery as soon as the board first shows it, then every 3 s until you quit. A detached Status Board window stays open, with its live tiles, after you close the main window.
 
 ### Contacted only when you use a tool
 
-Tools keep running after you switch to another tab (a ping, a traceroute, a scan, a capture) until they finish or you stop them. Closing the main window stops everything.
+Tools keep running after you switch to another tab (a ping, a traceroute, a scan, a capture) until they finish or you stop them. Closing the main window stops Ping, Traceroute, Visual Trace, MTR, Port Scan, Speed Test, Bandwidth, Bulk Discovery, Bonjour, Packet Capture, Syslog, and Routing Hello. Anything else you've already started runs to completion. That includes a Network Map scan, ARP Table's Sweep /24, Network Health, Fingerprint, Multi-Host, MTU Discovery, DNS Propagation, DNS Benchmark, Whois, SSL/TLS, HTTP Probe, GeoIP Lookup, BGP/ASN, and SNMP.
 
+A few tools start as soon as you open their tab, without a click: Network Health, ARP Table, Bonjour, and WiFi Analyzer. Connections, DHCP Leases, and Interface Stats also start on their own but stay on your Mac. Visual Trace shows its map as soon as it opens.
 
-- **Anything you type into a tool goes to the target you chose.** That covers Ping, Traceroute, MTR, Port Scan, HTTP Probe, SSL/TLS, MTU Discovery, Wake-on-LAN, SNMP, iperf3, and the UniFi controller.
-- **GeoIP Lookup and Visual Trace** → `ipwho.is`. It receives the IP you look up; Visual Trace sends each hop's IP.
-- **Dashboard GeoIP card** → `ip-api.com` over **plain HTTP**, so the IP you look up is visible to anyone on the network path.
+- **Anything you type into a tool goes to the target you chose.** That covers Ping, Traceroute, MTR, Port Scan, HTTP Probe, SSL/TLS, MTU Discovery, SNMP, iperf3, and the menu bar's quick Ping. Names you type are resolved through your system DNS resolver unless a bullet below says otherwise. SNMP uses v2c, which sends the community string unencrypted.
+- **Bandwidth** (when you press **Start**; opening the tab doesn't start it): a request to `ipinfo.io/json` for your public IP, ISP, ASN, city, and region (**ipinfo sees your public IP**). While it runs, which continues after you switch tabs until you press **Stop** or close the window: every 3 s, four TCP connections to `1.1.1.1` port 80 to time latency, jitter, and loss, and every 10 s a lookup of `one.one.one.one` through your DNS resolver to time DNS.
+- **Traceroute, Visual Trace, and MTR reach every router on the path**, not just the target. Traceroute and Visual Trace look up a name (PTR record) for every hop through your system DNS resolver. MTR pings every hop that responds once a second (`ping -i 1`) until you press Stop or close the window, and also looks up each hop's name.
+- **HTTP Probe** sends the method, headers, and body you type. macOS adds its standard headers unless you set your own: the default User-Agent, Accept, Accept-Language, Accept-Encoding, and any cookies stored for that site. It follows redirects unless you turn that off, so a redirect can carry the request to a different host. It keeps any cookies the site sets (see *Stored on your Mac*). The Dashboard's **HTTP Probe card** sends a GET to the URL you enter and also follows redirects.
+- **Fingerprint** (when you click **Fingerprint**):
+  - It looks up the target's A and AAAA records, plus the PTR record of the first IPv4 address Cloudflare returns, over plain UDP/53 at Cloudflare's `1.1.1.1`, so every name you type, internal ones included, goes to Cloudflare. The probes below connect to the name you typed, so your system resolver looks it up too.
+  - It sends a plain-HTTP GET to `http://<target>` and a GET to `https://<target>`. Both follow redirects and use the shared cookie store.
+  - It opens TCP connections to ports 22, 21, and 25 to read their greetings.
+  - It pings the target once.
+  - With the SNMP option on (the default), it sends an SNMP v2c GET for sysDescr, sysObjectID, and sysName with the community string shown (`public` unless you change it, sent unencrypted), retried once if there's no answer.
+- **Multi-Host** (when you click **Compare**; the list starts with `google.com` and `cloudflare.com`): for each host, 5 pings (the count is editable), a lookup through your system resolver, and a GET to `https://<host>` that follows redirects.
+- **Dashboard cards** run only when you press their button, but some start with targets filled in for you: Ping `1.1.1.1`, DNS `cloudflare.com` (looked up through your system resolver), Traceroute `github.com`, GeoIP `8.8.8.8`, Whois `apple.com`, HTTP Probe `https://api.github.com`, and Port Scan `192.168.1.1`. The Port Scan card always tries the same ports: 22, 53, 80, 161, 443, 8080, and 8443.
+- **GeoIP Lookup and Visual Trace** → `ipwho.is`. GeoIP sends the IP you look up. If you type a hostname, it's resolved through your system resolver first and only the IP is sent. *My IP* sends a request with no address, so ipwho.is sees yours. Visual Trace sends each hop's IP except 10.x, 172.16.x to 172.31.x, 192.168.x, and 127.x addresses. Other non-public hops, such as an ISP's 100.64.x.x addresses, are sent too.
+- **Apple Maps** → Visual Trace shows an Apple Maps (MapKit) map as soon as its tab opens, and GeoIP Lookup shows one with each result. Loading the map tiles lets Apple see your IP and the area shown: the world view at first, then the area around the located hops or the address you looked up.
+- **Dashboard GeoIP card** → `ip-api.com` over **plain HTTP**. Whatever you type, an IP or a hostname, is sent as is (unlike GeoIP Lookup, it isn't resolved first), so it's visible to anyone on the network path.
 - **Whois** → WHOIS registry servers, via macOS's `whois` command.
-- **BGP/ASN** → DNS lookups against Team Cymru (`asn.cymru.com`).
-- **DNS tools** → the resolvers you pick. DNS Benchmark looks up `google.com`, `apple.com`, `cloudflare.com`, `wikipedia.org`, and `amazon.com` by default.
+- **BGP/ASN** (the tool and its Dashboard card) → TXT lookups over plain UDP/53 to Google Public DNS (`8.8.8.8`), which forwards them to Team Cymru (`asn.cymru.com`). An IP lookup sends `<reversed IP>.origin.asn.cymru.com` (`origin6` for IPv6), then `AS<n>.asn.cymru.com` for the AS name. An ASN lookup sends only the second. Google and Team Cymru both see what you looked up.
+- **DNS Lookup** (the **Lookup** tab) → DNS-over-HTTPS to the provider you pick: `1.1.1.1` (the default), `8.8.8.8`, or `9.9.9.9`. It never uses your system resolver, so internal names you look up go to that provider.
+- **DNS Propagation** → sends the name you type over plain UDP/53 to all 16 built-in public resolvers, and you can't leave any out. They are Cloudflare (2), Google (2), Quad9 (2), OpenDNS (2), AdGuard, ControlD, CleanBrowsing, Verisign, DNS.WATCH, Yandex (Russia), Baidu (China), and AliDNS (China).
+- **DNS Benchmark** → the same 16 resolvers over plain UDP/53. By default each one gets 8 rounds of `google.com`, `apple.com`, `cloudflare.com`, `wikipedia.org`, and `amazon.com`, 640 queries in total. Your system resolver isn't queried, even with *Include system resolver* on.
 - **Speed Test** → `speed.cloudflare.com` and `www.cloudflare.com`.
-- **Captive Portal check** → `captive.apple.com`, `www.msftconnecttest.com`, `cp.cloudflare.com`, `www.gstatic.com`, `detectportal.firefox.com`, and `1.1.1.1` (DNS-over-HTTPS and trace), plus reachability tests to `github.com`, `cloudflare.com`, Gmail's mail servers, and Google's STUN server.
+- **Network Health** (formerly the Captive Portal check) runs every check when its tab opens, and again on **Re-check** (⌘R):
+  - **Captive-portal checks:** plain-HTTP requests to `captive.apple.com`, `www.msftconnecttest.com`, `cp.cloudflare.com`, and `detectportal.firefox.com`, three to `www.gstatic.com`, and one HTTPS request to `captive.apple.com`. These use throwaway sessions with no cookies or cache and don't follow redirects. The six portal probes identify themselves as macOS's captive-portal checker (User-Agent `CaptiveNetworkSupport-407.40.1 wispr`). The two extra `www.gstatic.com` requests, which look for a transparent proxy, use SNAP's default User-Agent.
+  - **DNS checks:** it resolves a random `snap-nxdomain-<random>.invalid` name, `localhost`, and `example.com` through your system resolver, and looks up `example.com` with DNS-over-HTTPS at `1.1.1.1`. It also fetches `https://1.1.1.1/cdn-cgi/trace`, whose response includes your public IP.
+  - **Port checks:** TCP connections, with nothing sent, to `github.com` (22), `smtp.gmail.com` (25, 465, 587), `1.1.1.1` (53), `cloudflare.com` (80, 443), `imap.gmail.com` (993), `pop.gmail.com` (995), and `stun.l.google.com` (3478).
 - **Menu bar quick DNS** → `1.1.1.1` (DNS-over-HTTPS).
+- **UniFi** → the controller only, and only when you press **Connect** or **Refresh**. Nothing runs in the background. SNAP logs in with your username, password, and any 2FA code (`POST /api/auth/login`, or `/api/login` on older controllers), then requests the device list. It uses HTTPS only.
+- **Session Report** (File > Save Session Report…, ⌘⇧R) → after you choose where to save it, two requests to `api.ipify.org` for your public IP. The HTML file contains your hostname, macOS version, public IP, router, DNS servers, every interface's IPv4/IPv6 addresses and status, and up to 20 recent alerts. It's written only to the file you chose and then opened in your default app for `.html` files.
+- **Links**, such as *Source code and license* in the About panel (click the version number at the bottom of the sidebar) and a Network Map device's *Open* button, open in your default browser. SNAP doesn't fetch them itself.
 
 ### On your local network
 
-- **Network Map and Bulk Discovery** (when you click Scan): a ping sweep of the range, the ARP table, mDNS/Bonjour queries, SSDP (UPnP) multicast, Ubiquiti discovery broadcasts plus a unicast probe to every address in the range, NetBIOS name queries, and a read-only HTTP/HTTPS request to each device's web page to read its title. Those page requests accept self-signed certificates and never send credentials.
+- **Network Map** (when you click **Scan Network**; it asks first above 1,024 addresses, and the limit is a /16):
+  - **Range sweep:** it reads the ARP table, pings every address in the range, and sends a Ubiquiti discovery probe (UDP 10001) to every address. For 6 s it also sends and listens for mDNS/Bonjour, SSDP (UPnP) multicast, and Ubiquiti broadcast queries.
+  - **Per-device probes:** every device that answered gets probed, all at the same time. That includes devices outside the range that answered the multicast or broadcast queries. Each gets a NetBIOS name query (UDP 137), another Ubiquiti probe, and a reverse DNS (PTR) lookup through your system resolver, which may be a server outside your network.
+  - **Web requests:** each device also gets up to three read-only requests, to `http://<ip>:80/`, `http://<ip>:8080/`, then `https://<ip>:443/`. They stop at the first one that returns a page title or Server header, and identify as `SNAP/1.2 LAN-scan`. They accept any certificate without checking it and never send credentials. They keep no cookies or cache. They do follow redirects, so a device that redirects to an outside address, such as a vendor's cloud login, sends the request there.
+  - **Limits:** scan ranges aren't restricted to private addresses. A scan has no Stop button and keeps going after you close the main window; by SNAP's own estimate a /16 takes about 38 minutes.
+- **Bulk Discovery** (when you click **Start**). It defaults to your Mac's subnet, or its /24 if the subnet is larger. It can cover up to 8,192 addresses and doesn't ask before large ranges.
+  - **Live check:** it tries TCP connections to ports 80, 22, 443, 8443, 161, 445, and 23 on every address in the range (all seven at once, 64 hosts at a time). A host that accepts or refuses a connection counts as live.
+  - **Per-host probes**, for each live host, 12 at a time:
+    - a reverse DNS lookup through your system resolver
+    - with *Port scan* on (the default), connection attempts to 22, 23, 80, 161, 443, 514, 830, 902, 4443, 8443, and 9100 (connect only, nothing sent)
+    - with *SNMP probe* on (the default), one SNMP v2c GET for sysDescr, sysObjectID, and sysName with the community string shown (`public` unless you change it, sent unencrypted)
+  - It reads the ARP table once. It sends no mDNS, SSDP, Ubiquiti, NetBIOS, or web requests. **Stop** or closing the window cancels it.
+- **ARP Table**: opening the tab, returning to it, or pressing Refresh (⌘R) reads the ARP table. It then looks up names (PTR records) for up to 64 entries through your system resolver. **Sweep /24** pings addresses 1 to 254 of the /24 around your Mac's Wi-Fi or Ethernet address, whatever your actual subnet size, to refill the table. It can't be stopped once started.
 - **Port Scan**: TCP connection attempts to the ports you choose.
-- **Bonjour Browser**: once opened, keeps listening for and querying mDNS services on your local network until the window closes.
-- **Syslog receiver**: listens on a UDP port (5140 by default) only while it's running.
-- **Packet Capture**: runs macOS's `tcpdump`, which only works if you launch SNAP with `sudo`. Captured packets appear in SNAP and go nowhere else.
+- **Wake-on-LAN**: sends a UDP broadcast "magic packet" (6 bytes of `FF`, then the target MAC 16 times). By default it goes to `255.255.255.255` port 9, so every device on your network segment receives it. Each device entry can set its own broadcast address and port, while the Dashboard card always uses `255.255.255.255:9`. The device list isn't saved.
+- **Bonjour**: once opened, keeps listening for and querying mDNS services on your local network until the window closes. It also browses over Apple's peer-to-peer Wi-Fi (AWDL), so it can list nearby Apple devices that aren't on your network.
+- **WiFi Analyzer**: has macOS scan for nearby Wi-Fi networks. A scan runs when the tab first opens, when Location permission changes, when you press Scan, and every 5 s while Live is on and the tab is visible. Each scan briefly takes your Wi-Fi radio off its channel. Nothing else in SNAP scans: the Dashboard, menu bar, and Status Board only read your current connection.
+- **Syslog receiver**: listens on a UDP port (5140 by default) only while it's running. It listens on every network interface and accepts messages from any device that can reach your Mac on that port. Messages stay in memory (the newest 5,000) unless you export them.
+- **Routing Hello**: when you press **Listen**, joins the HSRP and GLBP multicast groups (`224.0.0.2` and `224.0.0.102`, UDP 1985 and 3222) and only listens. It sends no hellos, though joining a group makes macOS announce the membership (IGMP). It stops when you press Stop or close the window.
+- **Packet Capture**: runs macOS's `tcpdump` on the interface you pick (`en0`, `en1`, `en2`, `lo0`, or `any`). This puts the interface into promiscuous mode, so on a wired, mirrored, or hub segment it can capture other devices' traffic too.
+  - It needs read access to `/dev/bpf*`. That means launching SNAP with `sudo` (the app shows the command), unless something like Wireshark's ChmodBPF has already made those devices readable.
+  - Running SNAP with `sudo` runs the whole app, and every tool it launches, as root. That session's settings and history may then be stored under root's account (`/var/root`) instead of yours.
+  - Captured packets stay in memory, appear in SNAP, and go nowhere else. Capture stops when the window closes.
+- **Vendor names** for MAC addresses come from the IEEE registry bundled with SNAP. MAC addresses are never sent to an online lookup service.
 
 Scans and port probes are visible to network monitoring and intrusion-detection systems. **Only scan networks you own or are authorized to test.**
 
 ### System tools SNAP runs
 
-`/sbin/ping`, `/usr/sbin/traceroute`, `/usr/sbin/arp`, `/usr/sbin/ipconfig`, `/usr/sbin/netstat`, `/sbin/ifconfig`, `/usr/bin/whois`, `/usr/bin/nettop`, `/usr/sbin/tcpdump`, and `iperf3` if you've installed it. SNAP never asks for your admin password, and it installs no helpers, daemons, or login items.
+SNAP launches these directly, never through a shell:
+
+- `/sbin/ping`
+- `/usr/sbin/traceroute`
+- `/usr/sbin/arp` (only reads the table)
+- `/usr/sbin/ipconfig getpacket` (read-only DHCP details, for Network Info and DHCP Leases)
+- `/usr/sbin/netstat` (the Connections tab, which lists every TCP connection on your Mac with its process)
+- `/sbin/ifconfig`
+- `/usr/bin/whois`
+- `/usr/bin/nettop` (Top Talkers, see above)
+- `/usr/sbin/tcpdump`
+- `/usr/bin/which` (to find `iperf3`)
+- `iperf3`, if `which` finds it on SNAP's PATH (`iperf3 -c <host> -p <port> -t 10 --forceflush`). For an app opened from Finder that PATH is usually `/usr/bin:/bin:/usr/sbin:/sbin`, so a Homebrew copy usually isn't found.
+
+SNAP never asks for your admin password, and it installs no helpers, daemons, or login items.
 
 ### Permissions
 
 - **Location Services** (asked at first launch). macOS only shows Wi-Fi network names (SSIDs) to apps with location permission. SNAP never requests your coordinates. If you decline, network names are hidden and everything else works.
-- **Local Network** (macOS 15+). Needed for scanning and Bonjour discovery.
-- **Notifications** (asked when alerts first load). Used for bandwidth threshold alerts.
-- **Keychain**. Used only if you tick *Remember* in the UniFi tool; the password goes into your login Keychain.
+- **Local Network** (macOS 15+). macOS asks the first time SNAP, or a tool it launches such as `ping`, contacts a device on your local network. That's usually the router ping a few seconds after launch. If you decline, anything aimed at your local network fails: the router ping and health dot, scans, Bonjour, the UniFi controller, and LAN targets in every tool.
+- **Notifications** (in practice asked at first launch, because the Dashboard's Recent Alerts card, on by default, loads the alerts). Used only for bandwidth threshold alerts, which can fire only while the Bandwidth monitor runs. macOS Notification Center keeps the alerts it has shown.
+- **Keychain**. Used only if you tick *Remember* in the UniFi tool; the password goes into your login Keychain. While Remember is on, opening the UniFi tab reads it back.
 - **Full Disk Access**. SNAP never asks for it. Without it, the Status Board's Top Talkers tile may show less data.
 
 ### Stored on your Mac
 
-- **Preferences** (`~/Library/Preferences/com.sevagbardakjian.snap.plist`): theme, Dashboard and Status Board layouts, favorites, your last 10 inputs per tool, alert thresholds, speed test history, the last Network Map scan (device names, IPs, MACs, vendors), the UniFi controller address and username, and approved UniFi certificate fingerprints.
-- **Bandwidth history** (`~/Library/Application Support/SNAP/bandwidth.sqlite`): per-interface byte counts. Never packet contents.
-- **Keychain**: the UniFi password, only if you chose *Remember*.
+- **Preferences** (`~/Library/Preferences/com.sevagbardakjian.snap.plist`):
+  - theme, Dashboard and Status Board layouts, and favorites (name, host, and date added)
+  - the last 10 inputs for Ping, Lookup, Whois, HTTP Probe, GeoIP, BGP/ASN, Traceroute, and Port Scan, shared with their Dashboard cards. *Clear history* in the clock menu next to each input removes them.
+  - alert thresholds, and whether alert notifications are on
+  - the last 100 speed test results
+  - the last Network Map scan, described below
+  - the UniFi controller URL, username, and *Remember* setting. These are saved after every successful connection, even with Remember off.
+  - approved UniFi certificate fingerprints
+  - whether you've seen the Quick Tour
+
+  The saved Network Map scan holds each device's IP, MAC, vendor, name, model, manufacturer, role, ping time, and last-seen time, plus your router's IP, your Mac's IP, and the scan time. Each new scan replaces it, and SNAP has no button to delete it. macOS may also keep the window's size and position, the menu bar item's position, and the last folder you used in a Save dialog in this file.
+- **Bandwidth history** (`~/Library/Application Support/SNAP/bandwidth.sqlite`, with `-wal` and `-shm` files next to it). While the Bandwidth monitor runs, SNAP adds one row per second with:
+  - the time
+  - the interface
+  - receive and send rates
+  - latency, jitter, and loss to `1.1.1.1`
+  - TCP retransmit rate
+  - DNS lookup time
+  - quality score
+
+  Rows older than 30 days are deleted when the file is opened, and *Clear all history…* in the Bandwidth tab deletes them all. The folder and an empty file are created the first time you open the Bandwidth tab, even if you never press Start. Never packet contents.
+- **Keychain**: the UniFi password, only if you chose *Remember*. There's one item for each controller URL and username. Unticking Remember or pressing Disconnect doesn't delete it.
+- **Web cache and cookies**, kept by macOS's networking framework for SNAP:
+  - **Where:** cached responses go in `~/Library/Caches/com.sevagbardakjian.snap`. Their URLs can include IPs and names you looked up. Cookies and HSTS data go in `~/Library/HTTPStorages/com.sevagbardakjian.snap` and `com.sevagbardakjian.snap.binarycookies`.
+  - **What uses it:** most of SNAP's web requests. That includes the automatic ones (ipify, ipinfo.io, ipwho.is, and the online check), DNS-over-HTTPS lookups, Fingerprint, Multi-Host, HTTP Probe, the Dashboard HTTP Probe and GeoIP cards, and Speed Test. A cookie that any of these services sets is stored and sent back on later requests to it.
+  - **Exceptions:** Network Health's captive-portal and proxy checks, SSL/TLS, the Network Map web requests, and Speed Test's latency check use throwaway sessions. Network Health's DNS-over-HTTPS lookup and its `1.1.1.1/cdn-cgi/trace` request (which returns your public IP) use the shared store. The UniFi tool keeps its login cookies in memory only, though its responses can still be cached.
+- **macOS log** (Console): SNAP writes there only on errors:
+  - if the bandwidth database can't be opened (the message includes its path, and so your user folder name)
+  - if a database command fails
+  - when Visual Trace can't locate a hop (the message includes the hop's IP)
 - **Files** are written only where you choose in a Save dialog (exports, session reports).
 - **Clipboard**: SNAP never reads it. It only writes to it when you click Copy.
 
-To remove everything SNAP has stored: delete the app, run `defaults delete com.sevagbardakjian.snap`, delete `~/Library/Application Support/SNAP`, and remove the `com.bardaklabs.snap.unifi` item in Keychain Access if you saved a UniFi password.
+To remove everything SNAP has stored:
+
+1. Quit SNAP (⌘Q). Closing the window leaves it running in the menu bar.
+2. Delete the app.
+3. Run `defaults delete com.sevagbardakjian.snap`.
+4. Delete these folders and files:
+   - `~/Library/Application Support/SNAP`
+   - `~/Library/Caches/com.sevagbardakjian.snap`
+   - `~/Library/HTTPStorages/com.sevagbardakjian.snap`
+   - `~/Library/HTTPStorages/com.sevagbardakjian.snap.binarycookies`
+   - `~/Library/Saved Application State/com.sevagbardakjian.snap.savedState`, if present
+5. If you saved a UniFi password, remove every `com.bardaklabs.snap.unifi` item in Keychain Access. Or run `security delete-generic-password -s com.bardaklabs.snap.unifi` repeatedly until it reports that no item was found.
+6. If SNAP ever crashed, delete its crash reports (`SNAP-*.ips`) in `~/Library/Logs/DiagnosticReports`.
+7. Optionally, turn off SNAP's Location Services, Local Network, and Notifications permissions in System Settings.
+8. If you ever ran SNAP with `sudo`, repeat this for root's account.
 
 ### Security notes
 
-- **Not sandboxed.** The App Sandbox would block the system tools and raw network probes listed above, so SNAP runs with the same file access as any app you launch yourself. It reads and writes only what's listed here.
-- **Plain HTTP allowed.** App Transport Security is relaxed so SNAP can reach LAN devices with HTTP-only admin pages and `ip-api.com`.
-- **UniFi credentials are protected by certificate pinning.** The first time a controller presents a self-signed certificate, SNAP shows its SHA-256 fingerprint and asks you to trust it. After that, a different certificate stops the connection before your credentials are sent. SNAP also refuses plain-HTTP controller URLs.
+- **Not sandboxed.** The App Sandbox would block the system tools and raw network probes listed above, so SNAP runs with the same file access as any app you launch yourself. It writes only what's listed above. It reads system network state to show it to you:
+  - routing and DNS configuration, and `/etc/resolv.conf`
+  - the ARP table
+  - Wi-Fi details, and nearby Wi-Fi networks (WiFi Analyzer)
+  - every TCP connection and its process ID (Connections)
+  - your Mac's name, macOS version, and uptime
+  - interface and TCP counters
+  - DHCP lease details, including the date of `/var/db/dhcpclient/leases/<interface>.plist`
+  - CPU, memory, and battery
+  - per-process network byte counts
+
+  None of it leaves your Mac except as this section describes.
+- **Plain HTTP allowed.** App Transport Security is turned off for every host (`NSAllowsArbitraryLoads`), so SNAP can reach LAN devices with HTTP-only admin pages. SNAP itself sends plain HTTP to:
+  - `ip-api.com` (Dashboard GeoIP card)
+  - the Network Health portal checks (`captive.apple.com`, `www.msftconnecttest.com`, `cp.cloudflare.com`, `detectportal.firefox.com`, `www.gstatic.com`)
+  - `http://<target>` in Fingerprint
+  - the Network Map web requests to ports 80 and 8080
+  - any `http://` URL you enter in HTTP Probe or its Dashboard card
+
+  Anyone on the network path can read or change those requests.
+- **Plain DNS.** DNS Propagation, DNS Benchmark, Fingerprint, BGP/ASN, and the Status Board's DNS Latency tile send unencrypted UDP/53 queries. The names they ask about are visible on the network path.
+- **Other plaintext traffic.** Whois (TCP 43), SNMP, NetBIOS, SSDP, and syslog are unencrypted protocols, so what they carry is visible on the network path too.
+- **UniFi credentials are protected by certificate pinning.** The first time a controller presents a certificate macOS doesn't trust (self-signed, expired, or for another name), SNAP shows its SHA-256 fingerprint and asks you to trust it. After that, a different untrusted certificate stops the connection before your credentials are sent. A certificate macOS trusts is accepted as usual. SNAP also refuses plain-HTTP controller URLs.
 - **Not notarized.** Current builds are ad-hoc signed and haven't been checked by Apple's notarization service.
 
 ## Architecture
@@ -191,7 +311,15 @@ open SNAP.xcodeproj
 ```
 
 ## Version
-Current: **v1.5.4** — see [CHANGELOG.md](CHANGELOG.md)
+Current: **v1.5.5**. See [CHANGELOG.md](CHANGELOG.md).
+
+### What's new in v1.5.5: open source, two e-ink themes, fixes
+- **Open source.** SNAP is now free and open source under the GNU GPL v3. Contributions are welcome under a [Contributor License Agreement](CLA.md).
+- **Two new themes: E-ink and Color e-ink.** Paper-and-ink looks, in a new E-ink group in the theme picker. On the Dashboard and sidebar they show status with shapes (filled, ringed, or hollow dots; inverted, outlined, or dashed chips; solid vs. dashed chart lines), so state stays readable without bright colors.
+- **Fixed: plain-HTTP requests to the internet were blocked.** The Dashboard's GeoIP card, three of Network Health's captive-portal checks, and HTTP Probe on `http://` sites now work.
+- **Fixed: the window title and toolbar now follow the tab on screen.** After visiting Network Info, other tabs showed its title and its Refresh, Copy, and Export buttons.
+- **Fixed:** the Status Board's CPU row showed "%" with no number, and the Quick Tour said 38 tools (there are 35).
+- **Requires macOS 14.0**, now pinned instead of depending on the Xcode version used to build.
 
 ### What's new in v1.5.4 — persistent tabs, Daylight fix, real scan ranges
 Builds clean; all 124 tests pass. Requires macOS 14.0 or later.
@@ -245,7 +373,7 @@ Two headline features plus a god-file split:
 - **Right-click coverage is comprehensive** — every result surface in SNAP that has a meaningful per-row host now supports the host context menu: Network Map (card + table), ConnectionSummary hero rows, ARP Table, DHCP Leases, Traceroute hops, Lookup answers, Connections (local/remote), Bonjour service IPs, Multi-Host Compare rows, Bulk Discovery, Fingerprint (IPv4/IPv6/Reverse DNS), and Visual Traceroute hops. Same menu everywhere: Copy / Send to Ping / Traceroute / Port Scan / Lookup / Whois / Find in Map / Add to Favorites.
 - **Status Board** is customizable: pick from six tile types (Bandwidth, Wi-Fi, Alerts, Favorites, Gateway Latency, Latest Speed Test), drop tiles in Edit Mode, persists per user. **Detach to window** button pops it to a second monitor (fullscreen) if connected. `⌘⇧B` toggles in-window mode. Header now uses the real app icon.
 - **`dig` → DNSWire migration.** The last three `dig` shell-outs in Fingerprint moved to the native UDP/53 querier. SNAP no longer invokes `/usr/bin/dig` anywhere; remaining shell-outs are `ping`, `traceroute`, and `arp`.
-- **First-launch Quick Tour.** A 5-slide welcome modal introduces the customizable Dashboard, the 38-tool sidebar, the 10 themes, and key shortcuts. Opens once on first launch; reopen anytime from **Help → Quick Tour…**
+- **First-launch Quick Tour.** A 5-slide welcome modal introduces the customizable Dashboard, the 35-tool sidebar, the 10 themes, and key shortcuts. Opens once on first launch; reopen anytime from **Help → Quick Tour…**
 - **Refactor:** `DeviceIdentifier.swift` (1351 LOC) split into three focused files — `DeviceIdentity.swift` (types + role-classification), `DeviceIdentifier.swift` (orchestrator + simple probes), `DiscoveryProbes.swift` (NetBIOS/SSDP/UBNT/mDNS). No behavior change.
 - **Known limitation:** the macOS sidebar and `.regularMaterial` system surfaces don't fully respect custom themes (especially Daylight) — full bleed-through is deferred to a follow-up.
 
@@ -258,7 +386,7 @@ A review-driven stability release (no new features):
 - **Version strings single-sourced** from the bundle (`AppInfo.version`) — menu bar / session reports no longer show a stale version.
 
 ### What's new in v1.4.4 — shell-out → native APIs
-First pass at replacing CLI subprocess spawns with native system calls (robustness + a step toward a sandboxable Lite):
+First pass at replacing CLI subprocess spawns with native system calls, for robustness:
 - **Default gateway / primary interface** now read from `SCDynamicStore` (`RouteInfo`) instead of parsing `netstat -rn` — collapsed 7 call sites to 1.
 - **System DNS resolvers** read from `SCDynamicStore` (`DNSInfo`) instead of `scutil --dns`.
 - **DNS A-record resolution** via `getaddrinfo` (was `/usr/bin/host`); **service banner grab** via `NWConnection` (was `/usr/bin/nc`); Menu Bar gateway no longer spawns `/sbin/route`.
@@ -273,8 +401,6 @@ A maintenance release focused on robustness and consistency (no new features):
 
 ## Roadmap
 - **v1.5** — HTTP/2+3 inspector, TLS fingerprinting + cert chain extraction on mgmt portals (cert expiry monitoring), DNSSEC validation, SNMPv3 (USM auth+priv), SNMP trap receiver, Sparkle auto-update
-- **v2.0 Pro** — Multi-site uptime dashboard, LaunchAgent daemon, Widgets, anomaly-baseline alerts, NetFlow/sFlow collector
-- **Lite** — App Store sandboxed variant
 
 ## Contributing
 Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build and test, and the [Contributor License Agreement](CLA.md) you'll be asked to sign on your first pull request. Please report security issues privately; see [SECURITY.md](SECURITY.md).
