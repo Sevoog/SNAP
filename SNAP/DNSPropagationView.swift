@@ -24,7 +24,7 @@ struct DNSPropagationView: View {
             Divider()
             content
         }
-        .navigationTitle("DNS Propagation")
+        .tabNavigationTitle(.dnsPropagation)
     }
 
     // MARK: Toolbar

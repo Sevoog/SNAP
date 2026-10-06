@@ -474,7 +474,7 @@ struct BulkDiscoveryView: View {
             progressBar
             results
         }
-        .navigationTitle("Bulk Discovery")
+        .tabNavigationTitle(.bulkDiscovery)
         // Runs when the window closes (tabs now stay alive across switches) — cancel the
         // two-phase sweep instead of orphaning it
         .onDisappear { if model.isRunning { model.cancel() } }

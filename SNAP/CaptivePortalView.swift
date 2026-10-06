@@ -30,7 +30,7 @@ struct CaptivePortalView: View {
             if let v = model.overallVerdict { verdictBanner(v) }
             content
         }
-        .navigationTitle("Network Health")
+        .tabNavigationTitle(.captivePortal)
         .onAppear { model.runAll() }
     }
 

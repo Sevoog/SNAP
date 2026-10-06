@@ -86,7 +86,7 @@ struct WakeOnLANView: View {
         .sheet(isPresented: $showAdd) {
             addDeviceSheet
         }
-        .navigationTitle("Wake-on-LAN")
+        .tabNavigationTitle(.wakeOnLAN)
     }
 
     private func wake(device: inout WOLDevice) {

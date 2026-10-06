@@ -129,7 +129,7 @@ struct LookupView: View {
                 .frame(minWidth: 260)
             }
         }
-        .navigationTitle("DNS Lookup")
+        .tabNavigationTitle(.lookup)
         .consumeHandoff(for: .lookup) { host = $0 }
     }
 

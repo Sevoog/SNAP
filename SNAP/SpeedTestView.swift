@@ -153,7 +153,7 @@ struct SpeedTestView: View {
                 internetTestView
             }
         }
-        .navigationTitle("Speed Test")
+        .tabNavigationTitle(.speedTest)
         // Runs when the window closes (tabs now stay alive across switches) — cancel the running test (the
         // cancellation handlers abort the transfer / terminate iperf3)
         .onDisappear { testTask?.cancel() }

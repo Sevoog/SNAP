@@ -142,7 +142,7 @@ struct SSLCheckerView: View {
                 }
             }
         }
-        .navigationTitle("SSL/TLS Checker")
+        .tabNavigationTitle(.ssl)
     }
 
     private func checkSSL() {

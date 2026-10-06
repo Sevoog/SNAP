@@ -107,7 +107,7 @@ struct FingerprintView: View {
                 .frame(minWidth: 260)
             }
         }
-        .navigationTitle("Fingerprint")
+        .tabNavigationTitle(.fingerprint)
     }
 
     private var classificationBanner: some View {

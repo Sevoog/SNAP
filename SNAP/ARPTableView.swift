@@ -26,7 +26,7 @@ struct ARPTableView: View {
             Divider()
             content
         }
-        .navigationTitle("ARP Table")
+        .tabNavigationTitle(.arpTable)
         .onAppear { reload() }
         .onTabVisibilityChange(shown: { reload() })   // fresh table on return
     }

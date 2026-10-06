@@ -30,6 +30,14 @@ Changes:
 - Now possible as a follow-up: the 22 `onChange(of:perform:)` deprecation warnings, and the macOS 13 fallbacks (`EmptyStateView`, the GeoIP and Visual Trace map fallbacks), exist only for macOS 13 and can be removed.
 
 
+### Fixed: hidden tabs set the window title and toolbar
+
+Since 1.5.4, tabs stay alive in the background after you leave them, and SwiftUI kept reading their window titles and toolbar items. The first opened tab in sidebar order won the title, so after visiting Network Info the Dashboard, and every tab after it, was titled "Network Info" and showed Network Info's Refresh, Copy, and Export buttons.
+
+- Tabs now set their title with `tabNavigationTitle(_:)` ([ContentView.swift](SNAP/ContentView.swift)): the tab on screen shows its own title, and hidden tabs report the on-screen tab's title instead of theirs, so they all agree. The 35 titles live in one place, `SNAPTab.windowTitle`; the Dashboard is "SNAP".
+- Network Info's toolbar buttons only exist while Network Info is on screen.
+- Checked with a small SwiftUI test app built the same way: before, the title stayed "Network Info" on the Dashboard and on Ping; after, it follows the tab on screen.
+
 ### Fixed: plain-HTTP requests to the internet were blocked
 
 `Info.plist` set both `NSAllowsArbitraryLoads` and `NSAllowsLocalNetworking`. When the local-networking key is present, macOS ignores `NSAllowsArbitraryLoads`, so App Transport Security stayed on for every public host and refused plain-HTTP requests before sending them (error -1022). Only local hosts and `captive.apple.com` got through. Removing `NSAllowsLocalNetworking` fixes it; arbitrary loads already cover local hosts. Confirmed with two minimal test apps, one with each setting. What works again:

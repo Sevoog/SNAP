@@ -177,7 +177,7 @@ struct ConnectionTableView: View {
                 }.width(50)
             }
         }
-        .navigationTitle("Active Connections")
+        .tabNavigationTitle(.connections)
         .onAppear { model.load() }
         .onDisappear { model.stopAutoRefresh() }
         // Auto-refresh (if you turned it on) keeps running in the background;

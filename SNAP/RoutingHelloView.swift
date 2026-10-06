@@ -307,7 +307,7 @@ struct RoutingHelloView: View {
             Divider().background(NS.borderMid)
             limitationsFooter
         }
-        .navigationTitle("Routing Hello")
+        .tabNavigationTitle(.routingHello)
         // Runs when the window closes (tabs now stay alive across switches) — leave the
         // multicast groups cleanly instead of leaking the joins
         .onDisappear { model.stop() }

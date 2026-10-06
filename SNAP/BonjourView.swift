@@ -329,7 +329,7 @@ struct BonjourView: View {
                 }
             }
         }
-        .navigationTitle("Bonjour Browser")
+        .tabNavigationTitle(.bonjour)
         .onAppear {
             // Start with All Services selected
             model.browseAll()

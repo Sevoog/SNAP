@@ -32,7 +32,7 @@ struct DHCPLeaseView: View {
                 }
             }
         }
-        .navigationTitle("DHCP Leases")
+        .tabNavigationTitle(.dhcpLease)
         .onAppear { reload() }
         .onTabVisibilityChange(shown: { reload() })   // fresh leases on return
     }

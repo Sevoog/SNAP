@@ -165,7 +165,7 @@ struct PingView: View {
                 .frame(minWidth: 300)
             }
         }
-        .navigationTitle("Ping")
+        .tabNavigationTitle(.ping)
         // Runs when the window closes (tabs now stay alive across switches) — without this the ping process
         // keeps running with no UI handle left to stop it
         .onDisappear { stopPing() }

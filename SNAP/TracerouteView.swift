@@ -121,7 +121,7 @@ struct TracerouteView: View {
                 .frame(minWidth: 250)
             }
         }
-        .navigationTitle("Traceroute")
+        .tabNavigationTitle(.traceroute)
         // Runs when the window closes (tabs now stay alive across switches) — terminate the traceroute
         // process instead of orphaning it
         .onDisappear {

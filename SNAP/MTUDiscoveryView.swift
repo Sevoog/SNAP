@@ -29,7 +29,7 @@ struct MTUDiscoveryView: View {
                 resultPanel.frame(minWidth: 260, idealWidth: 300)
             }
         }
-        .navigationTitle("MTU Discovery")
+        .tabNavigationTitle(.mtuDiscovery)
     }
 
     private var toolbar: some View {

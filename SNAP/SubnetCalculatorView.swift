@@ -110,7 +110,7 @@ struct SubnetCalculatorView: View {
             .padding(20)
         }
         .onAppear { calculate() }
-        .navigationTitle("Subnet Calculator")
+        .tabNavigationTitle(.subnet)
     }
 
     private func resultCard(_ label: String, _ value: String, color: Color) -> some View {

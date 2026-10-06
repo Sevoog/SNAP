@@ -268,7 +268,7 @@ struct MTRView: View {
             content
             if !model.hops.isEmpty { Divider(); summaryBar }
         }
-        .navigationTitle("MTR")
+        .tabNavigationTitle(.mtr)
         .onDisappear { model.stop() }
     }
 

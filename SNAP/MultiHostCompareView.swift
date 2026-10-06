@@ -175,7 +175,7 @@ struct MultiHostCompareView: View {
                 }
             }
         }
-        .navigationTitle("Multi-Host Compare")
+        .tabNavigationTitle(.multiHost)
     }
 
     enum Quality { case good, warn, bad, neutral }

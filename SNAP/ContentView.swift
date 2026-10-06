@@ -167,7 +167,28 @@ extension EnvironmentValues {
     }
 }
 
+private struct ActiveTabTitleKey: EnvironmentKey { static let defaultValue: String? = nil }
+
+extension EnvironmentValues {
+    /// Window title of the tab on screen. nil outside the tab system.
+    var activeTabTitle: String? {
+        get { self[ActiveTabTitleKey.self] }
+        set { self[ActiveTabTitleKey.self] = newValue }
+    }
+}
+
 extension View {
+    /// The window title for a tab. Use instead of `.navigationTitle`.
+    ///
+    /// Hidden tabs stay alive (see `ContentView.detailView`), and SwiftUI
+    /// still reads their titles: the first opened tab in `SNAPTab` order
+    /// wins, so after visiting Network Info every later tab, and the
+    /// Dashboard, was titled "Network Info". Here a hidden tab reports the
+    /// on-screen tab's title instead of its own, so every tab agrees.
+    func tabNavigationTitle(_ tab: SNAPTab) -> some View {
+        modifier(TabTitleModifier(tab: tab))
+    }
+
     /// For automatic work a tab does while on screen — polling, live Wi-Fi
     /// scans, reloading a snapshot: `hidden` runs when the user switches to
     /// another tab, `shown` when they come back. Work the user started (a
@@ -176,6 +197,60 @@ extension View {
     func onTabVisibilityChange(shown: @escaping () -> Void,
                                hidden: @escaping () -> Void = {}) -> some View {
         modifier(TabVisibilityModifier(shown: shown, hidden: hidden))
+    }
+}
+
+private struct TabTitleModifier: ViewModifier {
+    let tab: SNAPTab
+    @Environment(\.isActiveTab) private var isActive
+    @Environment(\.activeTabTitle) private var activeTitle
+
+    func body(content: Content) -> some View {
+        content.navigationTitle(isActive ? tab.windowTitle : (activeTitle ?? tab.windowTitle))
+    }
+}
+
+extension SNAPTab {
+    /// The window title while this tab is on screen.
+    var windowTitle: String {
+        switch self {
+        case .dashboard: return "SNAP"
+        case .info: return "Network Info"
+        case .ping: return "Ping"
+        case .lookup: return "DNS Lookup"
+        case .dnsPropagation: return "DNS Propagation"
+        case .dnsBenchmark: return "DNS Benchmark"
+        case .traceroute: return "Traceroute"
+        case .visualTrace: return "Visual Trace Route"
+        case .portScan: return "Port Scan"
+        case .whois: return "Whois"
+        case .fingerprint: return "Fingerprint"
+        case .bonjour: return "Bonjour Browser"
+        case .wakeOnLAN: return "Wake-on-LAN"
+        case .subnet: return "Subnet Calculator"
+        case .ssl: return "SSL/TLS Checker"
+        case .http: return "HTTP/HTTPS Probe"
+        case .bandwidth: return "Bandwidth Monitor"
+        case .interfaceStats: return "Interface Stats"
+        case .connections: return "Active Connections"
+        case .speedTest: return "Speed Test"
+        case .wifi: return "WiFi Analyzer"
+        case .multiHost: return "Multi-Host Compare"
+        case .networkMap: return "Network Map"
+        case .packetCapture: return "Packet Capture"
+        case .geoIP: return "GeoIP Lookup"
+        case .mtuDiscovery: return "MTU Discovery"
+        case .captivePortal: return "Network Health"
+        case .dhcpLease: return "DHCP Leases"
+        case .arpTable: return "ARP Table"
+        case .mtr: return "MTR"
+        case .snmp: return "SNMP"
+        case .routingHello: return "Routing Hello"
+        case .syslog: return "Syslog"
+        case .bgp: return "BGP/ASN Lookup"
+        case .unifi: return "UniFi"
+        case .bulkDiscovery: return "Bulk Discovery"
+        }
     }
 }
 
@@ -296,6 +371,7 @@ struct ContentView: View {
                     .environment(\.isActiveTab, active)
             }
         }
+        .environment(\.activeTabTitle, selectedTab.windowTitle)
         .onAppear { openedTabs.insert(selectedTab) }
         .onChange(of: selectedTab) { openedTabs.insert($0) }
     }

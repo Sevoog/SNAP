@@ -292,7 +292,7 @@ struct VisualTraceRouteView: View {
                 .frame(minWidth: 240, maxWidth: 320)
             }
         }
-        .navigationTitle("Visual Trace Route")
+        .tabNavigationTitle(.visualTrace)
         // Runs when the window closes (tabs now stay alive across switches) — terminate the traceroute
         // process instead of orphaning it
         .onDisappear { model.stop() }

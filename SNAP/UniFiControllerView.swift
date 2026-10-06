@@ -899,7 +899,7 @@ struct UniFiControllerView: View {
             if let err = model.errorMessage { errorBanner(err) }
             deviceList
         }
-        .navigationTitle("UniFi")
+        .tabNavigationTitle(.unifi)
         .sheet(item: $model.pendingCertificate) { p in
             CertificateTrustSheet(pending: p,
                                   onTrust: { model.trustPendingCertificate() },

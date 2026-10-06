@@ -415,7 +415,7 @@ struct BandwidthMonitorView: View {
             Divider()
             content
         }
-        .navigationTitle("Bandwidth Monitor")
+        .tabNavigationTitle(.bandwidth)
         .onAppear { historyRowCount = BandwidthHistoryStore.shared.rowCount() }
         .onDisappear { monitor.stop() }
         .onChange(of: range) { _ in reloadHistory() }

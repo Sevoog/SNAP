@@ -652,7 +652,7 @@ struct NetworkMapView: View {
                 }
             }
         }
-        .navigationTitle("Network Map")
+        .tabNavigationTitle(.networkMap)
         .onAppear { model.restoreLastScan() }
         .alert(Text(verbatim: model.pendingLargeScan.map { "Scan \($0.hostCount.formatted()) addresses?" } ?? ""),
                isPresented: Binding(get: { model.pendingLargeScan != nil },

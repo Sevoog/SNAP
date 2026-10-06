@@ -21,6 +21,7 @@ import AppKit
 import CoreWLAN
 
 struct InfoView: View {
+    @Environment(\.isActiveTab) private var isActiveTab
     @StateObject private var provider = NetworkInfoProvider()
     @State private var selectedName: String? = nil
     @State private var dhcpLease: DHCPLeaseInfo? = nil
@@ -43,19 +44,23 @@ struct InfoView: View {
             }
         }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { provider.refresh() } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+            // Only while this tab is on screen: hidden tabs stay alive, and
+            // their toolbar items would otherwise show on every other tab.
+            if isActiveTab {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { provider.refresh() } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .help("Re-enumerate interfaces")
                 }
-                .help("Re-enumerate interfaces")
-            }
-            ToolbarItem(placement: .primaryAction) {
-                ToolActionBar("Network Info",
-                              text:  { exportText() },
-                              json:  { exportJSON() })
+                ToolbarItem(placement: .primaryAction) {
+                    ToolActionBar("Network Info",
+                                  text:  { exportText() },
+                                  json:  { exportJSON() })
+                }
             }
         }
-        .navigationTitle("Network Info")
+        .tabNavigationTitle(.info)
         .onChange(of: selectedName) { _ in
             loadDHCPForSelected()
         }

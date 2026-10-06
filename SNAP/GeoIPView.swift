@@ -283,7 +283,7 @@ struct GeoIPView: View {
             mainContent
         }
         .background(NS.bg0)
-        .navigationTitle("GeoIP Lookup")
+        .tabNavigationTitle(.geoIP)
         .consumeHandoff(for: .geoIP) { query = $0 }
     }
 

@@ -29,7 +29,7 @@ struct DNSBenchmarkView: View {
                 configPane.frame(minWidth: 220, idealWidth: 260)
             }
         }
-        .navigationTitle("DNS Benchmark")
+        .tabNavigationTitle(.dnsBenchmark)
     }
 
     private var toolbar: some View {

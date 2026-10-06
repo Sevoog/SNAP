@@ -340,7 +340,7 @@ struct SNMPView: View {
             Divider()
             content
         }
-        .navigationTitle("SNMP")
+        .tabNavigationTitle(.snmp)
     }
 
     private var toolbar: some View {

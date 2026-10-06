@@ -75,7 +75,7 @@ struct WhoisView: View {
                 }
             }
         }
-        .navigationTitle("Whois")
+        .tabNavigationTitle(.whois)
         .consumeHandoff(for: .whois) { query = $0 }
     }
 

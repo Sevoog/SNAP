@@ -187,7 +187,7 @@ struct InterfaceStatsView: View {
                     .frame(minWidth: 280, idealWidth: 320, maxWidth: 380)
             }
         }
-        .navigationTitle("Interface Stats")
+        .tabNavigationTitle(.interfaceStats)
         .onAppear { if model.infos.isEmpty { model.refresh() } }
         .onDisappear { model.stopLive() }
         // Live sampling (if you started it) keeps running in the background;

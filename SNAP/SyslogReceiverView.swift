@@ -345,7 +345,7 @@ struct SyslogReceiverView: View {
             if let err = model.errorMessage { errorBanner(err) }
             logTable
         }
-        .navigationTitle("Syslog")
+        .tabNavigationTitle(.syslog)
         // Runs when the window closes (tabs now stay alive across switches) — stop the
         // listener instead of leaking the bound UDP socket
         .onDisappear { model.stop() }

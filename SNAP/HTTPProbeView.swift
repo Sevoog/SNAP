@@ -174,7 +174,7 @@ struct HTTPProbeView: View {
                 }
             }
         }
-        .navigationTitle("HTTP/HTTPS Probe")
+        .tabNavigationTitle(.http)
         .consumeHandoff(for: .http) { url = $0 }
     }
 

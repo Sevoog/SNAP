@@ -167,7 +167,7 @@ struct PacketCaptureView: View {
                 .frame(minWidth: 220)
             }
         }
-        .navigationTitle("Packet Capture")
+        .tabNavigationTitle(.packetCapture)
         // Runs when the window closes (tabs now stay alive across switches) — without this, tcpdump keeps
         // sniffing in the background with no UI handle left to stop it
         .onDisappear { stopCapture() }

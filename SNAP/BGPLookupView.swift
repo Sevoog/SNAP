@@ -217,7 +217,7 @@ struct BGPLookupView: View {
             Divider()
             content
         }
-        .navigationTitle("BGP/ASN Lookup")
+        .tabNavigationTitle(.bgp)
         .consumeHandoff(for: .bgp) { model.query = $0 }
     }
 

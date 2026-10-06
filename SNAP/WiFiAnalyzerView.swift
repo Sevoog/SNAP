@@ -389,7 +389,7 @@ struct WiFiAnalyzerView: View {
                 .frame(height: bottomHeight)
             statusBar
         }
-        .navigationTitle("WiFi Analyzer")
+        .tabNavigationTitle(.wifi)
         // Tabs stay alive in the background now: pause the 5 s live radio
         // scan while hidden (each scan disturbs Wi-Fi for every other tool)
         // and resume it on return. A real teardown still stops it.
