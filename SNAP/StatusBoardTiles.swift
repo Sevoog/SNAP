@@ -1101,7 +1101,7 @@ private struct SBSystemTile: View {
             }
             .padding(.bottom, 4)
             .overlay(Divider().background(NS.border), alignment: .bottom)
-            sysRow("CPU", sys.cpuPct, "%", cpuColor)
+            sysRow("CPU", sys.cpuPct, "\(Int(sys.cpuPct.rounded()))%", cpuColor)
             sysRow("Memory", memPct, memText, memColor)
             sysRow("Battery",
                    sys.batteryPct.map { Double($0) } ?? 0,
