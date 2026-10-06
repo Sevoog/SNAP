@@ -5,6 +5,8 @@ A professional macOS network utility — sandboxless, built for speed, with ten 
 
 Free and open source under the [GNU GPL v3](LICENSE). No accounts, analytics, telemetry, or crash reporting. See [Privacy & Security](#privacy--security) for every service SNAP contacts, what it stores, and what it can do on your network.
 
+If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sevoog).
+
 ## Screenshots
 
 ![Dashboard: live cards and quick tools](marketing/linkedin/framed/01-dashboard.png)
