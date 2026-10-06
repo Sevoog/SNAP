@@ -447,7 +447,7 @@ struct MenuBarView: View {
                     .frame(width: 26, height: 26)
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(red: 0.11, green: 0.11, blue: 0.11))
+                    .foregroundStyle(NS.onAmber)
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text("SNAP").font(.system(size: 12, weight: .semibold))

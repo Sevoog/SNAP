@@ -199,7 +199,7 @@ struct StatusBoardView: View {
                     RoundedRectangle(cornerRadius: 9).fill(NS.amber).frame(width: 36, height: 36)
                     Image(systemName: "scope")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(Color(red: 0.11, green: 0.11, blue: 0.11))
+                        .foregroundStyle(NS.onAmber)
                 }
             }
             VStack(alignment: .leading, spacing: 3) {

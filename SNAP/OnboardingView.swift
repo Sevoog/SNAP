@@ -61,7 +61,7 @@ struct OnboardingView: View {
                 RoundedRectangle(cornerRadius: 6).fill(NS.amber).frame(width: 22, height: 22)
                 Image(systemName: "scope")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color(red: 0.11, green: 0.11, blue: 0.11))
+                    .foregroundStyle(NS.onAmber)
             }
             Text("WELCOME TOUR")
                 .font(.system(size: 11, weight: .bold))
@@ -260,7 +260,7 @@ private struct WelcomeVisual: View {
                     .overlay(
                         Image(systemName: "scope")
                             .font(.system(size: 70, weight: .bold))
-                            .foregroundStyle(Color(red: 0.11, green: 0.11, blue: 0.11))
+                            .foregroundStyle(NS.onAmber)
                     )
             }
             Text("SNAP v\(AppInfo.version)")
@@ -308,7 +308,7 @@ private struct DashboardVisual: View {
                     .font(.system(size: 9, weight: .bold))
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(NS.amber)
-                    .foregroundStyle(Color(red: 0.11, green: 0.11, blue: 0.11))
+                    .foregroundStyle(NS.onAmber)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
             }
             .frame(width: 280)

@@ -46,7 +46,7 @@ struct SNAPApp: App {
             }
             CommandMenu("Appearance") {
                 let grouped = Dictionary(grouping: Theme.all, by: \.group)
-                ForEach(["Built-in", "Developer", "Themed"], id: \.self) { group in
+                ForEach(["Built-in", "Developer", "Themed", "E-ink"], id: \.self) { group in
                     if let themes = grouped[group] {
                         Section(group) {
                             ForEach(themes) { theme in

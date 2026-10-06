@@ -45,6 +45,22 @@ struct Theme: Identifiable, Hashable {
     /// theme, so Daylight showed dark tables and near-invisible gray labels.
     var isLight: Bool = false
 
+    /// E-ink: the palette is grayscale, so views that adopt the e-ink cues
+    /// (`StatusDot`, `statusPill`, `MiniSparkline(ink:)`, the sidebar
+    /// selection, the Dashboard cards) show state with shape instead of hue:
+    /// filled / ringed / hollow dots, inverted or dashed chips, solid vs.
+    /// dashed lines. Off for every other theme.
+    var inkCues: Bool = false
+
+    /// Color e-ink: draw those cues in the theme's muted semantic colors
+    /// instead of ink. Only meaningful with `inkCues`.
+    var inkColors: Bool = false
+
+    /// Icons and labels drawn on an accent (`amber`) fill, like the app logo
+    /// tile. Near-black suits the bright accents; the e-ink accents are dark,
+    /// so they use paper.
+    var onAmber: Color = Color(red: 0.11, green: 0.11, blue: 0.11)
+
     var colorScheme: ColorScheme { isLight ? .light : .dark }
     var appearanceName: NSAppearance.Name { isLight ? .aqua : .darkAqua }
 
@@ -52,14 +68,15 @@ struct Theme: Identifiable, Hashable {
     static func == (a: Theme, b: Theme) -> Bool { a.id == b.id }
 }
 
-// MARK: - Catalog (10 themes, matching the POC)
+// MARK: - Catalog (12 themes)
 
 extension Theme {
 
     static let all: [Theme] = [
         midnight, daylight,
         nord, solarized, tokyo, dracula,
-        matrix, cyberpunk, deex, synthwave
+        matrix, cyberpunk, deex, synthwave,
+        eink, einkColor
     ]
 
     static func byId(_ id: String) -> Theme? { all.first { $0.id == id } }
@@ -194,6 +211,129 @@ extension Theme {
     )
 }
 
+extension Theme {
+
+    // ----- E-ink -----
+    //
+    // Paper and ink, with the shape cues on (see `inkCues`). Semantic hues
+    // become gray levels: problems (red) are darkest, healthy (green) and TX
+    // (blue) are quieter, the brand accent is ink.
+
+    static let eink = Theme(
+        id: "eink", name: "E-ink", group: "E-ink",
+        bg0: hex(0xe8e6df), bg1: hex(0xdedcd4), bg2: hex(0xf2f0ea), bg3: hex(0xf7f5f0),
+        border: Color.black.opacity(0.30), borderMid: Color.black.opacity(0.45),
+        text1: hex(0x151515), text2: hex(0x3d3c39), text3: hex(0x6e6c67), text4: hex(0xb8b6ae),
+        amber: hex(0x151515),
+        green: hex(0x5a5853),
+        blue:  hex(0x75736d),
+        red:   hex(0x000000),
+        purple: hex(0x4a4844),
+        isLight: true,
+        inkCues: true,
+        onAmber: hex(0xf2f0ea)
+    )
+
+    /// Color e-ink (Kaleido-style): same paper and ink, muted pigments for
+    /// the semantics, and the same shape cues drawn in those colors.
+    static let einkColor = Theme(
+        id: "einkColor", name: "Color e-ink", group: "E-ink",
+        bg0: hex(0xe7e3d8), bg1: hex(0xddd9cd), bg2: hex(0xf1eee6), bg3: hex(0xf7f5ef),
+        border: Color.black.opacity(0.28), borderMid: Color.black.opacity(0.42),
+        text1: hex(0x1c1b19), text2: hex(0x3f3d39), text3: hex(0x6e6b64), text4: hex(0xbab5a8),
+        amber: hex(0x9c6b1f),
+        green: hex(0x5b7a4b),
+        blue:  hex(0x4d6a86),
+        red:   hex(0xa9533f),
+        purple: hex(0x7a6386),
+        isLight: true,
+        inkCues: true,
+        inkColors: true,
+        onAmber: hex(0xf1eee6)
+    )
+}
+
+// MARK: - E-ink cues
+
+/// Health of a status indicator, for themes that can't rely on hue.
+enum StatusLevel { case good, warn, bad, unknown }
+
+/// A status dot. Normal themes: a filled dot in `color`. E-ink: the shape
+/// carries the meaning (filled = good, ringed = degraded, hollow = down,
+/// faint ring = unknown), drawn in the current foreground style so it also
+/// works inside an inverted chip.
+struct StatusDot: View {
+    let level: StatusLevel
+    let color: Color
+    var size: CGFloat = 7
+    @ObservedObject private var themeMgr = ThemeManager.shared
+
+    var body: some View {
+        if themeMgr.current.inkCues {
+            let ink = themeMgr.current.inkColors ? AnyShapeStyle(color) : AnyShapeStyle(.foreground)
+            switch level {
+            case .good:
+                Circle().fill(ink).frame(width: size, height: size)
+            case .warn:
+                ZStack {
+                    Circle().strokeBorder(ink, lineWidth: 1.2)
+                    Circle().fill(ink).frame(width: size * 0.4, height: size * 0.4)
+                }
+                .frame(width: size, height: size)
+            case .bad:
+                Circle().strokeBorder(ink, lineWidth: 1.2).frame(width: size, height: size)
+            case .unknown:
+                Circle().strokeBorder(NS.text4, lineWidth: 1).frame(width: size, height: size)
+            }
+        } else {
+            Circle().fill(color).frame(width: size, height: size)
+        }
+    }
+}
+
+private struct StatusPillModifier: ViewModifier {
+    let level: StatusLevel
+    let color: Color
+    @ObservedObject private var themeMgr = ThemeManager.shared
+
+    func body(content: Content) -> some View {
+        if themeMgr.current.inkColors {
+            // Color e-ink: outlined in the status color, dashed when bad.
+            switch level {
+            case .good, .warn:
+                content.foregroundStyle(color).overlay(Capsule().strokeBorder(color, lineWidth: 1))
+            case .bad, .unknown:
+                content.foregroundStyle(color)
+                    .overlay(Capsule().strokeBorder(color, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
+            }
+        } else if themeMgr.current.inkCues {
+            switch level {
+            case .good:
+                content.foregroundStyle(NS.bg2).background(Capsule().fill(NS.text1))
+            case .warn:
+                content.foregroundStyle(NS.text1).overlay(Capsule().strokeBorder(NS.text1, lineWidth: 1))
+            case .bad, .unknown:
+                content.foregroundStyle(NS.text1)
+                    .overlay(Capsule().strokeBorder(NS.text1, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
+            }
+        } else {
+            content.foregroundStyle(color).background(Capsule().fill(color.opacity(0.10)))
+        }
+    }
+}
+
+extension View {
+    /// Status capsule. Normal themes: `color` text on a 10% tint of it.
+    /// E-ink: inverted (good), outlined (warn) or dashed (bad / unknown).
+    func statusPill(_ level: StatusLevel, color: Color) -> some View {
+        modifier(StatusPillModifier(level: level, color: color))
+    }
+}
+
+/// How a chart series is drawn in e-ink themes: `.primary` is a solid line
+/// over hatching, `.secondary` a dashed line with no fill.
+enum InkSeries { case primary, secondary }
+
 // Convenience constructors
 private func c(_ r: Double, _ g: Double, _ b: Double) -> Color {
     Color(red: r, green: g, blue: b)
@@ -244,7 +384,7 @@ struct ThemePicker: View {
     var body: some View {
         Menu {
             let grouped = Dictionary(grouping: Theme.all, by: \.group)
-            ForEach(["Built-in", "Developer", "Themed"], id: \.self) { group in
+            ForEach(["Built-in", "Developer", "Themed", "E-ink"], id: \.self) { group in
                 if let themes = grouped[group] {
                     Section(group) {
                         ForEach(themes) { theme in

@@ -31,6 +31,12 @@ struct NS {
     static var text2:     Color { ThemeManager.shared.current.text2 }
     static var text3:     Color { ThemeManager.shared.current.text3 }
     static var text4:     Color { ThemeManager.shared.current.text4 }
+    /// E-ink theme: show state with shape, not hue (see `Theme.inkCues`).
+    static var inkCues:   Bool  { ThemeManager.shared.current.inkCues }
+    /// Color e-ink: draw those cues in the muted semantic colors.
+    static var inkColors: Bool  { ThemeManager.shared.current.inkColors }
+    /// Icon / label color on an `amber` fill.
+    static var onAmber:   Color { ThemeManager.shared.current.onAmber }
 }
 
 // MARK: - Tab Definition
@@ -442,7 +448,7 @@ struct IconRail: View {
                     .frame(width: 32, height: 32)
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color(red: 0.11, green: 0.11, blue: 0.11))
+                    .foregroundStyle(NS.onAmber)
             }
             .padding(.bottom, 14)
 
@@ -478,16 +484,20 @@ struct RailButton: View {
     let isSelected: Bool
     let action: () -> Void
     @State private var isHovered = false
+    @ObservedObject private var themeMgr = ThemeManager.shared
 
     var body: some View {
+        let ink = themeMgr.current.inkCues
         Button(action: action) {
             Image(systemName: tab.icon)
                 .font(.system(size: 15))
-                .foregroundStyle(isSelected ? NS.amber : (isHovered ? NS.text1 : NS.text3))
+                .foregroundStyle(isSelected ? (ink ? (themeMgr.current.inkColors ? NS.amber : NS.bg2) : NS.amber)
+                                            : (isHovered ? NS.text1 : NS.text3))
                 .frame(width: 36, height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(isSelected ? NS.amber.opacity(0.12) : (isHovered ? NS.text1.opacity(0.04) : Color.clear))
+                        .fill(isSelected ? (ink ? NS.text1 : NS.amber.opacity(0.12))
+                                         : (isHovered ? NS.text1.opacity(0.04) : Color.clear))
                 )
         }
         .buttonStyle(.plain)
@@ -717,7 +727,7 @@ struct AboutSheet: View {
                         .frame(width: 72, height: 72)
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 32, weight: .bold))
-                        .foregroundStyle(Color(red: 0.11, green: 0.11, blue: 0.11))
+                        .foregroundStyle(NS.onAmber)
                 }
 
                 VStack(spacing: 4) {
@@ -792,17 +802,19 @@ struct DarkNavRow: View {
     let isSelected: Bool
     let action: () -> Void
     @State private var isHovered = false
+    @ObservedObject private var themeMgr = ThemeManager.shared
 
     var body: some View {
+        let ink = themeMgr.current.inkCues
         Button(action: action) {
             HStack(spacing: 9) {
                 Image(systemName: tab.icon)
                     .font(.system(size: 12))
-                    .foregroundStyle(isSelected ? NS.amber : NS.text3)
+                    .foregroundStyle(isSelected ? (ink ? (themeMgr.current.inkColors ? NS.amber : NS.bg2) : NS.amber) : NS.text3)
                     .frame(width: 14)
                 Text(tab.rawValue)
                     .font(.system(size: 12))
-                    .foregroundStyle(isSelected ? NS.amber : NS.text2)
+                    .foregroundStyle(isSelected ? (ink ? NS.bg2 : NS.amber) : NS.text2)
                 Spacer()
             }
             .padding(.horizontal, 10)
@@ -810,7 +822,7 @@ struct DarkNavRow: View {
             .background(
                 RoundedRectangle(cornerRadius: 7)
                     .fill(isSelected
-                          ? NS.amber.opacity(0.10)
+                          ? (ink ? NS.text1 : NS.amber.opacity(0.10))
                           : (isHovered ? NS.text1.opacity(0.03) : Color.clear))
             )
         }
@@ -1011,6 +1023,9 @@ struct SparklineView: View {
 struct MiniSparkline: View {
     let values: [Double]
     let color: Color
+    /// How to draw this series under an e-ink theme. nil = like any theme.
+    var ink: InkSeries? = nil
+    @ObservedObject private var themeMgr = ThemeManager.shared
 
     var body: some View {
         GeometryReader { geo in
@@ -1018,31 +1033,44 @@ struct MiniSparkline: View {
                 let peak = Swift.max(values.max() ?? 1, 0.001)
                 let w    = geo.size.width / CGFloat(values.count - 1)
                 let h    = geo.size.height
+                let points = values.enumerated().map { i, v in
+                    CGPoint(x: CGFloat(i) * w, y: h - CGFloat(v / peak) * h * 0.9)
+                }
+                let area = Path { path in
+                    path.move(to: CGPoint(x: 0, y: h))
+                    points.forEach { path.addLine(to: $0) }
+                    path.addLine(to: CGPoint(x: geo.size.width, y: h))
+                    path.closeSubpath()
+                }
+                let line = Path { path in
+                    path.move(to: points[0])
+                    points.dropFirst().forEach { path.addLine(to: $0) }
+                }
+
+                let inkColor = themeMgr.current.inkColors ? color : NS.text1
 
                 ZStack(alignment: .bottom) {
-                    // Area fill
-                    Path { path in
-                        path.move(to: CGPoint(x: 0, y: h))
-                        for (i, v) in values.enumerated() {
-                            let x = CGFloat(i) * w
-                            let y = h - CGFloat(v / peak) * h * 0.9
-                            path.addLine(to: CGPoint(x: x, y: y))
+                    switch themeMgr.current.inkCues ? ink : nil {
+                    case .primary:
+                        // Solid ink line over diagonal hatching
+                        Path { p in
+                            var x: CGFloat = -h
+                            while x < geo.size.width {
+                                p.move(to: CGPoint(x: x, y: h))
+                                p.addLine(to: CGPoint(x: x + h, y: 0))
+                                x += 4
+                            }
                         }
-                        path.addLine(to: CGPoint(x: geo.size.width, y: h))
-                        path.closeSubpath()
+                        .stroke(inkColor.opacity(0.45), lineWidth: 0.7)
+                        .mask(area)
+                        line.stroke(inkColor, lineWidth: 1.5)
+                    case .secondary:
+                        // Dashed ink line, no fill
+                        line.stroke(inkColor, style: StrokeStyle(lineWidth: 1.3, dash: [4, 3]))
+                    case nil:
+                        area.fill(color.opacity(0.08))
+                        line.stroke(color, lineWidth: 1.5)
                     }
-                    .fill(color.opacity(0.08))
-
-                    // Line
-                    Path { path in
-                        for (i, v) in values.enumerated() {
-                            let x = CGFloat(i) * w
-                            let y = h - CGFloat(v / peak) * h * 0.9
-                            if i == 0 { path.move(to: CGPoint(x: x, y: y)) }
-                            else { path.addLine(to: CGPoint(x: x, y: y)) }
-                        }
-                    }
-                    .stroke(color, lineWidth: 1.5)
                 }
             }
         }

@@ -178,6 +178,28 @@ struct DashCardChrome<Content: View>: View {
     let content: () -> Content
     @ObservedObject private var themeMgr = ThemeManager.shared
 
+
+    /// E-ink: the kind is told by shape. Live = inverted, Functional =
+    /// outlined, Launcher = dashed outline. No pulsing dot.
+    @ViewBuilder private var inkBadge: some View {
+        let label = Text(spec.kind.label)
+            .font(.system(size: 8, weight: .bold))
+            .tracking(0.4)
+            .padding(.horizontal, 5).padding(.vertical, 1)
+        let tinted = themeMgr.current.inkColors
+        switch spec.kind {
+        case .live:
+            label.foregroundStyle(NS.bg2).background(Capsule().fill(tinted ? spec.kind.color : NS.text1))
+        case .functional:
+            let c = tinted ? spec.kind.color : NS.text1
+            label.foregroundStyle(c).overlay(Capsule().strokeBorder(c, lineWidth: 1))
+        case .launcher:
+            let c = tinted ? spec.kind.color : NS.text2
+            label.foregroundStyle(c)
+                .overlay(Capsule().strokeBorder(c, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
+        }
+    }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             VStack(alignment: .leading, spacing: 0) {
@@ -192,12 +214,16 @@ struct DashCardChrome<Content: View>: View {
                         .foregroundStyle(NS.text1)
                     Spacer()
                     if !editing {
-                        HStack(spacing: 5) {
-                            if spec.kind == .live { LivePulse() }
-                            Text(spec.kind.label)
-                                .font(.system(size: 8, weight: .bold))
-                                .tracking(0.4)
-                                .foregroundStyle(spec.kind.color)
+                        if themeMgr.current.inkCues {
+                            inkBadge
+                        } else {
+                            HStack(spacing: 5) {
+                                if spec.kind == .live { LivePulse() }
+                                Text(spec.kind.label)
+                                    .font(.system(size: 8, weight: .bold))
+                                    .tracking(0.4)
+                                    .foregroundStyle(spec.kind.color)
+                            }
                         }
                     }
                 }
@@ -947,16 +973,22 @@ private struct BandwidthDashCard: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 22) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("RX").font(.system(size: 9)).foregroundStyle(NS.text3)
+                    HStack(spacing: 4) {
+                        Text("RX").font(.system(size: 9)).foregroundStyle(NS.text3)
+                        if ink { legendLine(dashed: false, color: NS.green) }
+                    }
                     Text(monitor.rxRateStr)
                         .font(.system(size: 16, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(NS.green)
+                        .foregroundStyle(ink && !NS.inkColors ? NS.text1 : NS.green)
                 }
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("TX").font(.system(size: 9)).foregroundStyle(NS.text3)
+                    HStack(spacing: 4) {
+                        Text("TX").font(.system(size: 9)).foregroundStyle(NS.text3)
+                        if ink { legendLine(dashed: true, color: NS.blue) }
+                    }
                     Text(monitor.txRateStr)
                         .font(.system(size: 16, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(NS.blue)
+                        .foregroundStyle(ink && !NS.inkColors ? NS.text1 : NS.blue)
                 }
                 Spacer()
                 Button("Open ›") { selectedTab = .bandwidth }
@@ -965,11 +997,23 @@ private struct BandwidthDashCard: View {
                     .tint(NS.amber)
             }
             HStack(spacing: 0) {
-                MiniSparkline(values: monitor.rxHistory, color: NS.green)
-                MiniSparkline(values: monitor.txHistory, color: NS.blue)
+                MiniSparkline(values: monitor.rxHistory, color: NS.green, ink: .primary)
+                MiniSparkline(values: monitor.txHistory, color: NS.blue, ink: .secondary)
             }
             .frame(height: 56)
         }
+    }
+
+    private var ink: Bool { themeMgr.current.inkCues }
+
+    /// E-ink legend swatch: which line style is RX and which is TX.
+    private func legendLine(dashed: Bool, color: Color) -> some View {
+        Path { p in
+            p.move(to: CGPoint(x: 0, y: 1))
+            p.addLine(to: CGPoint(x: 12, y: 1))
+        }
+        .stroke(NS.inkColors ? color : NS.text1, style: StrokeStyle(lineWidth: 1.4, dash: dashed ? [3, 2] : []))
+        .frame(width: 12, height: 2)
     }
 }
 
@@ -1027,14 +1071,19 @@ private struct WiFiDashCard: View {
 
     private var rssiColor: Color {
         if rssi == 0 { return NS.text3 }
+        if themeMgr.current.inkCues && !themeMgr.current.inkColors { return NS.text1 }
         if rssi > -60 { return NS.green }
         if rssi > -75 { return NS.amber }
         return NS.red
     }
 
     private func bar(height: CGFloat, on: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 1)
-            .fill(on ? NS.green : NS.text4)
+        // E-ink: filled bars for signal, outlined bars for the rest.
+        let ink = themeMgr.current.inkCues
+        return RoundedRectangle(cornerRadius: 1)
+            .fill(on ? (ink && !themeMgr.current.inkColors ? NS.text1 : NS.green) : (ink ? Color.clear : NS.text4))
+            .overlay(RoundedRectangle(cornerRadius: 1)
+                .strokeBorder(ink && !on ? NS.text1 : Color.clear, lineWidth: 1))
             .frame(width: 6, height: height)
     }
 
@@ -1690,9 +1739,8 @@ struct FavoritesStripView: View {
             ToolHandoff.shared.send(fav.host, to: .ping)
         } label: {
             HStack(spacing: 8) {
-                Circle()
-                    .fill(dotColor(st))
-                    .frame(width: 7, height: 7)
+                StatusDot(level: level(st), color: dotColor(st))
+                    .foregroundStyle(NS.text1)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(verbatim: fav.label)
                         .font(.system(size: 11, weight: .semibold))
@@ -1707,11 +1755,12 @@ struct FavoritesStripView: View {
                 if let st, let ms = st.rttMs {
                     Text(verbatim: String(format: "%.0f ms", ms))
                         .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(rttColor(st))
+                        .foregroundStyle(themeMgr.current.inkCues && !themeMgr.current.inkColors ? NS.text2 : rttColor(st))
                 } else if st?.state == .bad {
                     Text("timeout")
                         .font(.system(size: 9))
-                        .foregroundStyle(NS.red)
+                        .strikethrough(themeMgr.current.inkCues)
+                        .foregroundStyle(themeMgr.current.inkCues && !themeMgr.current.inkColors ? NS.text1 : NS.red)
                 } else {
                     Text("—")
                         .font(.system(size: 9, design: .monospaced))
@@ -1721,12 +1770,31 @@ struct FavoritesStripView: View {
             .padding(.horizontal, 10).padding(.vertical, 7)
             .frame(width: 230)
             .background(NS.bg2)
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(NS.border))
+            .overlay(favBorder(down: st?.state == .bad))
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .help("Click to Ping · right-click for actions")
         .hostMenu(fav.host)
+    }
+
+    /// E-ink: a host that's down gets a dashed ink border.
+    @ViewBuilder private func favBorder(down: Bool) -> some View {
+        if themeMgr.current.inkCues && down {
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(themeMgr.current.inkColors ? NS.red : NS.text1, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        } else {
+            RoundedRectangle(cornerRadius: 8).strokeBorder(NS.border)
+        }
+    }
+
+    private func level(_ st: FavoriteStatus?) -> StatusLevel {
+        switch st?.state {
+        case .ok:   return .good
+        case .slow: return .warn
+        case .bad:  return .bad
+        default:    return .unknown
+        }
     }
 
     private func dotColor(_ st: FavoriteStatus?) -> Color {

@@ -572,18 +572,14 @@ struct ConnectionSummaryCard: View {
                     .foregroundStyle(NS.text3)
             }
             Spacer()
+            let up = summary.primaryIface != nil
             HStack(spacing: 6) {
-                Circle()
-                    .fill(summary.primaryIface != nil ? NS.green : NS.red)
-                    .frame(width: 7, height: 7)
-                Text(summary.primaryIface != nil ? "Active route" : "Offline")
+                StatusDot(level: up ? .good : .bad, color: up ? NS.green : NS.red)
+                Text(up ? "Active route" : "Offline")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(summary.primaryIface != nil ? NS.green : NS.red)
             }
             .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(
-                Capsule().fill((summary.primaryIface != nil ? NS.green : NS.red).opacity(0.10))
-            )
+            .statusPill(up ? .good : .bad, color: up ? NS.green : NS.red)
         }
     }
 
@@ -781,14 +777,14 @@ struct ConnectionSummaryCard: View {
         Group {
             if let ms = ms {
                 let color: Color = ms < 10 ? NS.green : (ms < 50 ? NS.amber : NS.red)
+                let level: StatusLevel = ms < 10 ? .good : (ms < 50 ? .warn : .bad)
                 HStack(spacing: 3) {
                     Image(systemName: "bolt.fill").font(.system(size: 9))
                     Text(String(format: "%.1f ms", ms))
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                 }
-                .foregroundStyle(color)
                 .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Capsule().fill(color.opacity(0.10)))
+                .statusPill(level, color: color)
             } else {
                 Text("—").font(.system(size: 10)).foregroundStyle(NS.text4)
             }
