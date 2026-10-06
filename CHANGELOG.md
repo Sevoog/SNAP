@@ -29,6 +29,15 @@ Changes:
 - The About window and the About alert now read the minimum from the built app (`LSMinimumSystemVersion`) instead of hard-coding "13", so they can't drift again.
 - Now possible as a follow-up: the 22 `onChange(of:perform:)` deprecation warnings, and the macOS 13 fallbacks (`EmptyStateView`, the GeoIP and Visual Trace map fallbacks), exist only for macOS 13 and can be removed.
 
+
+### Fixed: plain-HTTP requests to the internet were blocked
+
+`Info.plist` set both `NSAllowsArbitraryLoads` and `NSAllowsLocalNetworking`. When the local-networking key is present, macOS ignores `NSAllowsArbitraryLoads`, so App Transport Security stayed on for every public host and refused plain-HTTP requests before sending them (error -1022). Only local hosts and `captive.apple.com` got through. Removing `NSAllowsLocalNetworking` fixes it; arbitrary loads already cover local hosts. Confirmed with two minimal test apps, one with each setting. What works again:
+
+- **Dashboard GeoIP card** (`ip-api.com` over HTTP) never returned a result.
+- **Network Health**: the Microsoft, Google and Firefox captive-portal checks failed on every network, and the transparent-proxy checks showed warnings.
+- **HTTP Probe and Fingerprint** couldn't reach public `http://` URLs.
+
 ---
 
 ## [1.5.4] — 2026-10-05
