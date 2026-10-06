@@ -16,31 +16,6 @@ enum AppInfo {
     static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
 }
 
-// Swaps identity-revealing live data (hostname, MAC, public IP, Wi-Fi SSID)
-// for fixed placeholder values, for taking screenshots/recordings without
-// exposing personal network details. Toggle with `-demoMode` or
-// SNAP_DEMO_MODE=1; everything else in the app behaves exactly as normal.
-enum DemoMode {
-    static let isActive: Bool = {
-        ProcessInfo.processInfo.arguments.contains("-demoMode")
-        || ProcessInfo.processInfo.environment["SNAP_DEMO_MODE"] == "1"
-    }()
-
-    static let hostname = "MacBook-Pro.local"
-    static let macAddress = "de:ad:be:ef:ca:fe"
-    static let publicIPv4 = "203.0.113.42" // RFC 5737 TEST-NET-3, reserved for documentation
-    static let ssid = "Home-5G"
-
-    // ipwho.is-shaped fields for the Status Board's public IP chip
-    static let ip = "203.0.113.42"
-    static let isp = "Example Networks"
-    static let asn = "AS65001" // RFC 5398, reserved for documentation/private use
-    static let city = "Springfield"
-    static let country = "United States"
-    static let countryCode = "US"
-    static let flagEmoji = "🇺🇸"
-}
-
 @main
 struct SNAPApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate

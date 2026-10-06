@@ -4,7 +4,7 @@ Thanks for your interest in SNAP. Contributions are welcome — bug reports, fix
 
 ## Before you start
 
-- **Bugs:** open an issue with your macOS version, what you did, what you expected, and what happened. Screenshots help; please use Demo Mode (below) so they don't show your network details.
+- **Bugs:** open an issue with your macOS version, what you did, what you expected, and what happened. Screenshots help; please blur or crop out your network details (IP addresses, Wi-Fi names, MAC addresses) first.
 - **Bigger changes** (a new tool, a redesign, a new dependency): open an issue first so we can agree on the approach before you spend time on it.
 - **Security issues:** don't open a public issue. See [SECURITY.md](SECURITY.md).
 
@@ -23,8 +23,6 @@ Or from the command line:
 ```bash
 xcodebuild -project SNAP.xcodeproj -scheme SNAP test
 ```
-
-**Demo Mode** swaps your real network details (hostname, MAC address, public IP, Wi-Fi name, ISP) for placeholders. Use it for any screenshot or recording you share: launch with the `-demoMode` argument, or set `SNAP_DEMO_MODE=1`. It doesn't replace the list of nearby networks in the Wi-Fi Analyzer, so keep that view out of shared screenshots.
 
 ## Guidelines
 

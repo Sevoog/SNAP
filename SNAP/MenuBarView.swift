@@ -326,7 +326,7 @@ struct WiFiInfo {
     static func current() -> WiFiInfo {
         guard let iface = CWWiFiClient.shared().interface() else { return WiFiInfo() }
         var info = WiFiInfo()
-        info.ssid = DemoMode.isActive ? DemoMode.ssid : (iface.ssid() ?? "—")
+        info.ssid = iface.ssid() ?? "—"
         info.rssi = iface.rssiValue()
         if let ch = iface.wlanChannel() {
             info.channel = ch.channelNumber

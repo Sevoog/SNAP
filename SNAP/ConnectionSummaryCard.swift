@@ -74,14 +74,14 @@ final class ConnectionSummary: ObservableObject {
         primaryIface = iface
         primaryIfaceDisplay = display
         primaryMediaIcon = icon
-        hostname = DemoMode.isActive ? DemoMode.hostname : ProcessInfo.processInfo.hostName
+        hostname = ProcessInfo.processInfo.hostName
 
         // Local interface details (IP, mask, MTU, MAC) for the primary iface
         if let name = iface, let detail = Self.fetchLocalDetail(iface: name) {
             localIPv4  = detail.ip
             localCIDR  = detail.cidr
             mtu        = detail.mtu
-            macAddress = DemoMode.isActive ? DemoMode.macAddress : detail.mac
+            macAddress = detail.mac
         } else {
             localIPv4 = nil; localCIDR = nil; mtu = nil; macAddress = nil
         }
@@ -154,7 +154,7 @@ final class ConnectionSummary: ObservableObject {
 
         let inetMs = await inetPing
         let gwMs: Double? = (gw.ip != nil) ? await Self.pingOnce(gw.ip!) : nil
-        publicIPv4 = DemoMode.isActive ? DemoMode.publicIPv4 : cache.publicIPv4
+        publicIPv4 = cache.publicIPv4
         publicIPv6 = cache.publicIPv6
         isp = geo?.isp
         asn = geo?.asn
@@ -232,11 +232,6 @@ final class ConnectionSummary: ObservableObject {
     /// Full Wi-Fi snapshot via CoreWLAN. Returns nil if no Wi-Fi interface
     /// is active or the user hasn't granted Location permission.
     private static func fetchWiFi() -> WiFiInfo? {
-        if DemoMode.isActive {
-            return WiFiInfo(ssid: DemoMode.ssid, bssid: DemoMode.macAddress,
-                            channel: 37, band: "6 GHz",
-                            rssi: -63, txRate: 1441, security: "WPA3")
-        }
         guard let iface = CWWiFiClient.shared().interface() else { return nil }
         let ssid = iface.ssid()
         guard ssid?.isEmpty == false else { return nil }

@@ -373,17 +373,6 @@ final class PublicIPMonitor: ObservableObject {
     }
 
     func refresh() {
-        if DemoMode.isActive {
-            ip = DemoMode.ip
-            isp = DemoMode.isp
-            asn = DemoMode.asn
-            city = DemoMode.city
-            country = DemoMode.country
-            countryCode = DemoMode.countryCode
-            flagEmoji = DemoMode.flagEmoji
-            lastRefresh = Date()
-            return
-        }
         guard let url = URL(string: "https://ipwho.is/") else { return }
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             guard let data,

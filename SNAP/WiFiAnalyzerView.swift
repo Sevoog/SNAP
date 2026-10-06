@@ -450,7 +450,7 @@ struct WiFiAnalyzerView: View {
     private func connectedBanner(_ c: WiFiNetwork) -> some View {
         HStack(spacing: 10) {
             Circle().fill(NS.green).frame(width: 8, height: 8)
-            Text("Connected: \(DemoMode.isActive ? DemoMode.ssid : c.ssid)").font(.system(size: 12, weight: .semibold)).foregroundStyle(NS.green)
+            Text("Connected: \(c.ssid)").font(.system(size: 12, weight: .semibold)).foregroundStyle(NS.green)
             Text("Ch \(c.channel) · \(c.widthMHz) MHz · \(c.generation) · \(c.security)")
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(NS.text2)
             Text("\(c.rssi) dBm · SNR \(c.snr)")

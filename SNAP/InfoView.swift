@@ -581,8 +581,8 @@ private struct WiFiSnapshot {
             }
         }()
         return WiFiSnapshot(
-            ssid:    DemoMode.isActive ? DemoMode.ssid : iface.ssid(),
-            bssid:   DemoMode.isActive ? DemoMode.macAddress : iface.bssid(),
+            ssid:    iface.ssid(),
+            bssid:   iface.bssid(),
             channel: chan.map { Int($0.channelNumber) },
             band:    bandLabel,
             rssi:    iface.rssiValue() != 0 ? Int(iface.rssiValue()) : nil,

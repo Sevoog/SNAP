@@ -1050,7 +1050,7 @@ private struct WiFiDashCard: View {
                 DispatchQueue.main.async { ssid = "Not associated" }
                 return
             }
-            let s = DemoMode.isActive ? DemoMode.ssid : (i.ssid() ?? "Hidden")
+            let s = i.ssid() ?? "Hidden"
             let r = i.rssiValue()
             let ch = i.wlanChannel()?.channelNumber ?? 0
             let widthRaw = i.wlanChannel()?.channelWidth.rawValue ?? 0

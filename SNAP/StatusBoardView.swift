@@ -297,7 +297,7 @@ enum StatusBoardWiFi {
     }
     static func read() -> Info? {
         guard let i = CWWiFiClient.shared().interface() else { return nil }
-        let s = DemoMode.isActive ? DemoMode.ssid : (i.ssid() ?? "Hidden")
+        let s = i.ssid() ?? "Hidden"
         let r = i.rssiValue()
         let ch = i.wlanChannel()?.channelNumber ?? 0
         let widthRaw = i.wlanChannel()?.channelWidth.rawValue ?? 0

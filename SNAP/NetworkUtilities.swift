@@ -244,7 +244,7 @@ struct InterfaceInfo: Identifiable, Hashable {
 class NetworkInfoProvider: ObservableObject {
     @Published var interfaces: [InterfaceInfo] = []
     @Published var externalIP: String = "Fetching..."
-    @Published var hostname: String = DemoMode.isActive ? DemoMode.hostname : ProcessInfo.processInfo.hostName
+    @Published var hostname: String = ProcessInfo.processInfo.hostName
     /// Interface that carries the current default IPv4 route. The InfoView
     /// uses this to badge the active row in the sidebar.
     @Published var activeRouteInterface: String? = nil
@@ -389,7 +389,7 @@ class NetworkInfoProvider: ObservableObject {
                     for i in 0..<6 {
                         bytes.append(raw.load(fromByteOffset: 8 + nameLen + i, as: UInt8.self))
                     }
-                    acc[name]!.mac = DemoMode.isActive ? DemoMode.macAddress : bytes.map { String(format: "%02x", $0) }.joined(separator: ":")
+                    acc[name]!.mac = bytes.map { String(format: "%02x", $0) }.joined(separator: ":")
                 }
                 // if_data lives in ifa_data — MTU + counters. Some pseudo
                 // interfaces (utun, ipsec) leave ifa_data as a different
@@ -619,7 +619,6 @@ class NetworkInfoProvider: ObservableObject {
 
     @MainActor
     private func fetchExternalIP() async {
-        if DemoMode.isActive { externalIP = DemoMode.publicIPv4; return }
         guard let url = URL(string: "https://api.ipify.org") else { return }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)

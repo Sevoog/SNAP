@@ -22,7 +22,7 @@ Free and open source under the [GNU GPL v3](LICENSE). No accounts, analytics, te
 
 </details>
 
-*Screenshots were taken in SNAP's Demo Mode; every network detail shown is a placeholder.*
+*Every network detail in these screenshots is a placeholder.*
 
 ## Features
 

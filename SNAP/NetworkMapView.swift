@@ -93,86 +93,6 @@ final class NetworkMapModel: ObservableObject {
         }
     }
 
-    // MARK: Demo mode fake inventory
-    //
-    // A self-contained fake network for screenshots/recordings — spans every
-    // DeviceGroup so the filter tabs and Visual constellation both have
-    // something in each bucket. Never touches ARP/mDNS/SSDP or UserDefaults.
-
-    private static func demoDevice(
-        _ ip: String, role: DeviceRole, name: String? = nil, vendor: String = "",
-        mac: String = "", model: String? = nil, ping: Double? = nil,
-        status: NetworkDevice.ReachStatus = .alive, signals: [IdentitySignal] = []
-    ) -> NetworkDevice {
-        var d = NetworkDevice(id: ip, ip: ip)
-        d.mac = mac
-        d.vendor = vendor
-        d.identity.displayName = name
-        d.identity.model = model
-        d.identity.manufacturer = vendor.isEmpty ? nil : vendor
-        d.identity.role = role
-        d.identity.signals = signals
-        d.pingMs = ping
-        d.status = status
-        return d
-    }
-
-    static let demoGatewayIP = "192.168.1.1"
-    static let demoSelfIP = "192.168.1.50"
-
-    static let demoDevices: [NetworkDevice] = [
-        demoDevice("192.168.1.1", role: .router, name: "UniFi Dream Machine Pro", vendor: "Ubiquiti",
-                   mac: "70:a7:41:aa:bb:01", model: "UDM-Pro", ping: 1.4,
-                   signals: [.ubnt(model: "UDM-Pro", firmware: "3.2.9", hostname: "UDMP"), .gatewayDetected]),
-        demoDevice("192.168.1.2", role: .accessPoint, name: "UniFi U6-Pro", vendor: "Ubiquiti",
-                   mac: "70:a7:41:aa:bb:02", model: "U6-Pro", ping: 3.2,
-                   signals: [.ubnt(model: "U6-Pro", firmware: "6.6.55", hostname: "U6Pro")]),
-        demoDevice("192.168.1.3", role: .networkSwitch, name: "UniFi Switch 24", vendor: "Ubiquiti",
-                   mac: "70:a7:41:aa:bb:03", model: "USW-24", ping: 2.0,
-                   signals: [.ubnt(model: "USW-24", firmware: "6.6.55", hostname: "USW24")]),
-        demoDevice("192.168.1.50", role: .mac, name: "MacBook Pro", vendor: "Apple",
-                   mac: DemoMode.macAddress, ping: 0.3, signals: [.selfDetected]),
-        demoDevice("192.168.1.60", role: .iPhone, name: "iPhone", vendor: "Apple",
-                   mac: "3c:22:fb:aa:bb:60", ping: 14.2,
-                   signals: [.mDNS(service: "_apple-mobdev2._tcp", model: nil, friendly: "iPhone", hostname: nil)]),
-        demoDevice("192.168.1.61", role: .iPad, name: "iPad", vendor: "Apple",
-                   mac: "3c:22:fb:aa:bb:61", ping: 18.9),
-        demoDevice("192.168.1.70", role: .appleTV, name: "Living Room", vendor: "Apple",
-                   mac: "a4:83:e7:aa:bb:70", ping: 6.1,
-                   signals: [.mDNS(service: "_airplay._tcp", model: "AppleTV14,1", friendly: "Living Room", hostname: nil)]),
-        demoDevice("192.168.1.71", role: .homePod, name: "Kitchen", vendor: "Apple",
-                   mac: "a4:83:e7:aa:bb:71", ping: 7.4),
-        demoDevice("192.168.1.80", role: .smartTV, name: "Samsung TV", vendor: "Samsung",
-                   mac: "8c:79:67:aa:bb:80", ping: 11.0, status: .arpOnly),
-        demoDevice("192.168.1.81", role: .sonos, name: "Sonos One", vendor: "Sonos",
-                   mac: "5c:aa:fd:aa:bb:81", ping: 9.3,
-                   signals: [.ssdp(server: "Sonos/70.3 UPnP/1.0", model: "Sonos One", location: nil)]),
-        demoDevice("192.168.1.90", role: .printer, name: "HP LaserJet", vendor: "HP",
-                   mac: "3c:d9:2b:aa:bb:90", ping: 22.5),
-        demoDevice("192.168.1.91", role: .nas, name: "Synology NAS", vendor: "Synology",
-                   mac: "00:11:32:aa:bb:91", model: "DS920+", ping: 1.9,
-                   signals: [.httpBanner(server: "nginx", title: "Synology DiskStation")]),
-        demoDevice("192.168.1.100", role: .ipCamera, name: "Front Door Cam", vendor: "Ubiquiti",
-                   mac: "70:a7:41:aa:bb:c0", ping: 5.5, status: .arpOnly),
-        demoDevice("192.168.1.101", role: .nestDevice, name: "Nest Thermostat", vendor: "Google",
-                   mac: "18:b4:30:aa:bb:c1", ping: 28.0),
-        demoDevice("192.168.1.110", role: .gameConsole, name: "PlayStation 5", vendor: "Sony",
-                   mac: "70:66:1b:aa:bb:d0", ping: 4.4),
-        demoDevice("192.168.1.120", role: .windowsPC, name: "Gaming PC", vendor: "Micro-Star",
-                   mac: "e0:d5:5e:aa:bb:d1", ping: 1.1),
-        demoDevice("192.168.1.130", role: .androidPhone, name: "Pixel 8", vendor: "Google",
-                   mac: "3c:5a:b4:aa:bb:d2", ping: 16.7),
-        demoDevice("192.168.1.140", role: .unknown, status: .unreachable),
-    ]
-
-    private func loadDemoDevices() {
-        devices = Self.demoDevices
-        gatewayIP = Self.demoGatewayIP
-        selfIP = Self.demoSelfIP
-        lastScan = Date()
-        phase = .done
-    }
-
     // MARK: Scan range
 
     /// Most addresses one scan covers: a full /16 (65,534 hosts).
@@ -239,7 +159,7 @@ final class NetworkMapModel: ObservableObject {
     /// The Scan button: runs small scans straight away, asks before big ones.
     func requestScan() {
         guard !isScanning, case .success(let range) = scanRange else { return }
-        if DemoMode.isActive || range.hostCount <= Self.confirmAboveHosts {
+        if range.hostCount <= Self.confirmAboveHosts {
             scan()
             return
         }
@@ -270,7 +190,6 @@ final class NetworkMapModel: ObservableObject {
 
     func scan() {
         guard !isScanning else { return }
-        if DemoMode.isActive { loadDemoDevices(); return }
         guard case .success(let range) = scanRange else { return }
         scanTargets = range.addresses()
         isScanning = true
@@ -562,7 +481,6 @@ final class NetworkMapModel: ObservableObject {
     }
 
     func restoreLastScan() {
-        if DemoMode.isActive { loadDemoDevices(); return }
         guard let data = UserDefaults.standard.data(forKey: Self.lastScanKey),
               let snap = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return }
