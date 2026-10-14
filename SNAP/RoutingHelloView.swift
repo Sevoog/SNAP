@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2026 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Passive multicast listener for the FHRP/routing protocols we can see
 // without privileged raw-socket access (UDP-encapsulated only):

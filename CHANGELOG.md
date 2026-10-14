@@ -37,7 +37,8 @@ SNAP has 35 tools plus the Dashboard. Corrected on the Quick Tour's first and th
 SNAP's source is now published under the **GNU General Public License v3.0** (`GPL-3.0-only`), replacing the previous proprietary license.
 
 - **[LICENSE](LICENSE)** is the official GPL-3.0 text from gnu.org, unmodified.
-- **Source files that said "All rights reserved"** now carry `// SPDX-License-Identifier: GPL-3.0-only` under their copyright line instead (52 Swift files).
+- **Every Swift file** (76) now carries a copyright line naming Sevag Bardakjian and `// SPDX-License-Identifier: GPL-3.0-only`. The 52 that said "All rights reserved" switched to it, and the 24 that had no copyright line got one.
+- **Attribution term ([NOTICE.md](NOTICE.md)).** As GPL v3 section 7(b) allows, anyone who shares SNAP or a work based on it must keep the copyright notices naming Sevag Bardakjian, and a modified version must show "Based on SNAP by Sevag Bardakjian" with a link to this repository in its About window. Every Swift file's header points to it, as section 7 requires.
 - **In the app:** the About window and About alert show the GPL's required notices: the copyright, that SNAP comes with no warranty, that it may be redistributed under the GPL, and where to find the source and license. The app's copyright string says the same.
 - **Contributions require signing the [Contributor License Agreement](CLA.md).** It lets SNAP also be offered under other licenses (dual licensing), while contributors keep their copyright and every GPL release stays GPL. A GitHub Action (CLA Assistant Lite, pinned to the commit behind v2.6.1) asks for signatures on pull requests and records them on the `cla-signatures` branch.
 - New **[CONTRIBUTING.md](CONTRIBUTING.md)** (building, guidelines, the CLA) and **[SECURITY.md](SECURITY.md)** (private vulnerability reporting).

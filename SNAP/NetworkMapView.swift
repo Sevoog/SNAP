@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2025 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Three view modes share the same model:
 //   • Grid    — info-dense device cards (status, model, MAC, ping, ports)

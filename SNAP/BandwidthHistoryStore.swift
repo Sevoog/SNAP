@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2025 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // SQLite-backed rolling history of bandwidth + quality samples (RX/TX bps,
 // latency, jitter, packet loss, retransmit rate, DNS latency, quality

@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2026 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Spawns a separate `NSWindow` containing the same `StatusBoardView`. Used
 // for the "throw it on a spare monitor" workflow — if a secondary screen is

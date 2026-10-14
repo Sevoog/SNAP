@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2025 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Two phases:
 //   1. Discover the path with one traceroute (`/usr/sbin/traceroute -n -q1 -m N`)

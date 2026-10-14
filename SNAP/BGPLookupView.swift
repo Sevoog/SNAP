@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2026 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Uses Team Cymru's IP-to-ASN service over plain DNS — no HTTP API key,
 // no rate limits to speak of, no third-party dependency. Two TXT queries:

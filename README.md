@@ -428,6 +428,8 @@ SNAP is free software, licensed under the [GNU General Public License v3.0](LICE
 
 SNAP comes with **absolutely no warranty**. Copyright © 2025–2026 Sevag Bardakjian.
 
+**Attribution.** As section 7(b) of the GPL allows, SNAP adds one term: if you share SNAP or a version of it, keep the copyright notices naming Sevag Bardakjian, and a modified version must show "Based on SNAP by Sevag Bardakjian" with a link to this repository in its About window. See [NOTICE.md](NOTICE.md).
+
 If you'd like to use SNAP under terms other than the GPL, for example in a closed-source product, open an issue or get in touch through GitHub.
 
 Bundled data: the IEEE MA-L OUI registry (`SNAP/oui_registry.txt`), published by the IEEE Registration Authority.

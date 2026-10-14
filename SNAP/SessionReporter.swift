@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2025 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Captures a snapshot of the current network state (interfaces, external IP,
 // gateway, DNS, recent alerts) and writes a self-contained HTML report. The

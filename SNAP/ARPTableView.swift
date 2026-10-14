@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2025 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Reads the local ARP cache via `arp -an` and surfaces every L2 neighbor on
 // the subnet with vendor lookup (OUI), hostname (reverse DNS), and a hint

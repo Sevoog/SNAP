@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2026 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Binds a UDP listener and receives syslog messages from network gear.
 // Point your switch / firewall / router at `<your-IP>:<port>` and watch

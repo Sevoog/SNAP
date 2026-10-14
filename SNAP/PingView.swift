@@ -1,6 +1,9 @@
 // PingView.swift
 // SNAP — Ping Tab
 // Created by Sevag Bardakjian
+// Copyright © 2025-2026 Sevag Bardakjian
+// SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 
 import SwiftUI
 import Charts

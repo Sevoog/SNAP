@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2026 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Press ⌘K from anywhere in SNAP to open a Spotlight-style modal. Categorized
 // list of every tool, every theme, and the common actions. Type to filter.

@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2026 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Two small singletons that power the "Send to Ping/Traceroute/..." right-click
 // menus, the ⌘K command bar's `ping HOST` inline actions, and the recent-inputs

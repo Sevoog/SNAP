@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2026 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Shared by the Network Map and Bulk Discovery so both accept the same
 // forms and agree on host counts. Before v1.5.4 the Network Map only ever

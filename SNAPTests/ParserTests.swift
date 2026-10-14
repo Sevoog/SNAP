@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2026 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // These cover the kind of logic most likely to silently break on an OS
 // update (CLI-output parsing) or off-by-one mistakes (CIDR math, channel

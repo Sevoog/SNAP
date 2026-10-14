@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2026 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Mirrors the Dashboard's customizable-card pattern, but scoped to the
 // Status Board's fullscreen / detachable display. The layout (which tiles

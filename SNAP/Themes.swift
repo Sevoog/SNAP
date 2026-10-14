@@ -3,6 +3,7 @@
 // Created by Sevag Bardakjian
 // Copyright © 2026 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
+// Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // The `NS` palette in ContentView.swift now forwards to ThemeManager.shared.current,
 // so changing the active theme cascades to every view that already uses NS tokens.
