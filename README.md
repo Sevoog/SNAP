@@ -26,6 +26,24 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 
 *Every network detail in these screenshots is a placeholder.*
 
+## Install
+
+1. Download `SNAP-1.5.5.zip` from the [latest release](https://github.com/Sevoog/SNAP/releases/latest).
+2. Unzip it and drag **SNAP** into your Applications folder. It runs natively on Apple silicon and Intel Macs with macOS 14 or later.
+3. Open SNAP. The first time, macOS blocks it, because SNAP isn't notarized by Apple yet. To open it anyway:
+   - In the warning ("Apple could not verify…"), click **Done**.
+   - Open **System Settings → Privacy & Security**, scroll down to **Security**, and click **Open Anyway** next to the message about SNAP. The button stays there for about an hour after the blocked attempt.
+   - Click **Open** in the warning that follows, and enter your login password if macOS asks.
+
+   After that, SNAP opens normally. If you'd rather use Terminal, `xattr -dr com.apple.quarantine /Applications/SNAP.app` does the same thing.
+4. On first launch, SNAP asks for **Location** (macOS only shows Wi-Fi network names to apps that have it) and **Local Network** access. See [Privacy & Security](#privacy--security) for what each is used for. A short Quick Tour opens the first time; reopen it anytime from **Help → Quick Tour…**.
+
+**Check the download (optional):** the release page lists the zip's SHA-256. Compare it with the output of `shasum -a 256 SNAP-1.5.5.zip`.
+
+**Build it yourself:** see [Building](#building). There are no dependencies, and Xcode signs it to run on your Mac automatically.
+
+**Uninstall:** quit SNAP (⌘Q), delete it from Applications, and follow the removal steps at the end of [Stored on your Mac](#stored-on-your-mac).
+
 ## Features
 
 ### Overview
