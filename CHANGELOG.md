@@ -35,7 +35,7 @@ The window can be as narrow as 900 pt, which leaves 650 pt for the tool next to 
 
 ### Changed: About panel text is easier to read
 
-The About panel's subtitle, version, detail rows, and fine print used the theme's faintest grays. They now use its secondary and primary text colors, like the sidebar footer.
+The About panel's subtitle, version, detail rows, and fine print used the theme's faintest grays, and its blue links were hard to read on some themes (2.5:1 contrast on Nord). Everything now uses the theme's primary text color, at least 8.7:1 in every theme; the links are underlined instead of blue, and the fine print is a size larger.
 
 ### Changed: Help menu, About window, and sidebar
 

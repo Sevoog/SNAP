@@ -723,7 +723,7 @@ struct AboutSheet: View {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 16))
-                        .foregroundStyle(NS.text3)
+                        .foregroundStyle(NS.text2)
                 }
                 .buttonStyle(.plain)
             }
@@ -745,12 +745,14 @@ struct AboutSheet: View {
                     Text("SNAP")
                         .font(.system(size: 22, weight: .bold))
                         .foregroundStyle(NS.text1)
+                    // Primary text throughout: secondary text and the blue
+                    // link color fall below 4.5:1 contrast in some themes.
                     Text("Sev's Network Analysis Platform")
                         .font(.system(size: 12))
-                        .foregroundStyle(NS.text2)
+                        .foregroundStyle(NS.text1)
                     Text("Version \(AppInfo.version)")
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(NS.text2)
+                        .foregroundStyle(NS.text1)
                         .padding(.top, 2)
                 }
 
@@ -777,19 +779,17 @@ struct AboutSheet: View {
                         .multilineTextAlignment(.center)
                     HStack(spacing: 6) {
                         if let source = URL(string: "https://github.com/Sevoog/SNAP") {
-                            Link("Source code and license", destination: source)
-                                .foregroundStyle(NS.blue)
+                            Link(destination: source) { Text("Source code and license").underline() }
                         }
                         Text("·")
                         if let site = URL(string: "https://sevag.ai") {
-                            Link("sevag.ai", destination: site)
-                                .foregroundStyle(NS.blue)
+                            Link(destination: site) { Text("sevag.ai").underline() }
                         }
                     }
                 }
-                .font(.system(size: 10))
-                .foregroundStyle(NS.text2)
-                .padding(.horizontal, 24)
+                .font(.system(size: 11))
+                .foregroundStyle(NS.text1)
+                .padding(.horizontal, 14)
                 .padding(.bottom, 20)
             }
         }
@@ -806,7 +806,7 @@ struct AboutSheet: View {
                 .frame(width: 16)
             Text(label)
                 .font(.system(size: 11))
-                .foregroundStyle(NS.text2)
+                .foregroundStyle(NS.text1)
             Spacer()
             Text(value)
                 .font(.system(size: 11, weight: .medium))
