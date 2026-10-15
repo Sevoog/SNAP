@@ -538,7 +538,7 @@ struct DarkSidebar: View {
                 Text("SNAP")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(NS.text1)
-                Text("Network Analysis Platform · v\(AppInfo.version)")
+                Text("Sev's Network Analysis Platform")
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundStyle(NS.text3)
             }
@@ -634,29 +634,34 @@ struct SidebarFooter: View {
             HStack(spacing: 6) {
                 Circle()
                     .fill(isOnline ? NS.green : NS.red)
-                    .frame(width: 5, height: 5)
+                    .frame(width: 7, height: 7)
                     .animation(.easeInOut(duration: 0.3), value: isOnline)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(isOnline ? "Online" : "Offline")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(isOnline ? NS.green : NS.red)
                     if isOnline && pingMs != "—" {
                         Text("\(pingMs) ms")
-                            .font(.system(size: 8, design: .monospaced))
-                            .foregroundStyle(NS.text4)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(NS.text2)
                     }
                 }
 
                 Spacer()
 
-                Text("v\(AppInfo.version)")
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(NS.text4)
-
-                Image(systemName: "info.circle")
-                    .font(.system(size: 10))
-                    .foregroundStyle(NS.text3)
+                // Version badge: opens the About panel, like the whole row.
+                HStack(spacing: 5) {
+                    Text("v\(AppInfo.version)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(NS.text1)
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(NS.text2)
+                }
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 6).fill(NS.text1.opacity(0.06)))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NS.border, lineWidth: 0.5))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
@@ -767,9 +772,16 @@ struct AboutSheet: View {
                     Text("© 2025–2026 Sevag Bardakjian · GNU GPL v3")
                     Text("Free software with ABSOLUTELY NO WARRANTY. You may redistribute it under the terms of the GPL v3.")
                         .multilineTextAlignment(.center)
-                    if let source = URL(string: "https://github.com/Sevoog/SNAP") {
-                        Link("Source code and license", destination: source)
-                            .foregroundStyle(NS.blue)
+                    HStack(spacing: 6) {
+                        if let source = URL(string: "https://github.com/Sevoog/SNAP") {
+                            Link("Source code and license", destination: source)
+                                .foregroundStyle(NS.blue)
+                        }
+                        Text("·")
+                        if let site = URL(string: "https://sevag.ai") {
+                            Link("sevag.ai", destination: site)
+                                .foregroundStyle(NS.blue)
+                        }
                     }
                 }
                 .font(.system(size: 10))

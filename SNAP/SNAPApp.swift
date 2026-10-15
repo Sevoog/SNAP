@@ -40,6 +40,14 @@ struct SNAPApp: App {
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
             }
+            CommandGroup(replacing: .help) {
+                Button("SNAP Help") {
+                    if let url = URL(string: "https://github.com/Sevoog/SNAP") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .keyboardShortcut("?", modifiers: .command)
+            }
             CommandGroup(after: .help) {
                 Button("Quick Tour…") {
                     OnboardingManager.shared.show()
@@ -105,26 +113,55 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
 
     // MARK: About panel
     func showAbout() {
+        Self.makeAboutAlert().runModal()
+    }
+
+    static func makeAboutAlert() -> NSAlert {
         let alert = NSAlert()
         alert.messageText = "SNAP"
         alert.informativeText = """
         Version \(AppInfo.version)
-        Advanced Network Analysis Platform for macOS
+        Sev's Network Analysis Platform for macOS
 
         Created by Sevag Bardakjian
         Copyright © 2025–2026 Sevag Bardakjian
 
-        SNAP is free software, licensed under the GNU GPL v3, and comes
-        with ABSOLUTELY NO WARRANTY. Source code and license:
-        https://github.com/Sevoog/SNAP
+        SNAP is free software, licensed under the GNU GPL v3, and comes with ABSOLUTELY NO WARRANTY.
 
-        Inspired by the classic macOS Network Analysis Platform.
         Built with SwiftUI for macOS \(Bundle.main.object(forInfoDictionaryKey: "LSMinimumSystemVersion") as? String ?? "14.0")+.
         Supports Intel and Apple Silicon.
         """
         alert.alertStyle = .informational
+        alert.accessoryView = aboutLinks()
         alert.addButton(withTitle: "OK")
-        alert.runModal()
+        return alert
+    }
+
+    /// Clickable links under the About text. NSAlert's informative text is
+    /// plain, so they live in an accessory text view.
+    static func aboutLinks() -> NSView {
+        let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        let links: [(label: String, title: String, url: String)] = [
+            ("Source code and license: ", "github.com/Sevoog/SNAP", "https://github.com/Sevoog/SNAP"),
+            ("Website: ", "sevag.ai", "https://sevag.ai"),
+        ]
+        let text = NSMutableAttributedString()
+        for (i, link) in links.enumerated() {
+            if i > 0 { text.append(NSAttributedString(string: "\n", attributes: [.font: font])) }
+            text.append(NSAttributedString(string: link.label,
+                                           attributes: [.font: font, .foregroundColor: NSColor.labelColor]))
+            if let url = URL(string: link.url) {
+                text.append(NSAttributedString(string: link.title, attributes: [.font: font, .link: url]))
+            }
+        }
+        let view = NSTextView(frame: NSRect(x: 0, y: 0, width: 280, height: 34))
+        view.isEditable = false
+        view.isSelectable = true
+        view.drawsBackground = false
+        view.textContainerInset = .zero
+        view.textContainer?.lineFragmentPadding = 0
+        view.textStorage?.setAttributedString(text)
+        return view
     }
 }
 

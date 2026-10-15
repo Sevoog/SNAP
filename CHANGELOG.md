@@ -24,6 +24,12 @@ The System tile passed the literal "%" as the CPU row's value text, so no number
 
 SNAP has 35 tools plus the Dashboard. Corrected on the Quick Tour's first and third slides and in the README. The Quick Tour's themes slide also now says 12 themes and lists the new E-ink group, instead of "10 ship in v1.5.0".
 
+### Changed: Help menu, About window, and sidebar
+
+- **Help → SNAP Help** (⌘?) opens the project's GitHub page instead of macOS's "Help isn't available for SNAP".
+- **About window** (SNAP → About SNAP): says "Sev's Network Analysis Platform for macOS"; drops the line "Inspired by the classic macOS Network Analysis Platform", which named a product that never existed; no longer breaks the license sentence after "and comes"; and has clickable links to the source code on GitHub and to sevag.ai. The About panel (the version badge at the bottom of the sidebar) also links to sevag.ai.
+- **Sidebar:** the title reads "Sev's Network Analysis Platform" without the version, which the footer already shows. The footer's ping time and version were drawn in each theme's faintest gray and nearly vanished, especially on Daylight. They now use the secondary and primary text colors, slightly larger, with the version in a small badge.
+
 ### Changed: README
 
 - **Privacy & Security rewritten from the code** into a complete inventory, then fact-checked against the code line by line. It now covers what the old version missed or got wrong, including: the Status Board monitors keep running until you quit once the board has been opened (public IP every 10 min, DNS timing every 10 s, `nettop` every 4 s); the Bandwidth monitor's `ipinfo.io` lookup happens on **Start**, not on opening the tab; BGP/ASN lookups go to Google Public DNS (`8.8.8.8`) and on to Team Cymru; Fingerprint resolves through Cloudflare (`1.1.1.1`); Bulk Discovery's TCP sweep, port probes, and SNMP; Apple Maps tiles in GeoIP Lookup and Visual Trace; the Session Report's `api.ipify.org` lookups; ARP Table's Sweep /24 and reverse DNS; Routing Hello's multicast groups; the default User-Agent; and the web cache and cookie files macOS keeps for SNAP (now part of the removal steps).
