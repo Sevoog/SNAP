@@ -47,7 +47,7 @@ The About panel's subtitle, version, detail rows, and fine print used the theme'
 
 - **Privacy & Security rewritten from the code** into a complete inventory, then fact-checked against the code line by line. It now covers what the old version missed or got wrong, including: the Status Board monitors keep running until you quit once the board has been opened (public IP every 10 min, DNS timing every 10 s, `nettop` every 4 s); the Bandwidth monitor's `ipinfo.io` lookup happens on **Start**, not on opening the tab; BGP/ASN lookups go to Google Public DNS (`8.8.8.8`) and on to Team Cymru; Fingerprint resolves through Cloudflare (`1.1.1.1`); Bulk Discovery's TCP sweep, port probes, and SNMP; Apple Maps tiles in GeoIP Lookup and Visual Trace; the Session Report's `api.ipify.org` lookups; ARP Table's Sweep /24 and reverse DNS; Routing Hello's multicast groups; the default User-Agent; and the web cache and cookie files macOS keeps for SNAP (now part of the removal steps).
 - Added an **Install** section: downloading the release zip, opening an app that isn't notarized (System Settings → Privacy & Security → Open Anyway), permissions on first launch, checking the SHA-256, and uninstalling.
-- Removed the Roadmap's "v2.0 Pro" and "Lite" (App Store) editions.
+- Removed the Roadmap section. It listed a "v2.0 Pro" and a "Lite" (App Store) edition, and v1.5 features that never shipped.
 - Added a Buy Me a Coffee link, plus `.github/FUNDING.yml` for GitHub's Sponsor button.
 - Added the v1.5.5 notes.
 

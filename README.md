@@ -420,9 +420,6 @@ A maintenance release focused on robustness and consistency (no new features):
 - **Export consistency** — added the standard TXT/CSV/JSON action bar to 12 more tabs (Ping, Lookup, Whois, Traceroute, Visual Trace, Port Scan, HTTP Probe, SSL/TLS, Fingerprint, Connections, Multi-Host, GeoIP).
 - **Parser test coverage** — +14 tests covering CIDR expansion (Bulk Discovery), ARP-cache parsing (ARP Table), and WiFi band / channel / sub-band helpers — the logic most prone to silent breakage on OS updates.
 
-## Roadmap
-- **v1.5** — HTTP/2+3 inspector, TLS fingerprinting + cert chain extraction on mgmt portals (cert expiry monitoring), DNSSEC validation, SNMPv3 (USM auth+priv), SNMP trap receiver, Sparkle auto-update
-
 ## Contributing
 Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build and test, and the [Contributor License Agreement](CLA.md) you'll be asked to sign on your first pull request. Please report security issues privately; see [SECURITY.md](SECURITY.md).
 
