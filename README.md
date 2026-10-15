@@ -76,6 +76,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 - **Interface Stats** — Sortable Table with filter chips, search, per-row 60s live sparklines, detail pane with bigger chart — *redesigned in v1.2.4*
 - **Connections** — Active socket / connection table
 - **Speed Test** — Cloudflare provider + iPerf3 LAN, delegate-based download accurate at 400+ Mbps, persistent history
+  - **iPerf3 LAN:** upload, download, or both, with 1 to 8 streams for 5 to 60 seconds. Results come with summary cards, a verdict against your Mac's link speed, and a per-second chart next to iperf3's own output.
 - **WiFi Analyzer** — *fully revamped in v1.4.2* Sortable native-`Table` networks list (vendor via OUI, mode, generation, width, security, warning flags) over a **resizable** tabbed graph panel:
   - **Network Details** — full per-network breakdown (radio / signal / security)
   - **Signal Strength** — RSSI-over-time with **auto-scaling Y axis**, signal-quality zone bands, and a glow + area-fill highlight on the selected network, plus a stats strip (current / avg / min-max / jitter σ / SNR / quality / trend)
@@ -215,12 +216,13 @@ SNAP launches these directly, never through a shell:
 - `/usr/sbin/arp` (only reads the table)
 - `/usr/sbin/ipconfig getpacket` (read-only DHCP details, for Network Info and DHCP Leases)
 - `/usr/sbin/netstat` (the Connections tab, which lists every TCP connection on your Mac with its process)
-- `/sbin/ifconfig`
+- `/sbin/ifconfig` (also reads the link speed of the connection that reaches an iPerf3 server)
+- `/sbin/route` (only `route -n get <server>`, to see which connection reaches an iPerf3 server)
 - `/usr/bin/whois`
 - `/usr/bin/nettop` (Top Talkers, see above)
 - `/usr/sbin/tcpdump`
 - `/usr/bin/which` (to find `iperf3` if it isn't in one of the folders below)
-- `iperf3`, if it's installed (`iperf3 -c <host> -p <port> -t 10 --forceflush`). SNAP looks in `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`, and `/usr/bin` (Homebrew on Apple silicon and Intel, MacPorts, the system), then asks `which`.
+- `iperf3`, if it's installed (`iperf3 -c <host> -p <port> -t <seconds> --forceflush`, plus `-P <streams>` for more than one stream and `-R` for a download test). SNAP looks in `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`, and `/usr/bin` (Homebrew on Apple silicon and Intel, MacPorts, the system), then asks `which`.
 
 SNAP never asks for your admin password, and it installs no helpers, daemons, or login items.
 
@@ -238,7 +240,8 @@ SNAP never asks for your admin password, and it installs no helpers, daemons, or
   - theme, Dashboard and Status Board layouts, and favorites (name, host, and date added)
   - the last 10 inputs for Ping, Lookup, Whois, HTTP Probe, GeoIP, BGP/ASN, Traceroute, and Port Scan, shared with their Dashboard cards. *Clear history* in the clock menu next to each input removes them.
   - alert thresholds, and whether alert notifications are on
-  - the last 100 speed test results
+  - the last 100 internet speed test results
+  - the last 100 iPerf3 results: server and port, direction, streams, test length, speed, retransmits, and your Mac's link speed. *Clear* under Recent LAN tests removes them.
   - the last Network Map scan, described below
   - the UniFi controller URL, username, and *Remember* setting. These are saved after every successful connection, even with Remember off.
   - approved UniFi certificate fingerprints

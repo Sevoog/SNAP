@@ -87,3 +87,45 @@ final class SpeedTestHistoryStore: ObservableObject {
         results = decoded
     }
 }
+
+// MARK: - iPerf3 (LAN) history
+
+struct IperfHistoryEntry: Identifiable, Codable, Equatable {
+    var id = UUID()
+    var date: Date
+    var server: String
+    var port: String
+    var direction: IperfDirection   // .upload or .download (a "Both" test saves two)
+    var streams: Int
+    var seconds: Int
+    var receiverBps: Double
+    var retransmits: Int?
+    var linkMbps: Double?
+}
+
+/// Kept apart from the internet results: the Status Board's Speed Test tile
+/// and the internet history graph only show internet tests.
+final class IperfHistoryStore: ObservableObject {
+    static let shared = IperfHistoryStore()
+    private let key: String
+    @Published private(set) var entries: [IperfHistoryEntry] = []
+
+    init(key: String = "snap_iperf_history") {
+        self.key = key
+        if let data = UserDefaults.standard.data(forKey: key),
+           let decoded = try? JSONDecoder().decode([IperfHistoryEntry].self, from: data) {
+            entries = decoded
+        }
+    }
+
+    func add(_ entry: IperfHistoryEntry) {
+        entries.insert(entry, at: 0)   // newest first
+        if entries.count > 100 { entries = Array(entries.prefix(100)) }
+        if let data = try? JSONEncoder().encode(entries) { UserDefaults.standard.set(data, forKey: key) }
+    }
+
+    func clear() {
+        entries = []
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+}

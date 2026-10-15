@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Charts
+import CoreWLAN
 
 // MARK: - Test Size
 
@@ -120,7 +121,15 @@ struct SpeedTestView: View {
     // iPerf3
     @State private var iperfHost = ""
     @State private var iperfPort = "5201"
-    @State private var iperfOutput = ""
+    @State private var iperfMessage = ""          // "not found" / launch errors
+    @State private var iperfDirection: IperfDirection = .upload
+    @State private var iperfStreams = 1
+    @State private var iperfSeconds = 10
+    @State private var iperfRuns: [IperfRunOutput] = []
+    @State private var iperfRunStreams = 1        // options used by the results on screen
+    @State private var iperfRunSeconds = 10
+    @State private var iperfLink: IperfLink?
+    @StateObject private var iperfHistory = IperfHistoryStore.shared
 
     struct LivePoint: Identifiable {
         let id = UUID(); let index: Int; let mbps: Double
@@ -242,24 +251,32 @@ struct SpeedTestView: View {
 
     // MARK: - iPerf3 LAN View
 
+    /// Everything iperf3 printed, unchanged, for Copy / Export.
+    private var iperfAllOutput: String {
+        ([iperfMessage] + iperfRuns.map(\.output)).filter { !$0.isEmpty }.joined(separator: "\n")
+    }
+
     private var iperfView: some View {
         VStack(spacing: 0) {
-            // Config bar
-            HStack(spacing: 10) {
-                Image(systemName: "network").foregroundStyle(.blue)
-                Text("iPerf3 Server:").font(.caption).foregroundStyle(.secondary)
-                TextField("192.168.1.x", text: $iperfHost)
-                    .textFieldStyle(.roundedBorder).frame(width: 140)
-                Text("Port:").font(.caption).foregroundStyle(.secondary)
-                TextField("5201", text: $iperfPort)
-                    .textFieldStyle(.roundedBorder).frame(width: 60)
-                Spacer()
-                Button("Run iPerf3 Test") { runIperf() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(iperfHost.isEmpty || isRunning)
-                if !iperfOutput.isEmpty {
-                    CopyButton { iperfOutput }
-                    ExportButton(toolName: "iPerf3", getText: { iperfOutput })
+            // Config bar: one row when there's room, two when narrow.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    iperfServerFields
+                    Divider().frame(height: 18)
+                    iperfOptions
+                    Spacer(minLength: 8)
+                    iperfActions
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        iperfServerFields
+                        Spacer(minLength: 8)
+                        iperfActions
+                    }
+                    HStack(spacing: 10) {
+                        iperfOptions
+                        Spacer()
+                    }
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
@@ -281,27 +298,78 @@ struct SpeedTestView: View {
             .padding(10)
             .background(Color.blue.opacity(0.06))
 
-            // Output
-            if iperfOutput.isEmpty {
-                Spacer()
-                VStack(spacing: 10) {
-                    Image(systemName: "network").font(.system(size: 36)).foregroundStyle(.tertiary)
-                    Text("Enter the IP of a machine running iperf3 -s")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    Text("Tests local network speed between two machines on the same subnet")
-                        .font(.caption2).foregroundStyle(.tertiary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if iperfRuns.isEmpty && iperfMessage.isEmpty {
+                        VStack(spacing: 10) {
+                            Image(systemName: "network").font(.system(size: 36)).foregroundStyle(.tertiary)
+                            Text("Enter the IP of a machine running iperf3 -s")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                            Text("Tests local network speed between two machines on the same subnet")
+                                .font(.caption2).foregroundStyle(.tertiary)
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 40)
+                    } else {
+                        ForEach(iperfRuns) { run in
+                            IperfRunSection(direction: run.direction,
+                                            result: IperfOutputParser.parse(run.output),
+                                            link: iperfLink,
+                                            streams: iperfRunStreams,
+                                            seconds: iperfRunSeconds,
+                                            live: isRunning && run.id == iperfRuns.last?.id)
+                        }
+                        IperfRawOutputSection(text: iperfAllOutput, showLegend: !iperfRuns.isEmpty)
+                    }
+                    if !iperfHistory.entries.isEmpty {
+                        IperfHistoryList(store: iperfHistory)
+                    }
                 }
-                .frame(maxWidth: .infinity).padding(.vertical, 40)
-                Spacer()
-            } else {
-                ScrollView {
-                    Text(iperfOutput)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                }
+                .padding(16)
             }
+        }
+    }
+
+    @ViewBuilder private var iperfServerFields: some View {
+        Image(systemName: "network").foregroundStyle(.blue)
+        Text("iPerf3 Server:").font(.caption).foregroundStyle(.secondary).fixedSize()
+        TextField("192.168.1.x", text: $iperfHost)
+            .textFieldStyle(.roundedBorder)
+            .frame(minWidth: 110, idealWidth: 140, maxWidth: 160)
+        Text("Port:").font(.caption).foregroundStyle(.secondary).fixedSize()
+        TextField("5201", text: $iperfPort)
+            .textFieldStyle(.roundedBorder).frame(width: 60)
+    }
+
+    private var iperfOptions: some View {
+        HStack(spacing: 8) {
+            Picker(selection: $iperfDirection) {
+                ForEach(IperfDirection.allCases) { d in Text(d.rawValue).tag(d) }
+            } label: { EmptyView() }
+            .pickerStyle(.menu).fixedSize()
+            .help("Direction: \(iperfDirection.detail)")
+
+            Picker(selection: $iperfStreams) {
+                ForEach([1, 2, 4, 8], id: \.self) { n in Text(n == 1 ? "1 stream" : "\(n) streams").tag(n) }
+            } label: { EmptyView() }
+            .pickerStyle(.menu).fixedSize()
+            .help("Parallel connections (iperf3 -P). One connection sometimes can't fill a fast link.")
+
+            Picker(selection: $iperfSeconds) {
+                ForEach([5, 10, 20, 30, 60], id: \.self) { s in Text("\(s) sec").tag(s) }
+            } label: { EmptyView() }
+            .pickerStyle(.menu).fixedSize()
+            .help("Test length in seconds (iperf3 -t). iperf3 reports once per second.")
+        }
+        .disabled(isRunning)
+    }
+
+    @ViewBuilder private var iperfActions: some View {
+        Button("Run iPerf3 Test") { runIperf() }
+            .buttonStyle(.borderedProminent).fixedSize()
+            .disabled(iperfHost.trimmingCharacters(in: .whitespaces).isEmpty || isRunning)
+        if !iperfAllOutput.isEmpty {
+            CopyButton { iperfAllOutput }.fixedSize()
+            ExportButton(toolName: "iPerf3", getText: { iperfAllOutput }).fixedSize()
         }
     }
 
@@ -643,9 +711,17 @@ struct SpeedTestView: View {
     // MARK: - iPerf3 LAN Test
 
     private func runIperf() {
-        guard !iperfHost.isEmpty else { return }
-        iperfOutput = "Running iPerf3 test to \(iperfHost):\(iperfPort)…\n"
-        phase = .download
+        let host = iperfHost.trimmingCharacters(in: .whitespaces)
+        let port = iperfPort.trimmingCharacters(in: .whitespaces)
+        guard !host.isEmpty else { return }
+        let directions: [IperfDirection] = iperfDirection == .both ? [.upload, .download] : [iperfDirection]
+        let streams = iperfStreams, seconds = iperfSeconds
+        iperfRuns = []
+        iperfMessage = ""
+        iperfLink = nil
+        iperfRunStreams = streams
+        iperfRunSeconds = seconds
+        phase = directions[0] == .download ? .download : .upload
 
         testTask = Task {
             // Find iperf3: the usual install folders first, then `which`.
@@ -659,7 +735,7 @@ struct SpeedTestView: View {
 
             guard !binaryPath.isEmpty, !binaryPath.hasPrefix("Error:") else {
                 await MainActor.run {
-                    self.iperfOutput = """
+                    self.iperfMessage = """
                     iperf3 not found.
                     SNAP looked in \(IperfLocator.candidates.map { ($0 as NSString).deletingLastPathComponent }.joined(separator: ", ")), then on its PATH.
 
@@ -669,59 +745,96 @@ struct SpeedTestView: View {
                     Then run the server on the remote machine:
                       iperf3 -s
 
-                    And make sure port \(self.iperfPort) is open in the firewall.
+                    And make sure port \(port) is open in the firewall.
                     """
                     self.phase = .done
                 }
                 return
             }
 
-            // Run iperf3 download test
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: binaryPath)
-            proc.arguments = ["-c", iperfHost, "-p", iperfPort, "-t", "10", "--forceflush"]
-            let pipe = Pipe()
-            proc.standardOutput = pipe
-            proc.standardError = pipe
+            // Which connection reaches the server, and how fast it is,
+            // for the verdict. Read once, before the test loads the link.
+            let link = await IperfLinkProbe.detect(host: host)
+            await MainActor.run { self.iperfLink = link }
 
-            let header = "iperf3 -c \(iperfHost) -p \(iperfPort) -t 10\n"
-                       + String(repeating: "─", count: 50) + "\n"
-            await MainActor.run { self.iperfOutput = header }
-
-            pipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                if data.isEmpty {
-                    // EOF — release the handler so the pipe can deallocate
-                    handle.readabilityHandler = nil
-                    return
+            for direction in directions {
+                guard !Task.isCancelled else { return }
+                var args = ["-c", host, "-p", port, "-t", String(seconds)]
+                if streams > 1 { args += ["-P", String(streams)] }
+                if direction == .download { args.append("-R") }
+                let header = "iperf3 " + args.joined(separator: " ") + "\n"
+                           + String(repeating: "─", count: 50) + "\n"
+                let index: Int = await MainActor.run {
+                    self.phase = direction == .download ? .download : .upload
+                    self.iperfRuns.append(IperfRunOutput(direction: direction, output: header))
+                    return self.iperfRuns.count - 1
                 }
-                if let str = String(data: data, encoding: .utf8) {
-                    DispatchQueue.main.async { self.iperfOutput += str }
-                }
-            }
-
-            // Wait via terminationHandler instead of waitUntilExit — no
-            // blocked cooperative thread, and Stop (Task.cancel) actually
-            // terminates the 10-second run instead of being ignored
-            await withTaskCancellationHandler {
-                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                    proc.terminationHandler = { _ in cont.resume() }
-                    do {
-                        try proc.run()
-                    } catch {
-                        proc.terminationHandler = nil
-                        DispatchQueue.main.async {
-                            self.iperfOutput += "Failed to launch iperf3: \(error.localizedDescription)\n"
-                        }
-                        cont.resume()
-                    }
-                }
-            } onCancel: {
-                if proc.isRunning { proc.terminate() }
+                await runIperfProcess(binaryPath, args: args + ["--forceflush"], runIndex: index)
             }
 
             guard !Task.isCancelled else { return }
-            await MainActor.run { self.phase = .done }
+            await MainActor.run {
+                for run in self.iperfRuns {
+                    let r = IperfOutputParser.parse(run.output)
+                    guard let received = r.receiverBps else { continue }
+                    self.iperfHistory.add(IperfHistoryEntry(
+                        date: Date(), server: host, port: port, direction: run.direction,
+                        streams: streams, seconds: seconds, receiverBps: received,
+                        retransmits: r.retransmits, linkMbps: link?.speedMbps))
+                }
+                self.phase = .done
+            }
+        }
+    }
+
+    /// Runs one iperf3 client, streaming its output into `iperfRuns[runIndex]`.
+    /// Returns once the process has exited AND its output has been fully read,
+    /// so the summary always sees iperf3's final sender/receiver lines.
+    private func runIperfProcess(_ binaryPath: String, args: [String], runIndex: Int) async {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: binaryPath)
+        proc.arguments = args
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = pipe
+
+        // Wait via terminationHandler instead of waitUntilExit: no blocked
+        // cooperative thread, and Stop (Task.cancel) actually terminates the
+        // run instead of being ignored.
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                let gate = IperfDoneGate(cont)   // process exit + end of output
+                pipe.fileHandleForReading.readabilityHandler = { handle in
+                    let data = handle.availableData
+                    if data.isEmpty {
+                        // EOF: release the handler so the pipe can deallocate.
+                        // Signal on main, after the output appends queued there.
+                        handle.readabilityHandler = nil
+                        DispatchQueue.main.async { gate.done() }
+                        return
+                    }
+                    if let str = String(data: data, encoding: .utf8) {
+                        DispatchQueue.main.async {
+                            if runIndex < self.iperfRuns.count { self.iperfRuns[runIndex].output += str }
+                        }
+                    }
+                }
+                proc.terminationHandler = { _ in gate.done() }
+                do {
+                    try proc.run()
+                } catch {
+                    proc.terminationHandler = nil
+                    pipe.fileHandleForReading.readabilityHandler = nil
+                    DispatchQueue.main.async {
+                        if runIndex < self.iperfRuns.count {
+                            self.iperfRuns[runIndex].output += "Failed to launch iperf3: \(error.localizedDescription)\n"
+                        }
+                    }
+                    gate.done(); gate.done()
+                }
+            }
+        } onCancel: {
+            if proc.isRunning { proc.terminate() }
         }
     }
 
@@ -772,5 +885,625 @@ enum IperfLocator {
     static func firstExecutable(in paths: [String],
                                 isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }) -> String? {
         paths.first(where: isExecutable)
+    }
+}
+
+// MARK: - iPerf3 results
+
+/// Which way the data flows, from this Mac's point of view.
+enum IperfDirection: String, CaseIterable, Identifiable, Codable {
+    case upload = "Upload", download = "Download", both = "Both"
+    var id: String { rawValue }
+    var detail: String {
+        switch self {
+        case .upload:   return "This Mac sends to the server (iperf3's default)"
+        case .download: return "The server sends to this Mac (iperf3 -R)"
+        case .both:     return "Upload, then download"
+        }
+    }
+}
+
+/// One iperf3 run, read from its normal text output. SNAP still shows that
+/// output unchanged; this is only for the summary, chart, and verdict.
+struct IperfResult: Equatable {
+    var intervalsBps: [Double] = []   // per interval, all streams combined (bits/s)
+    var senderBps: Double?
+    var receiverBps: Double?          // the real result: what actually arrived
+    var transferBytes: Double?        // receiver's total, in bytes
+    var transferText: String?         // the same total as iperf3 printed it, e.g. "13.9 GBytes"
+    var retransmits: Int?
+    var seconds: Double?
+    var reverse = false
+    var streams = 0
+    var error: String?
+}
+
+enum IperfOutputParser {
+    // [  4]   0.00-1.00   sec  4.74 GBytes  40.6 Gbits/sec    0   4.00 MBytes
+    // [SUM]   0.00-3.00   sec  7.86 GBytes  22.5 Gbits/sec    0             sender
+    private static let line = try! NSRegularExpression(pattern:
+        #"^\[\s*(SUM|\d+)\]\s+([\d.]+)-([\d.]+)\s+sec\s+([\d.]+)\s+([KMGT]?)Bytes\s+([\d.]+)\s+([KMGT]?)bits/sec(.*)$"#)
+
+    static func parse(_ text: String) -> IperfResult {
+        var r = IperfResult()
+        let lines = text.components(separatedBy: .newlines)
+        for l in lines {
+            if l.hasPrefix("iperf3: error") {
+                r.error = l.replacingOccurrences(of: "iperf3: error - ", with: "")
+                           .replacingOccurrences(of: "iperf3: error: ", with: "")
+            }
+            if l.hasPrefix("Reverse mode") { r.reverse = true }
+            if l.contains(" connected to ") { r.streams += 1 }
+        }
+        // With several streams, the [SUM] lines are the combined figures.
+        let multi = r.streams > 1
+        for l in lines {
+            let ns = l as NSString
+            guard let m = line.firstMatch(in: l, range: NSRange(location: 0, length: ns.length)) else { continue }
+            func g(_ i: Int) -> String { ns.substring(with: m.range(at: i)) }
+            guard (g(1) == "SUM") == multi,
+                  let start = Double(g(2)), let end = Double(g(3)), let value = Double(g(6)) else { continue }
+            let bps = value * multiplier(g(7))
+            let rest = g(8).trimmingCharacters(in: .whitespaces)
+            if rest.hasSuffix("sender") {
+                r.senderBps = bps
+                r.retransmits = rest.split(separator: " ").first.flatMap { Int($0) }
+            } else if rest.hasSuffix("receiver") {
+                r.receiverBps = bps
+                r.transferBytes = Double(g(4)).map { $0 * binaryMultiplier(g(5)) }
+                r.transferText = "\(g(4)) \(g(5))Bytes"
+                r.seconds = end - start
+            } else {
+                r.intervalsBps.append(bps)
+            }
+        }
+        return r
+    }
+
+    // iperf3's byte totals are binary: 1 GByte = 1,073,741,824 bytes.
+    private static func binaryMultiplier(_ prefix: String) -> Double {
+        switch prefix {
+        case "K": return 1024
+        case "M": return 1024 * 1024
+        case "G": return 1024 * 1024 * 1024
+        case "T": return 1024 * 1024 * 1024 * 1024
+        default:  return 1
+        }
+    }
+
+    // iperf3's bitrates are decimal (its byte totals are binary).
+    private static func multiplier(_ prefix: String) -> Double {
+        switch prefix {
+        case "K": return 1e3
+        case "M": return 1e6
+        case "G": return 1e9
+        case "T": return 1e12
+        default:  return 1
+        }
+    }
+}
+
+/// The network connection this Mac uses to reach the iPerf3 server.
+struct IperfLink: Equatable {
+    enum Kind: Equatable { case ethernet, wifi, loopback, other }
+    var interface: String
+    var kind: Kind
+    var speedMbps: Double? = nil   // Ethernet: negotiated speed. Wi-Fi: current transmit rate.
+    var media: String? = nil       // e.g. "10Gbase-T"
+}
+
+enum IperfLinkProbe {
+    /// "interface: en0" from `route -n get <host>`.
+    static func interface(fromRoute output: String) -> String? {
+        for l in output.components(separatedBy: .newlines) {
+            let t = l.trimmingCharacters(in: .whitespaces)
+            if t.hasPrefix("interface:") {
+                return String(t.dropFirst("interface:".count)).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
+    }
+
+    /// Negotiated Ethernet speed from `ifconfig`'s media line, e.g.
+    /// "media: autoselect (10Gbase-T <full-duplex>)" -> 10,000 Mbps.
+    static func ethernetSpeed(fromIfconfig output: String) -> (mbps: Double, media: String)? {
+        guard let mediaLine = output.components(separatedBy: .newlines).first(where: { $0.contains("media:") }) else { return nil }
+        let re = try! NSRegularExpression(pattern: #"\((\d+)(G?)base[-A-Za-z0-9]*"#, options: [.caseInsensitive])
+        let ns = mediaLine as NSString
+        guard let m = re.firstMatch(in: mediaLine, range: NSRange(location: 0, length: ns.length)),
+              let n = Double(ns.substring(with: m.range(at: 1))) else { return nil }
+        let gig = ns.substring(with: m.range(at: 2)).lowercased() == "g"
+        return (gig ? n * 1000 : n, String(ns.substring(with: m.range).dropFirst()))
+    }
+
+    static func detect(host: String) async -> IperfLink? {
+        let route = await Shell.run("/sbin/route", args: ["-n", "get", host], timeout: 5)
+        guard let iface = interface(fromRoute: route) else { return nil }
+        if iface.hasPrefix("lo") { return IperfLink(interface: iface, kind: .loopback) }
+        if CWWiFiClient.interfaceNames()?.contains(iface) == true {
+            let rate = CWWiFiClient.shared().interface(withName: iface)?.transmitRate() ?? 0
+            return IperfLink(interface: iface, kind: .wifi, speedMbps: rate > 0 ? rate : nil)
+        }
+        if let e = ethernetSpeed(fromIfconfig: await Shell.run("/sbin/ifconfig", args: [iface], timeout: 5)) {
+            return IperfLink(interface: iface, kind: .ethernet, speedMbps: e.mbps, media: e.media)
+        }
+        return IperfLink(interface: iface, kind: .other)
+    }
+}
+
+/// A plain-language reading of an iPerf3 result.
+struct IperfVerdict: Equatable {
+    var headline: String
+    var detail: String
+    var notes: [String] = []
+}
+
+enum IperfAdvisor {
+    static func rate(_ bps: Double) -> String {
+        if bps >= 1e9 { return String(format: "%.2f Gbps", bps / 1e9) }
+        if bps >= 1e8 { return String(format: "%.0f Mbps", bps / 1e6) }
+        if bps >= 1e6 { return String(format: "%.1f Mbps", bps / 1e6) }
+        return String(format: "%.0f Kbps", bps / 1e3)
+    }
+
+    /// Link speeds: "10 Gbps", "2.5 Gbps", "1 Gbps", "866 Mbps".
+    static func linkRate(_ mbps: Double) -> String {
+        if mbps >= 1000, mbps.truncatingRemainder(dividingBy: 100) == 0 {
+            let g = mbps / 1000
+            return g == g.rounded() ? "\(Int(g)) Gbps" : String(format: "%.1f Gbps", g)
+        }
+        return String(format: "%.0f Mbps", mbps)
+    }
+
+    /// Decimal units, like the rest of SNAP: 1 GB = 1,000,000,000 bytes.
+    static func bytes(_ n: Double) -> String {
+        if n >= 1e12 { return String(format: "%.2f TB", n / 1e12) }
+        if n >= 1e10 { return String(format: "%.1f GB", n / 1e9) }
+        if n >= 1e9  { return String(format: "%.2f GB", n / 1e9) }
+        if n >= 1e6  { return String(format: "%.0f MB", n / 1e6) }
+        return String(format: "%.0f KB", n / 1e3)
+    }
+
+    private static func pct(_ x: Double) -> String { String(format: "%.0f%%", x * 100) }
+
+    struct Steadiness: Equatable { var plusMinusPct: Double; var minBps: Double; var maxBps: Double }
+
+    static func steadiness(_ intervals: [Double]) -> Steadiness? {
+        guard intervals.count >= 2, let mn = intervals.min(), let mx = intervals.max() else { return nil }
+        let mean = intervals.reduce(0, +) / Double(intervals.count)
+        guard mean > 0 else { return nil }
+        return Steadiness(plusMinusPct: (mx - mn) / 2 / mean * 100, minBps: mn, maxBps: mx)
+    }
+
+    /// Common Ethernet speeds a slower device in the path would cap a test at.
+    private static let ceilingsMbps: [Double] = [100, 1000, 2500, 5000, 10000]
+
+    static func verdict(for r: IperfResult, link: IperfLink?, streams: Int) -> IperfVerdict? {
+        guard r.error == nil, let got = r.receiverBps else { return nil }
+        let gotMbps = got / 1e6
+        var v: IperfVerdict
+        if let link, link.kind == .loopback {
+            v = IperfVerdict(headline: "This tested your Mac against itself",
+                             detail: "The server address leads back to this Mac, so the result measures the computer, not the network. Use another machine's address to test the network.")
+        } else if let link, link.kind == .ethernet, let L = link.speedMbps, L > 0 {
+            let ratio = gotMbps / L
+            let media = link.media.map { ", \($0)" } ?? ""
+            if ratio > 1.05 {
+                v = IperfVerdict(headline: "Faster than this Mac's link",
+                                 detail: "\(rate(got)) is more than this Mac's \(linkRate(L)) link (\(link.interface)\(media)) can carry, so the test traffic probably didn't cross that link. This happens when the server runs on this Mac itself, for example in a virtual machine.")
+            } else if ratio >= 0.85 {
+                v = IperfVerdict(headline: "About as fast as a \(linkRate(L)) link gets",
+                                 detail: "This Mac's link is \(linkRate(L)) (\(link.interface)\(media)). \(rate(got)) is \(pct(ratio)) of that, which is normal once TCP and Ethernet overhead are counted. The link itself is the limit.")
+            } else if let cap = ceilingsMbps.first(where: { $0 < L * 0.95 && gotMbps >= $0 * 0.85 && gotMbps <= $0 * 1.02 }) {
+                v = IperfVerdict(headline: "Capped near \(linkRate(cap))",
+                                 detail: "This Mac's link is \(linkRate(L)), but the result stops just under \(linkRate(cap)). Something in the path most likely runs at \(linkRate(cap)): the other machine's network port, a switch, a cable, or an adapter.")
+            } else {
+                v = IperfVerdict(headline: "Below what this Mac's link can do",
+                                 detail: "\(rate(got)) is \(pct(ratio)) of this Mac's \(linkRate(L)) link. Common causes are the other machine's link or CPU, other traffic on the network, or Wi-Fi somewhere in the path."
+                                    + (streams == 1 ? " One connection sometimes can't fill a fast link, so try 4 streams." : ""))
+            }
+        } else if let link, link.kind == .wifi {
+            if let L = link.speedMbps, L > 0 {
+                let ratio = gotMbps / L
+                v = ratio > 1.05
+                    ? IperfVerdict(headline: "\(rate(got)) over Wi-Fi",
+                                   detail: "That's faster than the \(linkRate(L)) link rate Wi-Fi reported just before the test (\(link.interface)). Wi-Fi changes its rate from moment to moment and usually speeds up once traffic starts, so that starting rate isn't a firm limit.")
+                    : ratio >= 0.45
+                    ? IperfVerdict(headline: "Typical for this Wi-Fi connection",
+                                   detail: "Wi-Fi reports a link rate of \(linkRate(L)) (\(link.interface)). Real throughput is usually about half to two-thirds of that, and \(rate(got)) is \(pct(ratio)). For more speed, move closer to the access point or use Ethernet.")
+                    : IperfVerdict(headline: "Slower than this Wi-Fi connection usually allows",
+                                   detail: "Wi-Fi reports a link rate of \(linkRate(L)) (\(link.interface)), and \(rate(got)) is only \(pct(ratio)) of it. Distance, walls, interference, or other devices on the same Wi-Fi are the usual causes.")
+            } else {
+                v = IperfVerdict(headline: "\(rate(got)) over Wi-Fi",
+                                 detail: "This Mac reaches the server over Wi-Fi (\(link.interface)), but macOS didn't report a link rate to compare against.")
+            }
+        } else {
+            let via = link.map { " (\($0.interface))" } ?? ""
+            v = IperfVerdict(headline: "\(rate(got)) measured",
+                             detail: "SNAP couldn't read the speed of the connection that reaches this server\(via), so there's nothing to compare the result against.")
+        }
+        if let n = r.retransmits, n > 0 {
+            v.notes.append("\(n) retransmit\(n == 1 ? "" : "s"): some packets were lost or delayed and sent again. A few are normal on busy or Wi-Fi networks; many point to a bad cable, a struggling switch, or congestion.")
+        }
+        if let s = steadiness(r.intervalsBps), s.plusMinusPct > 15 {
+            v.notes.append("Speed swung between \(rate(s.minBps)) and \(rate(s.maxBps)) during the test, so the connection wasn't steady. Other traffic or Wi-Fi conditions usually cause this.")
+        }
+        return v
+    }
+}
+
+// MARK: - iPerf3 views
+
+/// One iperf3 client run (a "Both" test makes two) and its raw output.
+struct IperfRunOutput: Identifiable {
+    let id = UUID()
+    let direction: IperfDirection
+    var output: String
+}
+
+/// Resumes the run once iperf3 has exited AND its output has reached EOF,
+/// in whichever order those happen.
+final class IperfDoneGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var remaining = 2
+    private var cont: CheckedContinuation<Void, Never>?
+    init(_ cont: CheckedContinuation<Void, Never>) { self.cont = cont }
+    func done() {
+        lock.lock()
+        remaining -= 1
+        let c = remaining == 0 ? cont : nil
+        if remaining == 0 { cont = nil }
+        lock.unlock()
+        c?.resume()
+    }
+}
+
+/// Summary, verdict, and per-second chart for one run.
+struct IperfRunSection: View {
+    let direction: IperfDirection
+    let result: IperfResult
+    let link: IperfLink?
+    let streams: Int
+    let seconds: Int
+    let live: Bool        // iperf3 is still running this one
+
+    private var finished: Bool { result.receiverBps != nil }
+    private var color: Color { direction == .download ? .blue : .orange }
+
+    private var title: String {
+        direction == .download ? "Download: server \u{2192} this Mac" : "Upload: this Mac \u{2192} server"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: direction == .download ? "arrow.down.circle" : "arrow.up.circle")
+                    .foregroundStyle(color)
+                Text(title).font(.headline)
+                if streams > 1 {
+                    Text("\(streams) streams").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if live {
+                    Text(result.intervalsBps.isEmpty ? "Connecting\u{2026}" : "Second \(min(result.intervalsBps.count, seconds)) of \(seconds)")
+                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                } else if !finished && result.error == nil {
+                    Text("Stopped before iperf3 finished").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if live {
+                ProgressView(value: Double(min(result.intervalsBps.count, seconds)), total: Double(max(seconds, 1)))
+                    .tint(color)
+            }
+
+            if let error = result.error {
+                IperfNoteCard(icon: "exclamationmark.triangle", tint: .red,
+                              headline: "iperf3 couldn't run the test",
+                              detail: error.prefix(1).uppercased() + error.dropFirst(),
+                              notes: ["Check that iperf3 -s is running on the server, that the address and port are right, and that the server's firewall allows the port."])
+            }
+
+            if finished || !result.intervalsBps.isEmpty {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
+                    throughputCard
+                    dataCard
+                    retransmitCard
+                    steadinessCard
+                }
+            }
+
+            if !live, let v = IperfAdvisor.verdict(for: result, link: link, streams: streams) {
+                IperfNoteCard(icon: "lightbulb", tint: .blue, headline: v.headline, detail: v.detail, notes: v.notes)
+            }
+
+            if !result.intervalsBps.isEmpty {
+                IperfIntervalChart(intervalsBps: result.intervalsBps, seconds: seconds,
+                                   link: link, color: color)
+            }
+        }
+    }
+
+    // MARK: Cards
+
+    private var throughputCard: some View {
+        let value: Double?
+        let caption: String
+        if let r = result.receiverBps {
+            value = r; caption = "average, as received"
+        } else if live {
+            value = result.intervalsBps.last; caption = "live, this second"
+        } else {
+            value = result.intervalsBps.isEmpty ? nil : result.intervalsBps.reduce(0, +) / Double(result.intervalsBps.count)
+            caption = "average so far"
+        }
+        return IperfStatCard(title: "Throughput", value: value.map(IperfAdvisor.rate) ?? "\u{2026}",
+                             caption: caption, icon: "speedometer")
+    }
+
+    private var dataCard: some View {
+        IperfStatCard(title: "Data moved",
+                      value: result.transferBytes.map(IperfAdvisor.bytes) ?? "\u{2026}",
+                      caption: result.transferText.map { "iperf3 shows \($0)" } ?? "shown when the test ends",
+                      icon: "shippingbox")
+    }
+
+    private var retransmitCard: some View {
+        let value: String
+        let caption: String
+        switch result.retransmits {
+        case .some(0): value = "0"; caption = "nothing had to be resent"
+        case .some(let n): value = n.formatted(); caption = "packets sent again"
+        case .none: value = finished ? "n/a" : "\u{2026}"
+                    caption = finished ? "not reported" : "shown when the test ends"
+        }
+        return IperfStatCard(title: "Retransmits", value: value, caption: caption, icon: "arrow.triangle.2.circlepath")
+    }
+
+    private var steadinessCard: some View {
+        let s = IperfAdvisor.steadiness(result.intervalsBps)
+        return IperfStatCard(title: "Steadiness",
+                             value: s.map { String(format: $0.plusMinusPct < 10 ? "\u{00B1}%.1f%%" : "\u{00B1}%.0f%%", $0.plusMinusPct) } ?? "\u{2026}",
+                             caption: s.map { "\(IperfAdvisor.rate($0.minBps)) to \(IperfAdvisor.rate($0.maxBps))" } ?? "needs two seconds",
+                             icon: "waveform.path.ecg")
+    }
+}
+
+private struct IperfStatCard: View {
+    let title: String
+    let value: String
+    let caption: String
+    let icon: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: icon)
+                .font(.caption).foregroundStyle(NS.text3)
+            Text(value)
+                .font(.title3.bold().monospacedDigit()).foregroundStyle(NS.text1)
+                .lineLimit(1).minimumScaleFactor(0.7)
+            Text(caption)
+                .font(.caption2).foregroundStyle(NS.text3)
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(NS.bg3)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+/// The verdict, or an error, in plain language.
+private struct IperfNoteCard: View {
+    let icon: String
+    let tint: Color
+    let headline: String
+    let detail: String
+    let notes: [String]
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon).foregroundStyle(tint).font(.title3)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(headline).font(.subheadline.bold()).foregroundStyle(NS.text1)
+                Text(detail).font(.callout).foregroundStyle(NS.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(notes, id: \.self) { note in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\u{2022}").foregroundStyle(NS.text3)
+                        Text(note).font(.callout).foregroundStyle(NS.text2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(tint.opacity(0.07))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(tint.opacity(0.25)))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+/// One bar per second, with this Mac's link speed as a dashed line.
+private struct IperfIntervalChart: View {
+    let intervalsBps: [Double]
+    let seconds: Int
+    let link: IperfLink?
+    let color: Color
+
+    private struct Bar: Identifiable { let id: Int; let label: String; let value: Double }
+
+    private var linkBps: Double? {
+        guard let link, link.kind != .loopback, let m = link.speedMbps, m > 0 else { return nil }
+        return m * 1e6
+    }
+    /// The link line, when it fits the bars' scale (at most twice the fastest second).
+    private var ruleBps: Double? {
+        guard let l = linkBps, l <= 2 * (intervalsBps.max() ?? 0) else { return nil }
+        return l
+    }
+    private var linkName: String {
+        guard let link else { return "" }
+        return "\(link.kind == .wifi ? "Wi-Fi link rate" : "Link") \(IperfAdvisor.linkRate(link.speedMbps ?? 0))"
+    }
+    private var useGbps: Bool { max(intervalsBps.max() ?? 0, ruleBps ?? 0) >= 1e9 }
+    private var scale: Double { useGbps ? 1e9 : 1e6 }
+    private var unit: String { useGbps ? "Gbps" : "Mbps" }
+    private var slots: Int { max(seconds, intervalsBps.count) }
+    private var labels: [String] { (1...max(slots, 1)).map(String.init) }
+    private var bars: [Bar] {
+        intervalsBps.enumerated().map { Bar(id: $0.offset, label: String($0.offset + 1), value: $0.element / scale) }
+    }
+    /// Keep the axis readable on a 60-second test.
+    private var axisLabels: [String] {
+        let step = slots <= 12 ? 1 : slots <= 30 ? 5 : 10
+        return labels.filter { (Int($0) ?? 0) == 1 || (Int($0) ?? 0) % step == 0 }
+    }
+
+    var body: some View {
+        GroupBox {
+            Chart {
+                ForEach(bars) { b in
+                    BarMark(x: .value("Second", b.label), y: .value(unit, b.value))
+                        .foregroundStyle(color.opacity(0.8))
+                }
+                if let l = ruleBps {
+                    RuleMark(y: .value("Link", l / scale))
+                        .foregroundStyle(NS.text3)
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                        .annotation(position: .top, alignment: .leading) {
+                            Text(linkName).font(.caption2).foregroundStyle(NS.text3)
+                        }
+                }
+            }
+            .chartXScale(domain: labels)
+            .chartXAxis { AxisMarks(values: axisLabels) { _ in AxisValueLabel() } }
+            .chartYAxisLabel(unit)
+            .chartYAxis { AxisMarks { AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4])); AxisValueLabel() } }
+            .frame(height: 140).padding(.top, 4)
+        } label: {
+            HStack {
+                Label("Each second", systemImage: "chart.bar").font(.caption.bold())
+                Spacer()
+                if linkBps != nil && ruleBps == nil {
+                    Text("\(linkName), above this scale").font(.caption2).foregroundStyle(NS.text3)
+                }
+            }
+        }
+    }
+}
+
+/// iperf3's output exactly as it printed it, with a key to its columns.
+struct IperfRawOutputSection: View {
+    let text: String
+    var showLegend = true   // off for SNAP's own messages, e.g. "iperf3 not found"
+
+    var body: some View {
+        if showLegend { withLegend } else { raw }
+    }
+
+    private var withLegend: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 12) {
+                raw.frame(minWidth: 0, idealWidth: 540, maxWidth: .infinity)
+                IperfLegend().frame(width: 260)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                raw
+                IperfLegend()
+            }
+        }
+    }
+
+    private var raw: some View {
+        GroupBox {
+            ScrollView(.horizontal) {
+                Text(text)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(NS.text1)
+                    .textSelection(.enabled)
+                    .fixedSize()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(6)
+            }
+        } label: {
+            Label("iperf3 output", systemImage: "terminal").font(.caption.bold())
+        }
+    }
+}
+
+private struct IperfLegend: View {
+    private let rows: [(String, String)] = [
+        ("Interval", "The time slice, in seconds. iperf3 prints one line per second."),
+        ("Transfer", "Data moved in that slice. iperf3 counts in binary units (1 GByte = 1,073,741,824 bytes), so SNAP's Data moved card, in decimal GB, reads a little higher."),
+        ("Bitrate", "Speed during that slice. 1 Gbits/sec = 1,000 Mbps."),
+        ("Retr", "Retransmits: packets lost or delayed and sent again. 0 is ideal. In a download test the server sends, so they appear only on its sender line."),
+        ("Cwnd", "Congestion window: how much data TCP keeps in flight. Bigger usually means a faster, cleaner path."),
+        ("sender / receiver", "The totals at the end. The receiver line is what actually arrived, so it's the result to quote."),
+        ("[SUM]", "With more than one stream, all streams combined."),
+        ("[  5]", "Which connection a line belongs to."),
+    ]
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(rows, id: \.0) { row in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.0).font(.caption.bold().monospaced()).foregroundStyle(NS.text1)
+                        Text(row.1).font(.caption).foregroundStyle(NS.text2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(4)
+        } label: {
+            Label("How to read this", systemImage: "questionmark.circle").font(.caption.bold())
+        }
+    }
+}
+
+/// Past LAN tests, newest first. Kept apart from internet tests.
+struct IperfHistoryList: View {
+    @ObservedObject var store: IperfHistoryStore
+
+    var body: some View {
+        GroupBox {
+            VStack(spacing: 0) {
+                ForEach(store.entries.prefix(20)) { e in
+                    HStack(spacing: 10) {
+                        Image(systemName: e.direction == .download ? "arrow.down" : "arrow.up")
+                            .foregroundStyle(e.direction == .download ? Color.blue : Color.orange)
+                            .frame(width: 14)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(e.date.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption2).foregroundStyle(NS.text3)
+                            Text("\(e.server):\(e.port)").font(.caption).foregroundStyle(NS.text1)
+                        }
+                        Text("\(e.direction.rawValue) \u{00B7} \(e.streams == 1 ? "1 stream" : "\(e.streams) streams") \u{00B7} \(e.seconds) sec")
+                            .font(.caption2).foregroundStyle(NS.text3).lineLimit(1)
+                        Spacer(minLength: 8)
+                        if let link = e.linkMbps {
+                            Text("link \(IperfAdvisor.linkRate(link))")
+                                .font(.caption2).foregroundStyle(NS.text3).lineLimit(1)
+                        }
+                        if let r = e.retransmits {
+                            Text("\(r) retr").font(.caption2.monospacedDigit()).foregroundStyle(NS.text3)
+                        }
+                        Text(IperfAdvisor.rate(e.receiverBps))
+                            .font(.caption.bold().monospacedDigit()).foregroundStyle(NS.text1)
+                    }
+                    .padding(.vertical, 6)
+                    if e.id != store.entries.prefix(20).last?.id { Divider() }
+                }
+            }
+        } label: {
+            HStack {
+                Label("Recent LAN tests", systemImage: "clock.arrow.circlepath").font(.caption.bold())
+                Spacer()
+                Button("Clear") { store.clear() }
+                    .font(.caption).buttonStyle(.plain).foregroundStyle(.secondary)
+            }
+        }
     }
 }

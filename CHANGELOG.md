@@ -5,6 +5,21 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ## [Unreleased]
 
+### New: iPerf3 results, explained
+
+Speed Test's iPerf3 mode still shows iperf3's output exactly as iperf3 prints it, and now adds:
+
+- **Summary cards:** throughput (what actually arrived), data moved, retransmits, and steadiness (how much the speed swung from second to second). Data moved is in decimal GB like the rest of SNAP; iperf3 counts in binary GBytes, so the card also shows iperf3's own figure.
+- **A plain-language verdict** that compares the result with your Mac's link: which connection reaches the server (Ethernet or Wi-Fi), its speed, and whether something slower in the path holds the result back, for example "Capped near 1 Gbps" on a Mac with a 10 Gbps port. It also calls out retransmits and an unsteady connection.
+- **A per-second chart**, with your Mac's link speed as a dashed line when it's on the same scale.
+- **How to read this:** a key to iperf3's columns (Interval, Transfer, Bitrate, Retr, Cwnd, sender and receiver, `[SUM]`).
+- **Direction:** Upload (this Mac sends), Download (the server sends, `-R`), or Both, one after the other.
+- **Streams:** 1, 2, 4, or 8 parallel connections (`-P`). One connection sometimes can't fill a fast link.
+- **Duration:** 5, 10, 20, 30, or 60 seconds (`-t`). It was always 10.
+- **Recent LAN tests:** the last 100 iPerf3 results are saved. They're kept apart from internet speed tests, so they don't show up in that history or on the Status Board's Speed Test tile.
+
+To find the connection and its speed, SNAP runs `route -n get <server>`, then reads the link speed from `ifconfig` for Ethernet or the current transmit rate from macOS for Wi-Fi.
+
 ### Fixed: Speed Test's iPerf3 mode couldn't find iperf3
 
 SNAP looked for `iperf3` only with `which`, using the app's own PATH. An app opened from Finder gets just `/usr/bin:/bin:/usr/sbin:/sbin`, so it missed Homebrew installs (`/opt/homebrew/bin` on Apple silicon, `/usr/local/bin` on Intel) and reported "iperf3 not found" even when Terminal could run it. It now checks those folders, MacPorts (`/opt/local/bin`), and `/usr/bin` first, then `which`; the not-found message lists where it looked. Found on Intel Macs.
