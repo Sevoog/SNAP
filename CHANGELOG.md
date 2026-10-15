@@ -24,6 +24,19 @@ The System tile passed the literal "%" as the CPU row's value text, so no number
 
 SNAP has 35 tools plus the Dashboard. Corrected on the Quick Tour's first and third slides and in the README. The Quick Tour's themes slide also now says 12 themes and lists the new E-ink group, instead of "10 ship in v1.5.0".
 
+### Fixed: narrow windows cut off the sidebar and squeezed toolbars
+
+The window can be as narrow as 900 pt, which leaves 650 pt for the tool next to the icon rail and sidebar. Five tools needed more than that (Port Scan 870 pt, SNMP 800, WiFi Analyzer 682, Ping 678, UniFi 669). A tool that's too wide pushed the whole window's layout sideways, so the sidebar lost its left edge. Others fit only by squeezing labels until they broke one or two letters per line ("Ope / n only", "Ra / ng / e", "Eth / ern / et"), and some side panels were cut off.
+
+- **The tool area now clips its own content** ([ContentView.swift](SNAP/ContentView.swift)), so no tool can push the icon rail and sidebar off the window again.
+- **Toolbars wrap instead of overflowing.** Port Scan, Ping, SNMP, UniFi, WiFi Analyzer, Interface Stats, Network Map, Connections, MTU Discovery, Packet Capture, Lookup, Bulk Discovery, and Fingerprint keep their one-row toolbar when there's room and switch to two rows when the window is narrow (`ViewThatFits`). Labels, toggles, filter chips, and buttons no longer wrap mid-word or truncate (Lookup's server picker showed "1.", Packet Capture's button "Ca…").
+- **Side panels fit.** Minimum widths that added up to more than 650 pt are lowered: Network Map's device grid (520 pt, now down to 340 when narrow), Packet Capture's packet table (550 to 420), and DNS Benchmark's results (520 to 400). Their tables scroll sideways when narrow. At normal window sizes the splits are the same as before.
+- Checked by rendering all 36 tools at the narrowest and the default window size: every tool fits at 650 pt, and the wide layouts are unchanged.
+
+### Changed: About panel text is easier to read
+
+The About panel's subtitle, version, detail rows, and fine print used the theme's faintest grays. They now use its secondary and primary text colors, like the sidebar footer.
+
 ### Changed: Help menu, About window, and sidebar
 
 - **Help → SNAP Help** (⌘?) opens the project's GitHub page instead of macOS's "Help isn't available for SNAP".

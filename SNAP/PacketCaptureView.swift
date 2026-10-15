@@ -58,38 +58,27 @@ struct PacketCaptureView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Toolbar
-            HStack(spacing: 12) {
-                Image(systemName: "doc.text.magnifyingglass").foregroundStyle(.blue)
-
-                Picker("Interface", selection: $interface) {
-                    ForEach(interfaces, id: \.self) { i in Text(i).tag(i) }
+            // Toolbar: one row when it fits; otherwise the capture buttons wrap to a second row
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    Image(systemName: "doc.text.magnifyingglass").foregroundStyle(.blue)
+                    interfacePicker
+                    bpfField.frame(width: 220)
+                    maxField
+                    Spacer()
+                    captureControls
                 }
-                .frame(width: 130)
-                .fixedSize()
-
-                TextField("BPF Filter (e.g. tcp port 80)", text: $filter)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 220)
-
-                Text("Max:").font(.caption).foregroundStyle(.secondary)
-                TextField("", text: $maxPackets).textFieldStyle(.roundedBorder).frame(width: 50)
-
-                Spacer()
-
-                if isCapturing {
-                    Button("Stop") { stopCapture() }
-                        .buttonStyle(.bordered).tint(.red)
-                    Circle().fill(.red).frame(width: 8)
-                        .opacity(Double(Int(Date().timeIntervalSince1970) % 2))
-                        .animation(.easeInOut(duration: 0.5).repeatForever(), value: isCapturing)
-                    Text("\(packetCount) packets").font(.caption).foregroundStyle(.red)
-                } else {
-                    Button { packets = [] } label: { Label("Clear", systemImage: "trash") }
-                        .buttonStyle(.bordered)
-                    Button("Capture") { startCapture() }
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.return)
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "doc.text.magnifyingglass").foregroundStyle(.blue)
+                        interfacePicker
+                        bpfField.frame(maxWidth: .infinity)
+                        maxField
+                    }
+                    HStack(spacing: 12) {
+                        Spacer()
+                        captureControls
+                    }
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
@@ -99,11 +88,11 @@ struct PacketCaptureView: View {
             if showPrivilegeWarning {
                 HStack {
                     Image(systemName: "lock.shield").foregroundStyle(.orange)
-                    Text("Packet capture requires running SNAP with elevated privileges.")
-                        .font(.caption)
-                    Text("Run: sudo /path/to/SNAP.app/Contents/MacOS/SNAP")
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
+                    // Side by side when there is room, stacked otherwise
+                    ViewThatFits(in: .horizontal) {
+                        HStack { privilegeMessage }
+                        VStack(alignment: .leading, spacing: 2) { privilegeMessage }
+                    }
                     Spacer()
                     Button("Dismiss") { showPrivilegeWarning = false }.font(.caption)
                 }
@@ -147,7 +136,7 @@ struct PacketCaptureView: View {
                         }
                     }
                 }
-                .frame(minWidth: 550)
+                .frame(minWidth: 420)  // with the detail pane, under the narrowest tool area (650 pt)
 
                 // Packet detail
                 VStack(alignment: .leading, spacing: 0) {
@@ -174,6 +163,56 @@ struct PacketCaptureView: View {
         // Runs when the window closes (tabs now stay alive across switches) — without this, tcpdump keeps
         // sniffing in the background with no UI handle left to stop it
         .onDisappear { stopCapture() }
+    }
+
+    private var interfacePicker: some View {
+        Picker("Interface", selection: $interface) {
+            ForEach(interfaces, id: \.self) { i in Text(i).tag(i) }
+        }
+        .frame(width: 130)
+        .fixedSize()
+    }
+
+    private var bpfField: some View {
+        TextField("BPF Filter (e.g. tcp port 80)", text: $filter)
+            .textFieldStyle(.roundedBorder)
+    }
+
+    @ViewBuilder
+    private var maxField: some View {
+        Text("Max:").font(.caption).foregroundStyle(.secondary).fixedSize()
+        TextField("", text: $maxPackets).textFieldStyle(.roundedBorder).frame(width: 50)
+    }
+
+    @ViewBuilder
+    private var captureControls: some View {
+        if isCapturing {
+            Button("Stop") { stopCapture() }
+                .buttonStyle(.bordered).tint(.red)
+                .fixedSize()
+            Circle().fill(.red).frame(width: 8)
+                .opacity(Double(Int(Date().timeIntervalSince1970) % 2))
+                .animation(.easeInOut(duration: 0.5).repeatForever(), value: isCapturing)
+            Text("\(packetCount) packets").font(.caption).foregroundStyle(.red)
+                .fixedSize()
+        } else {
+            Button { packets = [] } label: { Label("Clear", systemImage: "trash") }
+                .buttonStyle(.bordered)
+                .fixedSize()
+            Button("Capture") { startCapture() }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return)
+                .fixedSize()
+        }
+    }
+
+    @ViewBuilder
+    private var privilegeMessage: some View {
+        Text("Packet capture requires running SNAP with elevated privileges.")
+            .font(.caption)
+        Text("Run: sudo /path/to/SNAP.app/Contents/MacOS/SNAP")
+            .font(.caption.monospaced())
+            .textSelection(.enabled)
     }
 
     private func startCapture() {

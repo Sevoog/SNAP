@@ -47,50 +47,32 @@ struct PingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Controls bar
-            HStack(spacing: 12) {
-                Image(systemName: "network")
-                    .foregroundStyle(.blue)
-                TextField("Hostname or IP", text: $host)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 250)
-                HistoryMenuButton(key: .ping) { host = $0 }
+            // Controls bar: one row when the window is wide; narrow windows put the
+            // host and Ping on the first row and count/interval/size on a second row
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    hostIcon
+                    hostField.frame(width: 250)
+                    HistoryMenuButton(key: .ping) { host = $0 }
 
-                Divider().frame(height: 20)
+                    Divider().frame(height: 20)
 
-                Label("Count:", systemImage: "number")
-                    .foregroundStyle(.secondary).font(.caption)
-                TextField("", text: $count)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 50)
+                    pingOptions
 
-                Label("Interval:", systemImage: "clock")
-                    .foregroundStyle(.secondary).font(.caption)
-                TextField("", text: $interval)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 50)
+                    Spacer()
 
-                Label("Size:", systemImage: "doc")
-                    .foregroundStyle(.secondary).font(.caption)
-                TextField("", text: $packetSize)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 50)
-
-                Spacer()
-
-                if !results.isEmpty {
-                    ToolActionBar("Ping", text: { exportText() }, csv: { exportCSV() })
+                    pingActions
                 }
-                if isRunning {
-                    Button("Stop") { stopPing() }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
-                    ProgressView().controlSize(.small)
-                } else {
-                    Button("Ping") { startPing() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(host.isEmpty)
-                        .keyboardShortcut(.return)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 12) {
+                        hostIcon
+                        hostField.frame(minWidth: 140, maxWidth: .infinity)
+                        HistoryMenuButton(key: .ping) { host = $0 }
+                        pingActions
+                    }
+                    HStack(spacing: 12) {
+                        pingOptions
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -120,17 +102,20 @@ struct PingView: View {
                         }
                     }
 
-                    // Stats footer
+                    // Stats footer: one row when the pane is wide, two rows of three when narrow
                     if !results.isEmpty {
                         Divider()
-                        HStack(spacing: 20) {
-                            statBadge("Sent", "\(results.count)")
-                            statBadge("Recv", "\(successResults.count)", color: .green)
-                            statBadge("Loss", String(format: "%.1f%%", lossPercent), color: lossPercent > 0 ? .red : .green)
-                            statBadge("Min", String(format: "%.2fms", minMs))
-                            statBadge("Avg", String(format: "%.2fms", avgMs))
-                            statBadge("Max", String(format: "%.2fms", maxMs))
-                            Spacer()
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 20) {
+                                countBadges
+                                latencyBadges
+                                Spacer()
+                            }
+                            Grid(horizontalSpacing: 20, verticalSpacing: 6) {
+                                GridRow { countBadges }
+                                GridRow { latencyBadges }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
@@ -173,6 +158,63 @@ struct PingView: View {
         // keeps running with no UI handle left to stop it
         .onDisappear { stopPing() }
         .consumeHandoff(for: .ping) { host = $0 }
+    }
+
+    // MARK: - Controls bar pieces (shared by the one-row and two-row layouts)
+
+    private var hostIcon: some View {
+        Image(systemName: "network")
+            .foregroundStyle(.blue)
+    }
+
+    private var hostField: some View {
+        TextField("Hostname or IP", text: $host)
+            .textFieldStyle(.roundedBorder)
+    }
+
+    @ViewBuilder
+    private var pingOptions: some View {
+        Label("Count:", systemImage: "number")
+            .foregroundStyle(.secondary).font(.caption)
+            .fixedSize()
+        TextField("", text: $count)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 50)
+
+        Label("Interval:", systemImage: "clock")
+            .foregroundStyle(.secondary).font(.caption)
+            .fixedSize()
+        TextField("", text: $interval)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 50)
+
+        Label("Size:", systemImage: "doc")
+            .foregroundStyle(.secondary).font(.caption)
+            .fixedSize()
+        TextField("", text: $packetSize)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 50)
+    }
+
+    @ViewBuilder
+    private var pingActions: some View {
+        if !results.isEmpty {
+            ToolActionBar("Ping", text: { exportText() }, csv: { exportCSV() })
+                .fixedSize()
+        }
+        if isRunning {
+            Button("Stop") { stopPing() }
+                .buttonStyle(.bordered)
+                .tint(.red)
+                .fixedSize()
+            ProgressView().controlSize(.small)
+        } else {
+            Button("Ping") { startPing() }
+                .buttonStyle(.borderedProminent)
+                .disabled(host.isEmpty)
+                .keyboardShortcut(.return)
+                .fixedSize()
+        }
     }
 
     private func startPing() {
@@ -238,10 +280,25 @@ struct PingView: View {
         return s
     }
 
+    @ViewBuilder
+    private var countBadges: some View {
+        statBadge("Sent", "\(results.count)")
+        statBadge("Recv", "\(successResults.count)", color: .green)
+        statBadge("Loss", String(format: "%.1f%%", lossPercent), color: lossPercent > 0 ? .red : .green)
+    }
+
+    @ViewBuilder
+    private var latencyBadges: some View {
+        statBadge("Min", String(format: "%.2fms", minMs))
+        statBadge("Avg", String(format: "%.2fms", avgMs))
+        statBadge("Max", String(format: "%.2fms", maxMs))
+    }
+
     private func statBadge(_ label: String, _ value: String, color: Color = .primary) -> some View {
         VStack(spacing: 2) {
             Text(value).font(.headline).foregroundStyle(color)
             Text(label).font(.caption2).foregroundStyle(.secondary)
         }
+        .fixedSize()
     }
 }

@@ -638,18 +638,23 @@ struct NetworkMapView: View {
                                systemImage: "map.circle",
                                description: "SNAP fills in your current network. Adjust the range if you like (a subnet like 10.0.0.0/16, a range like 10.0.0.1-10.0.3.254, or several separated by commas), then press Scan Network. SNAP will ping every address, run mDNS + SSDP + NetBIOS probes, and identify each device.")
             } else {
-                HSplitView {
-                    Group {
-                        switch viewMode {
-                        case .grid: GridView(devices: filtered, selectedIP: $selectedIP)
-                        case .list: ListView(devices: filtered, selectedIP: $selectedIP)
-                        case .map:  VisualView(model: model, devices: filtered, selectedIP: $selectedIP)
+                GeometryReader { geo in
+                    HSplitView {
+                        Group {
+                            switch viewMode {
+                            case .grid: GridView(devices: filtered, selectedIP: $selectedIP)
+                            case .list: ListView(devices: filtered, selectedIP: $selectedIP)
+                            case .map:  VisualView(model: model, devices: filtered, selectedIP: $selectedIP)
+                            }
                         }
-                    }
-                    .frame(minWidth: 520)
+                        // 520 pt when there's room. In a narrow window it
+                        // gives way so both panes fit; 520 + 280 used to
+                        // push the whole layout off both edges.
+                        .frame(minWidth: max(340, min(520, geo.size.width - 290)))
 
-                    DeviceDetailPanel(device: selected, model: model)
-                        .frame(minWidth: 280, idealWidth: 320)
+                        DeviceDetailPanel(device: selected, model: model)
+                            .frame(minWidth: 280, idealWidth: 320)
+                    }
                 }
             }
         }
@@ -690,73 +695,121 @@ struct NetworkMapView: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "map.circle").foregroundStyle(.blue)
-            TextField("Range (e.g. 192.168.1.0/24)", text: $model.subnet)
-                .textFieldStyle(.roundedBorder)
-                // Gives up width first when the window is narrow, so the
-                // fixed-size controls below never get squeezed.
-                .frame(minWidth: 170, idealWidth: 260, maxWidth: 260)
-                .disabled(model.isScanning)
-                .help("""
-                      A subnet (10.0.0.0/16), a range (10.0.0.1-10.0.3.254 or 192.168.1.100-150), \
-                      a /24 shorthand (192.168.1), or a single address — several separated by commas. \
-                      Up to 65,536 addresses. Add your UniFi management VLAN here if your APs/switches \
-                      live on a different subnet than your Mac.
-                      """)
-            rangeSummary
-                .lineLimit(1)
-                .fixedSize()
-
-            Picker("View", selection: $viewMode) {
-                ForEach(ViewMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            // Sized to its content. A fixed 220 pt frame left the "View"
-            // label almost no slack, so a fraction-of-a-point shift from the
-            // device count's width changing (e.g. toggling Online only)
-            // wrapped it onto two lines.
-            .fixedSize()
-
-            Spacer()
-
-            if model.isScanning {
-                ProgressView(value: model.progress)
-                    .progressViewStyle(.linear)
-                    .frame(width: 140)
-                Text(model.phase.label)
-                    .font(.system(size: 11))
-                    .foregroundStyle(NS.text3)
+        // One row when everything fits at its natural width. Otherwise two:
+        // range + scan on top, view mode + results underneath.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                mapIcon
+                rangeField
+                    // Measured at its minimum, so one row is used whenever
+                    // everything else fits at full size; spare room widens it.
+                    .frame(minWidth: 170, idealWidth: 170, maxWidth: 260)
+                rangeSummary
                     .lineLimit(1)
-            } else {
-                if let t = model.lastScan {
-                    Text("Scanned \(t.formatted(date: .omitted, time: .shortened))")
-                        .font(.system(size: 11))
-                        .foregroundStyle(NS.text3)
+                    .fixedSize()
+                viewPicker
+                Spacer()
+                scanStatus(progressWidth: 140)
+                deviceCount
+                actionBar
+                scanButton
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    mapIcon
+                    rangeField
+                        .frame(minWidth: 120, maxWidth: 260)
+                    rangeSummary
                         .lineLimit(1)
+                        .fixedSize()
+                    Spacer(minLength: 0)
+                    scanStatus(progressWidth: 80)
+                    scanButton
+                }
+                HStack(spacing: 12) {
+                    viewPicker
+                    Spacer(minLength: 0)
+                    deviceCount
+                    actionBar
                 }
             }
-
-            Text("\(filtered.count) of \(model.devices.count)")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(NS.text3)
-                .lineLimit(1)
-                .fixedSize()
-
-            if !model.devices.isEmpty {
-                ToolActionBar("Network-Map",
-                              text: { model.exportInventoryText() },
-                              csv:  { model.exportInventoryCSV() },
-                              json: { model.exportInventoryJSON() })
-            }
-
-            Button(model.isScanning ? "Scanning…" : "Scan Network") { model.requestScan() }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.isScanning || !model.canScan)
-                .keyboardShortcut(.return)
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(NS.bg0)
+    }
+
+    private var mapIcon: some View {
+        Image(systemName: "map.circle").foregroundStyle(.blue)
+    }
+
+    private var rangeField: some View {
+        TextField("Range (e.g. 192.168.1.0/24)", text: $model.subnet)
+            .textFieldStyle(.roundedBorder)
+            .disabled(model.isScanning)
+            .help("""
+                  A subnet (10.0.0.0/16), a range (10.0.0.1-10.0.3.254 or 192.168.1.100-150), \
+                  a /24 shorthand (192.168.1), or a single address — several separated by commas. \
+                  Up to 65,536 addresses. Add your UniFi management VLAN here if your APs/switches \
+                  live on a different subnet than your Mac.
+                  """)
+    }
+
+    private var viewPicker: some View {
+        Picker("View", selection: $viewMode) {
+            ForEach(ViewMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        // Sized to its content. A fixed 220 pt frame left the "View"
+        // label almost no slack, so a fraction-of-a-point shift from the
+        // device count's width changing (e.g. toggling Online only)
+        // wrapped it onto two lines.
+        .fixedSize()
+    }
+
+    /// Progress while scanning, otherwise when the last scan finished.
+    @ViewBuilder private func scanStatus(progressWidth: CGFloat) -> some View {
+        if model.isScanning {
+            ProgressView(value: model.progress)
+                .progressViewStyle(.linear)
+                .frame(width: progressWidth)
+            Text(model.phase.label)
+                .font(.system(size: 11))
+                .foregroundStyle(NS.text3)
+                .lineLimit(1)
+                .layoutPriority(1)
+        } else if let t = model.lastScan {
+            Text("Scanned \(t.formatted(date: .omitted, time: .shortened))")
+                .font(.system(size: 11))
+                .foregroundStyle(NS.text3)
+                .lineLimit(1)
+                .fixedSize()
+        }
+    }
+
+    private var deviceCount: some View {
+        Text("\(filtered.count) of \(model.devices.count)")
+            .font(.system(size: 11, design: .monospaced))
+            .foregroundStyle(NS.text3)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    @ViewBuilder private var actionBar: some View {
+        if !model.devices.isEmpty {
+            ToolActionBar("Network-Map",
+                          text: { model.exportInventoryText() },
+                          csv:  { model.exportInventoryCSV() },
+                          json: { model.exportInventoryJSON() })
+                .fixedSize()
+        }
+    }
+
+    private var scanButton: some View {
+        Button(model.isScanning ? "Scanning…" : "Scan Network") { model.requestScan() }
+            .buttonStyle(.borderedProminent)
+            .disabled(model.isScanning || !model.canScan)
+            .keyboardShortcut(.return)
+            .fixedSize()
     }
 }
 
@@ -780,51 +833,79 @@ private struct FilterBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11)).foregroundStyle(NS.text3)
-                TextField("search devices", text: $filters.search)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 220)
-            }
-
-            chip(label: "All groups",
-                 selected: filters.group == nil) { filters.group = nil }
-            ForEach(allGroups, id: \.self) { g in
-                chip(label: g.rawValue,
-                     selected: filters.group == g) { filters.group = g }
-            }
-
-            if !allVendors.isEmpty {
-                Divider().frame(height: 18).background(NS.borderMid)
-                Menu {
-                    Button("All vendors") { filters.vendor = nil }
-                    Divider()
-                    ForEach(allVendors, id: \.self) { v in
-                        Button(v) { filters.vendor = v }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "tag")
-                        Text(filters.vendor ?? "Vendor")
-                    }
-                    .font(.system(size: 11))
+        // One row when it all fits. Otherwise search, vendor and Online only
+        // on top, with the group chips wrapping onto lines underneath.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                // Measured narrower than its 220 pt so one row still fits
+                // at 1100 pt; spare room widens it back.
+                searchField(minWidth: 190, idealWidth: 190, maxWidth: 220)
+                chips
+                if !allVendors.isEmpty {
+                    Divider().frame(height: 18).background(NS.borderMid)
+                    vendorMenu
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
+                Spacer()
+                onlineToggle
             }
-
-            Spacer()
-
-            Toggle(isOn: $filters.aliveOnly) {
-                Text("Online only").font(.system(size: 11))
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    searchField(minWidth: 140, idealWidth: 220, maxWidth: 220)
+                    Spacer(minLength: 0)
+                    if !allVendors.isEmpty { vendorMenu }
+                    onlineToggle
+                }
+                FlowLayoutWiFi(spacing: 8) { chips }
             }
-            .toggleStyle(.switch)
-            .controlSize(.small)
         }
         .padding(.horizontal, 16).padding(.vertical, 8)
         .background(NS.bg1)
+    }
+
+    private func searchField(minWidth: CGFloat, idealWidth: CGFloat, maxWidth: CGFloat) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11)).foregroundStyle(NS.text3)
+            TextField("search devices", text: $filters.search)
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: minWidth, idealWidth: idealWidth, maxWidth: maxWidth)
+        }
+    }
+
+    @ViewBuilder private var chips: some View {
+        chip(label: "All groups",
+             selected: filters.group == nil) { filters.group = nil }
+        ForEach(allGroups, id: \.self) { g in
+            chip(label: g.rawValue,
+                 selected: filters.group == g) { filters.group = g }
+        }
+    }
+
+    private var vendorMenu: some View {
+        Menu {
+            Button("All vendors") { filters.vendor = nil }
+            Divider()
+            ForEach(allVendors, id: \.self) { v in
+                Button(v) { filters.vendor = v }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "tag")
+                Text(filters.vendor ?? "Vendor")
+            }
+            .font(.system(size: 11))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private var onlineToggle: some View {
+        Toggle(isOn: $filters.aliveOnly) {
+            Text("Online only").font(.system(size: 11))
+        }
+        .toggleStyle(.switch)
+        .controlSize(.small)
+        .fixedSize()
     }
 
     private func chip(label: String, selected: Bool, _ action: @escaping () -> Void) -> some View {
@@ -832,6 +913,8 @@ private struct FilterBar: View {
             Text(label)
                 .font(.system(size: 11, weight: selected ? .semibold : .regular))
                 .foregroundStyle(selected ? NS.bg0 : NS.text2)
+                .lineLimit(1)
+                .fixedSize()
                 .padding(.horizontal, 10).padding(.vertical, 4)
                 .background(
                     Capsule().fill(selected ? NS.amber : NS.bg2)

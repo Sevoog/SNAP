@@ -403,22 +403,60 @@ struct WiFiAnalyzerView: View {
 
     // MARK: Toolbar
 
+    // One row when there's room; narrow windows move the filter field and
+    // band picker to a second row so Live / Scan never clip.
     private var toolbar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                toolbarTitle
+                Spacer()
+                searchField.frame(width: 160)
+                bandPicker
+                toolbarActions
+            }
+            VStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    toolbarTitle
+                    Spacer()
+                    toolbarActions
+                }
+                HStack(spacing: 10) {
+                    searchField.frame(minWidth: 120, maxWidth: .infinity)
+                    bandPicker
+                }
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(NS.bg0)
+    }
+
+    private var toolbarTitle: some View {
         HStack(spacing: 10) {
             Image(systemName: "wifi").foregroundStyle(NS.blue)
             Text("WiFi Analyzer").font(.system(size: 13, weight: .semibold)).foregroundStyle(NS.text1)
-            Spacer()
-            TextField("Filter networks…", text: $search)
-                .textFieldStyle(.roundedBorder).frame(width: 160)
-            Picker("", selection: $bandFilter) {
-                Text("All").tag(WiFiBand?.none)
-                Text("2.4").tag(WiFiBand?.some(.twoGHz))
-                Text("5").tag(WiFiBand?.some(.fiveGHz))
-                Text("6").tag(WiFiBand?.some(.sixGHz))
-            }
-            .pickerStyle(.segmented).frame(width: 180)
+                .fixedSize()
+        }
+    }
+
+    private var searchField: some View {
+        TextField("Filter networks…", text: $search).textFieldStyle(.roundedBorder)
+    }
+
+    private var bandPicker: some View {
+        Picker("", selection: $bandFilter) {
+            Text("All").tag(WiFiBand?.none)
+            Text("2.4").tag(WiFiBand?.some(.twoGHz))
+            Text("5").tag(WiFiBand?.some(.fiveGHz))
+            Text("6").tag(WiFiBand?.some(.sixGHz))
+        }
+        .pickerStyle(.segmented).frame(width: 180)
+    }
+
+    private var toolbarActions: some View {
+        HStack(spacing: 10) {
             ToolActionBar("WiFi", text: { model.exportText() },
                           csv: { model.exportCSV() }, json: { model.exportJSON() })
+                .fixedSize()
             Button(action: { model.toggleLive() }) {
                 HStack(spacing: 5) {
                     Circle().fill(model.liveOn ? NS.green : NS.text4).frame(width: 7, height: 7)
@@ -427,13 +465,18 @@ struct WiFiAnalyzerView: View {
             }
             .buttonStyle(.bordered)
             .tint(model.liveOn ? .green : nil)
-            if model.isScanning { ProgressView().controlSize(.small) }
-            else {
-                Button("Scan") { model.scan() }.buttonStyle(.borderedProminent).keyboardShortcut(.return)
+            .fixedSize()
+            // The hidden Scan keeps its width reserved while the spinner
+            // shows, so the toolbar doesn't shift (or re-wrap) every scan.
+            ZStack {
+                Button("Scan") {}.buttonStyle(.borderedProminent).hidden().accessibilityHidden(true)
+                if model.isScanning { ProgressView().controlSize(.small) }
+                else {
+                    Button("Scan") { model.scan() }.buttonStyle(.borderedProminent).keyboardShortcut(.return)
+                }
             }
+            .fixedSize()
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        .background(NS.bg0)
     }
 
     private var errorBanner: some View {
@@ -449,14 +492,21 @@ struct WiFiAnalyzerView: View {
     }
 
     private func connectedBanner(_ c: WiFiNetwork) -> some View {
-        HStack(spacing: 10) {
-            Circle().fill(NS.green).frame(width: 8, height: 8)
-            Text("Connected: \(c.ssid)").font(.system(size: 12, weight: .semibold)).foregroundStyle(NS.green)
-            Text("Ch \(c.channel) · \(c.widthMHz) MHz · \(c.generation) · \(c.security)")
-                .font(.system(size: 11, design: .monospaced)).foregroundStyle(NS.text2)
-            Text("\(c.rssi) dBm · SNR \(c.snr)")
-                .font(.system(size: 11, design: .monospaced)).foregroundStyle(rssiColor(c.rssi))
-            Spacer()
+        let dot = Circle().fill(NS.green).frame(width: 8, height: 8)
+        let name = Text("Connected: \(c.ssid)").font(.system(size: 12, weight: .semibold)).foregroundStyle(NS.green)
+            .lineLimit(1)
+        let radio = Text("Ch \(c.channel) · \(c.widthMHz) MHz · \(c.generation) · \(c.security)")
+            .font(.system(size: 11, design: .monospaced)).foregroundStyle(NS.text2).lineLimit(1)
+        let signal = Text("\(c.rssi) dBm · SNR \(c.snr)")
+            .font(.system(size: 11, design: .monospaced)).foregroundStyle(rssiColor(c.rssi)).fixedSize()
+        // The radio details drop under the SSID when one row won't fit.
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) { dot; name; radio; signal; Spacer() }
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 10) { dot; name }
+                HStack(spacing: 10) { radio; signal }.padding(.leading, 18)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 16).padding(.vertical, 7).background(NS.green.opacity(0.08))
     }

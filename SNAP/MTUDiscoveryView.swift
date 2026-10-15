@@ -26,7 +26,8 @@ struct MTUDiscoveryView: View {
             if !error.isEmpty { errorBar }
             Divider()
             HSplitView {
-                stepLog.frame(minWidth: 440)
+                // Minimums sum to under the narrowest tool area (650 pt)
+                stepLog.frame(minWidth: 380)
                 resultPanel.frame(minWidth: 260, idealWidth: 300)
             }
         }
@@ -34,32 +35,63 @@ struct MTUDiscoveryView: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "arrow.left.and.right.square").foregroundStyle(.cyan)
-            TextField("Host or IP", text: $host)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 240)
-            HStack(spacing: 4) {
-                Text("Range").font(.caption).foregroundStyle(.secondary)
-                TextField("", value: $lowerBound, format: .number)
-                    .textFieldStyle(.roundedBorder).frame(width: 60)
-                Text("–").foregroundStyle(.secondary)
-                TextField("", value: $upperBound, format: .number)
-                    .textFieldStyle(.roundedBorder).frame(width: 60)
+        // One row when it fits; otherwise Discover and its tools wrap to a second row
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.left.and.right.square").foregroundStyle(.cyan)
+                hostField.frame(width: 240)
+                rangeFields
+                Spacer()
+                runControls
             }
-            Spacer()
-            if !steps.isEmpty {
-                ToolActionBar("MTU Discovery",
-                              text: { exportText() })
+            VStack(spacing: 8) {
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.left.and.right.square").foregroundStyle(.cyan)
+                    hostField.frame(maxWidth: .infinity)
+                    rangeFields
+                }
+                HStack(spacing: 12) {
+                    Spacer()
+                    runControls
+                }
             }
-            Button(isRunning ? "Searching…" : "Discover") { run() }
-                .buttonStyle(.borderedProminent)
-                .disabled(isRunning || host.isEmpty)
-                .keyboardShortcut(.return)
-            if isRunning { ProgressView().controlSize(.small) }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(NS.bg0)
+    }
+
+    private var hostField: some View {
+        TextField("Host or IP", text: $host)
+            .textFieldStyle(.roundedBorder)
+    }
+
+    private var rangeFields: some View {
+        HStack(spacing: 4) {
+            Text("Range").font(.caption).foregroundStyle(.secondary)
+            TextField("", value: $lowerBound, format: .number)
+                .textFieldStyle(.roundedBorder).frame(width: 60)
+            Text("–").foregroundStyle(.secondary)
+            TextField("", value: $upperBound, format: .number)
+                .textFieldStyle(.roundedBorder).frame(width: 60)
+        }
+        .fixedSize()
+    }
+
+    // Copy/Export keep their slot while hidden, so the first step of a run
+    // doesn't reflow the toolbar
+    @ViewBuilder
+    private var runControls: some View {
+        ToolActionBar("MTU Discovery",
+                      text: { exportText() })
+            .opacity(steps.isEmpty ? 0 : 1)
+            .disabled(steps.isEmpty)
+            .accessibilityHidden(steps.isEmpty)
+        Button(isRunning ? "Searching…" : "Discover") { run() }
+            .buttonStyle(.borderedProminent)
+            .disabled(isRunning || host.isEmpty)
+            .keyboardShortcut(.return)
+            .fixedSize()
+        if isRunning { ProgressView().controlSize(.small) }
     }
 
     private var errorBar: some View {

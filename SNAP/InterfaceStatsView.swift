@@ -181,9 +181,11 @@ struct InterfaceStatsView: View {
             Divider()
             filterBar
             Divider()
+            // Minimums must sum below the narrowest tool width (650 pt) or
+            // the detail pane is pushed off the right edge.
             HSplitView {
                 table
-                    .frame(minWidth: 520)
+                    .frame(minWidth: 340)
                 detailContainer
                     .frame(minWidth: 280, idealWidth: 320, maxWidth: 380)
             }
@@ -198,36 +200,72 @@ struct InterfaceStatsView: View {
 
     // MARK: Toolbar
 
+    // One row when there's room; at narrow widths the refresh status tucks
+    // under the title so the buttons keep their full labels.
     private var toolbar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "chart.line.uptrend.xyaxis").foregroundStyle(.blue)
-            Text("Interface Stats")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(NS.text1)
-
-            if model.isLive {
-                Circle().fill(NS.green).frame(width: 7, height: 7)
-                    .opacity(0.85)
-                Text("Live").font(.system(size: 11)).foregroundStyle(NS.green)
-            } else if let t = model.lastRefresh {
-                Text("refreshed \(t.formatted(date: .omitted, time: .standard))")
-                    .font(.system(size: 11)).foregroundStyle(NS.text3)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                toolbarIcon
+                toolbarTitle
+                toolbarStatus
+                Spacer()
+                toolbarActions
             }
+            HStack(spacing: 12) {
+                toolbarIcon
+                VStack(alignment: .leading, spacing: 1) {
+                    toolbarTitle
+                    HStack(spacing: 5) { toolbarStatus }
+                }
+                Spacer()
+                toolbarActions
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(NS.bg0)
+    }
 
-            Spacer()
+    private var toolbarIcon: some View {
+        Image(systemName: "chart.line.uptrend.xyaxis").foregroundStyle(.blue)
+    }
 
+    private var toolbarTitle: some View {
+        Text("Interface Stats")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(NS.text1)
+            .fixedSize()
+    }
+
+    @ViewBuilder
+    private var toolbarStatus: some View {
+        if model.isLive {
+            Circle().fill(NS.green).frame(width: 7, height: 7)
+                .opacity(0.85)
+            Text("Live").font(.system(size: 11)).foregroundStyle(NS.green)
+        } else if let t = model.lastRefresh {
+            Text("refreshed \(t.formatted(date: .omitted, time: .standard))")
+                .font(.system(size: 11)).foregroundStyle(NS.text3)
+                .fixedSize()
+        }
+    }
+
+    private var toolbarActions: some View {
+        HStack(spacing: 12) {
             ToolActionBar("Interface Stats",
                           text: { exportText() },
                           csv:  { exportCSV() },
                           json: { exportJSON() })
+                .fixedSize()
 
             if model.isLive {
                 Button("Stop Live") { model.stopLive() }
                     .buttonStyle(.bordered)
                     .tint(.red)
+                    .fixedSize()
             } else {
                 Button("Live") { model.startLive() }
                     .buttonStyle(.bordered)
+                    .fixedSize()
             }
 
             Button { model.refresh() } label: {
@@ -235,32 +273,55 @@ struct InterfaceStatsView: View {
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut("r", modifiers: .command)
+            .fixedSize()
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        .background(NS.bg0)
     }
 
     // MARK: Filter chip bar
 
+    // One row when there's room; narrow windows give the chips their own row.
     private var filterBar: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11)).foregroundStyle(NS.text3)
-                TextField("search name / MAC / IP", text: $model.search)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 220)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                searchField
+                filterChips
+                Spacer()
+                countLabel
             }
-            ForEach(InterfaceStatsModel.Filter.allCases) { f in
-                chip(f)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    searchField
+                    Spacer()
+                    countLabel
+                }
+                HStack(spacing: 8) { filterChips }
             }
-            Spacer()
-            Text("\(sortedRows.count) of \(model.infos.count)")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(NS.text3)
         }
         .padding(.horizontal, 16).padding(.vertical, 8)
         .background(NS.bg1)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11)).foregroundStyle(NS.text3)
+            TextField("search name / MAC / IP", text: $model.search)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 220)
+        }
+    }
+
+    private var filterChips: some View {
+        ForEach(InterfaceStatsModel.Filter.allCases) { f in
+            chip(f)
+        }
+    }
+
+    private var countLabel: some View {
+        Text("\(sortedRows.count) of \(model.infos.count)")
+            .font(.system(size: 11, design: .monospaced))
+            .foregroundStyle(NS.text3)
+            .fixedSize()
     }
 
     private func chip(_ f: InterfaceStatsModel.Filter) -> some View {
@@ -269,6 +330,7 @@ struct InterfaceStatsView: View {
             Text(f.rawValue)
                 .font(.system(size: 11, weight: selected ? .semibold : .regular))
                 .foregroundStyle(selected ? NS.bg0 : NS.text2)
+                .fixedSize()
                 .padding(.horizontal, 10).padding(.vertical, 4)
                 .background(Capsule().fill(selected ? NS.amber : NS.bg2))
         }

@@ -26,7 +26,8 @@ struct DNSBenchmarkView: View {
             if !error.isEmpty { errorBar }
             Divider()
             HSplitView {
-                resultTable.frame(minWidth: 520)
+                // Both minimums must fit the 650 pt tool area (the table scrolls sideways)
+                resultTable.frame(minWidth: 400)
                 configPane.frame(minWidth: 220, idealWidth: 260)
             }
         }
@@ -39,10 +40,13 @@ struct DNSBenchmarkView: View {
             Text("Resolver Benchmark")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(NS.text1)
+                .fixedSize()
             if isRunning {
+                // Up to 160 pt; the bar is what shrinks on narrow windows
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
-                    .frame(width: 160)
+                    .frame(minWidth: 60, maxWidth: 160)
+                    .layoutPriority(1)
             }
             Spacer()
             if !rows.isEmpty {
@@ -50,11 +54,13 @@ struct DNSBenchmarkView: View {
                               text: { exportText() },
                               csv:  { exportCSV() },
                               json: { exportJSON() })
+                    .fixedSize()
             }
             Button(isRunning ? "Running…" : "Run Benchmark") { run() }
                 .buttonStyle(.borderedProminent)
                 .disabled(isRunning)
                 .keyboardShortcut(.return)
+                .fixedSize()
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(NS.bg0)

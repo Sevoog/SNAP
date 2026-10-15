@@ -909,88 +909,161 @@ struct UniFiControllerView: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "antenna.radiowaves.left.and.right.circle")
-                .foregroundStyle(NS.blue)
-            Text("UniFi Controller")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(NS.text1)
-            Text(model.connectionStatus)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(model.devices.isEmpty ? NS.text3 : NS.green)
-            if let t = model.lastRefresh {
-                Text("· refreshed \(t.formatted(date: .omitted, time: .standard))")
-                    .font(.system(size: 11)).foregroundStyle(NS.text3)
+        // One row when it fits; when connected in a narrow window the
+        // status line drops below the title.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                toolbarTitle
+                toolbarStatus
+                Spacer()
+                toolbarActions
             }
-            Spacer()
-            if !model.devices.isEmpty {
-                ToolActionBar("UniFi",
-                              text: { model.exportText() },
-                              csv:  { model.exportCSV() },
-                              json: { model.exportJSON() })
-                Button("Refresh") { model.refresh() }
-                    .buttonStyle(.bordered)
-            }
-            if model.isConnecting {
-                ProgressView().controlSize(.small)
-            } else if model.devices.isEmpty {
-                Button("Connect") { model.connect() }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.return)
-            } else {
-                Button("Disconnect") { model.disconnect() }
-                    .buttonStyle(.bordered).tint(.red)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 12) {
+                    toolbarTitle
+                    Spacer()
+                    toolbarActions
+                }
+                HStack(spacing: 12) { toolbarStatus }
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(NS.bg0)
     }
 
+    @ViewBuilder
+    private var toolbarTitle: some View {
+        Image(systemName: "antenna.radiowaves.left.and.right.circle")
+            .foregroundStyle(NS.blue)
+        Text("UniFi Controller")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(NS.text1)
+            .fixedSize()
+    }
+
+    @ViewBuilder
+    private var toolbarStatus: some View {
+        Text(model.connectionStatus)
+            .font(.system(size: 11, design: .monospaced))
+            .foregroundStyle(model.devices.isEmpty ? NS.text3 : NS.green)
+            .fixedSize()
+        if let t = model.lastRefresh {
+            Text("· refreshed \(t.formatted(date: .omitted, time: .standard))")
+                .font(.system(size: 11)).foregroundStyle(NS.text3)
+                .fixedSize()
+        }
+    }
+
+    @ViewBuilder
+    private var toolbarActions: some View {
+        if !model.devices.isEmpty {
+            ToolActionBar("UniFi",
+                          text: { model.exportText() },
+                          csv:  { model.exportCSV() },
+                          json: { model.exportJSON() })
+            Button("Refresh") { model.refresh() }
+                .buttonStyle(.bordered)
+        }
+        if model.isConnecting {
+            ProgressView().controlSize(.small)
+        } else if model.devices.isEmpty {
+            Button("Connect") { model.connect() }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return)
+        } else {
+            Button("Disconnect") { model.disconnect() }
+                .buttonStyle(.bordered).tint(.red)
+        }
+    }
+
     private var credentialBar: some View {
-        HStack(spacing: 8) {
-            Text("Host:").font(.system(size: 11)).foregroundStyle(NS.text3)
-            TextField("https://controller", text: $model.host)
-                .textFieldStyle(.roundedBorder).frame(width: 200)
-                .disabled(!model.devices.isEmpty || model.isConnecting)
-            Text("User:").font(.system(size: 11)).foregroundStyle(NS.text3)
-            TextField("admin", text: $model.username)
-                .textFieldStyle(.roundedBorder).frame(width: 110)
-                .textContentType(.username)
-                .disabled(!model.devices.isEmpty || model.isConnecting)
-            Text("Pass:").font(.system(size: 11)).foregroundStyle(NS.text3)
-            SecureField("", text: $model.password)
-                .textFieldStyle(.roundedBorder).frame(width: 130)
-                .textContentType(.password)
-                .disabled(!model.devices.isEmpty || model.isConnecting)
-            Text("2FA:")
-                .font(.system(size: 11))
-                .foregroundStyle(model.needsTwoFactor ? NS.amber : NS.text3)
-            TextField("optional", text: $model.twoFactorCode)
-                .textFieldStyle(.roundedBorder).frame(width: 80)
-                .textContentType(.oneTimeCode)
-                .disabled(!model.devices.isEmpty || model.isConnecting)
-                .help("6-digit TOTP / SMS code. Leave blank if 2FA isn't enabled. Single-use — never stored.")
-            Toggle("Remember", isOn: $model.rememberCredentials)
-                .toggleStyle(.checkbox).font(.system(size: 11))
-            Spacer()
-            if let fp = model.pinnedFingerprint {
-                HStack(spacing: 4) {
-                    Image(systemName: "lock.shield").foregroundStyle(NS.green)
-                    Text("Certificate pinned").foregroundStyle(NS.text3)
-                    Button("Forget") { model.forgetPinnedCertificate() }
-                        .buttonStyle(.link)
-                        .disabled(!model.devices.isEmpty || model.isConnecting)
+        // One row when it fits; narrow windows move 2FA, Remember and the
+        // certificate note onto a second row.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                fieldLabel("Host:")
+                hostField.frame(width: 200)
+                loginFields
+                twoFactorFields
+                Spacer()
+                certificateNote
+            }
+            VStack(spacing: 6) {
+                HStack(spacing: 8) {
+                    fieldLabel("Host:")
+                    hostField.frame(minWidth: 120, maxWidth: .infinity)
+                    loginFields
                 }
-                .font(.system(size: 10))
-                .help("SHA-256 \(fp)\nSNAP won't send credentials if this controller's certificate changes.")
-            } else {
-                Text("Self-signed certs: trusted on first connect")
-                    .font(.system(size: 10)).foregroundStyle(NS.text3)
-                    .help("The first connection to a controller with a self-signed certificate shows its fingerprint and asks you to trust it. After that, a different certificate blocks the login before any credentials are sent.")
+                HStack(spacing: 8) {
+                    twoFactorFields
+                    Spacer()
+                    certificateNote
+                }
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 6)
         .background(NS.bg1)
+    }
+
+    private func fieldLabel(_ s: String) -> some View {
+        Text(s).font(.system(size: 11)).foregroundStyle(NS.text3).fixedSize()
+    }
+
+    private var hostField: some View {
+        TextField("https://controller", text: $model.host)
+            .textFieldStyle(.roundedBorder)
+            .disabled(!model.devices.isEmpty || model.isConnecting)
+    }
+
+    @ViewBuilder
+    private var loginFields: some View {
+        fieldLabel("User:")
+        TextField("admin", text: $model.username)
+            .textFieldStyle(.roundedBorder).frame(width: 110)
+            .textContentType(.username)
+            .disabled(!model.devices.isEmpty || model.isConnecting)
+        fieldLabel("Pass:")
+        SecureField("", text: $model.password)
+            .textFieldStyle(.roundedBorder).frame(width: 130)
+            .textContentType(.password)
+            .disabled(!model.devices.isEmpty || model.isConnecting)
+    }
+
+    @ViewBuilder
+    private var twoFactorFields: some View {
+        Text("2FA:")
+            .font(.system(size: 11))
+            .foregroundStyle(model.needsTwoFactor ? NS.amber : NS.text3)
+            .fixedSize()
+        TextField("optional", text: $model.twoFactorCode)
+            .textFieldStyle(.roundedBorder).frame(width: 80)
+            .textContentType(.oneTimeCode)
+            .disabled(!model.devices.isEmpty || model.isConnecting)
+            .help("6-digit TOTP / SMS code. Leave blank if 2FA isn't enabled. Single-use — never stored.")
+        Toggle("Remember", isOn: $model.rememberCredentials)
+            .toggleStyle(.checkbox).font(.system(size: 11))
+            .fixedSize()
+    }
+
+    @ViewBuilder
+    private var certificateNote: some View {
+        if let fp = model.pinnedFingerprint {
+            HStack(spacing: 4) {
+                Image(systemName: "lock.shield").foregroundStyle(NS.green)
+                Text("Certificate pinned").foregroundStyle(NS.text3)
+                Button("Forget") { model.forgetPinnedCertificate() }
+                    .buttonStyle(.link)
+                    .disabled(!model.devices.isEmpty || model.isConnecting)
+            }
+            .font(.system(size: 10))
+            .fixedSize()
+            .help("SHA-256 \(fp)\nSNAP won't send credentials if this controller's certificate changes.")
+        } else {
+            Text("Self-signed certs: trusted on first connect")
+                .font(.system(size: 10)).foregroundStyle(NS.text3)
+                .fixedSize()
+                .help("The first connection to a controller with a self-signed certificate shows its fingerprint and asks you to trust it. After that, a different certificate blocks the login before any credentials are sent.")
+        }
     }
 
     private func errorBanner(_ s: String) -> some View {

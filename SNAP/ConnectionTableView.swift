@@ -117,31 +117,28 @@ struct ConnectionTableView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "list.bullet.rectangle").foregroundStyle(.blue)
-                TextField("Filter by host/process/state...", text: $model.searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 240)
-                Picker("State", selection: $model.filterState) {
-                    ForEach(model.allStates, id: \.self) { s in Text(s).tag(s) }
+            // One row when it fits; otherwise the refresh controls wrap to a second row
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    Image(systemName: "list.bullet.rectangle").foregroundStyle(.blue)
+                    searchField.frame(width: 240)
+                    statePicker
+                    autoRefreshToggle
+                    Spacer()
+                    refreshControls
                 }
-                .frame(width: 130)
-                Toggle("Auto-refresh (3s)", isOn: Binding(
-                    get: { model.autoRefresh },
-                    set: { if $0 { model.startAutoRefresh() } else { model.stopAutoRefresh() } }
-                ))
-                .toggleStyle(.checkbox).font(.caption)
-                Spacer()
-                if !model.filtered.isEmpty {
-                    ToolActionBar("Connections",
-                                  text: { "proto\tlocal\tremote\tstate\tpid\tprocess\n" + model.filtered.map { "\($0.proto)\t\($0.localAddr):\($0.localPort)\t\($0.remoteAddr):\($0.remotePort)\t\($0.state)\t\($0.pid)\t\($0.process)" }.joined(separator: "\n") },
-                                  csv: { "proto,local_addr,local_port,remote_addr,remote_port,state,pid,process\n" + model.filtered.map { "\($0.proto),\($0.localAddr),\($0.localPort),\($0.remoteAddr),\($0.remotePort),\($0.state),\($0.pid),\(csvEscape($0.process))" }.joined(separator: "\n") })
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "list.bullet.rectangle").foregroundStyle(.blue)
+                        searchField.frame(maxWidth: .infinity)
+                        statePicker
+                    }
+                    HStack(spacing: 12) {
+                        autoRefreshToggle
+                        Spacer()
+                        refreshControls
+                    }
                 }
-                if model.isLoading { ProgressView().controlSize(.small) }
-                Button("Refresh") { model.load() }
-                    .buttonStyle(.bordered)
-                    .keyboardShortcut("r", modifiers: .command)
-                Text("\(model.filtered.count) connections").font(.caption2).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             .background(NS.bg0)
@@ -186,6 +183,52 @@ struct ConnectionTableView: View {
         // Auto-refresh (if you turned it on) keeps running in the background;
         // otherwise take a fresh snapshot on return, as opening the tab did.
         .onTabVisibilityChange(shown: { if !model.autoRefresh { model.load() } })
+    }
+
+    private var searchField: some View {
+        TextField("Filter by host/process/state...", text: $model.searchText)
+            .textFieldStyle(.roundedBorder)
+    }
+
+    private var statePicker: some View {
+        Picker("State", selection: $model.filterState) {
+            ForEach(model.allStates, id: \.self) { s in Text(s).tag(s) }
+        }
+        .frame(width: 130)
+    }
+
+    private var autoRefreshToggle: some View {
+        Toggle("Auto-refresh (3s)", isOn: Binding(
+            get: { model.autoRefresh },
+            set: { if $0 { model.startAutoRefresh() } else { model.stopAutoRefresh() } }
+        ))
+        .toggleStyle(.checkbox).font(.caption)
+        .fixedSize()
+    }
+
+    // Copy/Export, the spinner and the count keep their slots while hidden or
+    // changing, so filtering or an auto-refresh tick never reflows the toolbar
+    @ViewBuilder
+    private var refreshControls: some View {
+        ToolActionBar("Connections",
+                      text: { "proto\tlocal\tremote\tstate\tpid\tprocess\n" + model.filtered.map { "\($0.proto)\t\($0.localAddr):\($0.localPort)\t\($0.remoteAddr):\($0.remotePort)\t\($0.state)\t\($0.pid)\t\($0.process)" }.joined(separator: "\n") },
+                      csv: { "proto,local_addr,local_port,remote_addr,remote_port,state,pid,process\n" + model.filtered.map { "\($0.proto),\($0.localAddr),\($0.localPort),\($0.remoteAddr),\($0.remotePort),\($0.state),\($0.pid),\(csvEscape($0.process))" }.joined(separator: "\n") })
+            .opacity(model.filtered.isEmpty ? 0 : 1)
+            .disabled(model.filtered.isEmpty)
+            .accessibilityHidden(model.filtered.isEmpty)
+        ProgressView().controlSize(.small)
+            .opacity(model.isLoading ? 1 : 0)
+            .accessibilityHidden(!model.isLoading)
+        Button("Refresh") { model.load() }
+            .buttonStyle(.bordered)
+            .keyboardShortcut("r", modifiers: .command)
+            .fixedSize()
+        ZStack(alignment: .leading) {
+            Text("0000 connections").hidden()
+            Text("\(model.filtered.count) connections")
+        }
+        .font(.caption2).foregroundStyle(.secondary)
+        .fixedSize()
     }
 
     private func stateColor(_ state: String) -> Color {

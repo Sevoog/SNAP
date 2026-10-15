@@ -349,48 +349,92 @@ struct SNMPView: View {
             HStack(spacing: 10) {
                 Image(systemName: "network.badge.shield.half.filled").foregroundStyle(.cyan)
                 Text("SNMP v2c").font(.system(size: 13, weight: .semibold)).foregroundStyle(NS.text1)
+                    .fixedSize()
                 Spacer()
                 if !model.status.isEmpty {
                     Text(model.status).font(.system(size: 11)).foregroundStyle(NS.text3)
+                        .lineLimit(1)
                 }
                 ToolActionBar("SNMP", text: { model.exportText() })
+                    .fixedSize()
             }
-            HStack(spacing: 8) {
-                TextField("Host or IP", text: $model.host)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 220)
-                TextField("community", text: $model.community)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 110)
-                TextField("port", text: $model.port)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 60)
-                Picker("", selection: $model.mode) {
-                    ForEach(SNMPMode.allCases) { Text($0.rawValue).tag($0) }
+            // One row when it fits; narrow windows move the mode picker,
+            // OID field and Query onto a second row.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    hostField.frame(width: 220)
+                    connectionFields
+                    modePicker
+                    if model.mode == .walk {
+                        oidField.frame(minWidth: 160, idealWidth: 160, maxWidth: 240)
+                            .layoutPriority(1)
+                    }
+                    Spacer()
+                    runControls
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 320)
-
-                if model.mode == .walk {
-                    TextField("OID (e.g. 1.3.6.1.2.1.2.2)", text: $model.customOID)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 240)
-                }
-                Spacer()
-                if model.isRunning {
-                    Button("Stop") { model.cancel() }
-                        .buttonStyle(.bordered).tint(.red)
-                    ProgressView().controlSize(.small)
-                } else {
-                    Button("Query") { model.run() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(model.host.isEmpty)
-                        .keyboardShortcut(.return)
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        hostField.frame(minWidth: 120, maxWidth: .infinity)
+                        connectionFields
+                    }
+                    HStack(spacing: 8) {
+                        modePicker
+                        if model.mode == .walk {
+                            oidField.frame(minWidth: 120, maxWidth: .infinity)
+                        } else {
+                            Spacer()
+                        }
+                        runControls
+                    }
                 }
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(NS.bg0)
+    }
+
+    private var hostField: some View {
+        TextField("Host or IP", text: $model.host)
+            .textFieldStyle(.roundedBorder)
+    }
+
+    @ViewBuilder
+    private var connectionFields: some View {
+        TextField("community", text: $model.community)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 110)
+        TextField("port", text: $model.port)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 60)
+    }
+
+    private var modePicker: some View {
+        Picker("", selection: $model.mode) {
+            ForEach(SNMPMode.allCases) { Text($0.rawValue).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .fixedSize()
+    }
+
+    private var oidField: some View {
+        TextField("OID (e.g. 1.3.6.1.2.1.2.2)", text: $model.customOID)
+            .textFieldStyle(.roundedBorder)
+    }
+
+    @ViewBuilder
+    private var runControls: some View {
+        if model.isRunning {
+            Button("Stop") { model.cancel() }
+                .buttonStyle(.bordered).tint(.red)
+                .fixedSize()
+            ProgressView().controlSize(.small)
+        } else {
+            Button("Query") { model.run() }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.host.isEmpty)
+                .keyboardShortcut(.return)
+                .fixedSize()
+        }
     }
 
     @ViewBuilder

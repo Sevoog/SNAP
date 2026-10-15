@@ -38,39 +38,28 @@ struct LookupView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.blue)
-                TextField("Hostname or IP", text: $host)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 240)
-                HistoryMenuButton(key: .lookup) { host = $0 }
-
-                Picker("Type", selection: $recordType) {
-                    ForEach(recordTypes, id: \.self) { t in Text(t).tag(t) }
+            // One row when it fits; narrow windows move the pickers to a second row
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.blue)
+                    hostField.frame(width: 240)
+                    HistoryMenuButton(key: .lookup) { host = $0 }
+                    queryPickers
+                    Spacer()
+                    lookupActions
                 }
-                .frame(width: 80)
-
-                HStack(spacing: 4) {
-                    Text("DoH:").font(.caption).foregroundStyle(.secondary)
-                    Picker("Server", selection: $useServer) {
-                        ForEach(dohProviders, id: \.self) { s in Text(s).tag(s) }
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(.blue)
+                        hostField.frame(minWidth: 140, maxWidth: .infinity)
+                        HistoryMenuButton(key: .lookup) { host = $0 }
+                        lookupActions
                     }
-                    .frame(width: 90)
+                    HStack(spacing: 12) {
+                        queryPickers
+                        Spacer()
+                    }
                 }
-
-                Spacer()
-
-                if !records.isEmpty {
-                    ToolActionBar("DNS-Lookup",
-                                  text: { "DNS \(recordType) \(host) via \(useServer)\n\n" + records.map { "\($0.type)\tTTL \($0.ttl)\t\($0.value)" }.joined(separator: "\n") },
-                                  csv: { "type,ttl,value\n" + records.map { "\($0.type),\($0.ttl),\(csvEscape($0.value))" }.joined(separator: "\n") })
-                }
-                Button("Lookup") { startLookup() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(host.isEmpty || isRunning)
-                    .keyboardShortcut(.return)
-
-                if isRunning { ProgressView().controlSize(.small) }
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             .background(NS.bg0)
@@ -115,9 +104,14 @@ struct LookupView: View {
 
                 VStack(alignment: .leading) {
                     HStack {
-                        Text("Raw Output").font(.headline)
+                        Text("Raw Output").font(.headline).fixedSize()
                         Spacer()
-                        Text("via DNS-over-HTTPS (sandbox-safe)").font(.caption2).foregroundStyle(.tertiary)
+                        // Drop the aside before it wraps over the header
+                        ViewThatFits(in: .horizontal) {
+                            Text("via DNS-over-HTTPS (sandbox-safe)")
+                            Text("via DNS-over-HTTPS")
+                        }
+                        .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
                     }
                     .padding(.horizontal)
                     ScrollView {
@@ -134,6 +128,48 @@ struct LookupView: View {
         }
         .tabNavigationTitle(.lookup)
         .consumeHandoff(for: .lookup) { host = $0 }
+    }
+
+    // MARK: - Toolbar pieces (shared by the one- and two-row layouts)
+
+    private var hostField: some View {
+        TextField("Hostname or IP", text: $host)
+            .textFieldStyle(.roundedBorder)
+    }
+
+    private var queryPickers: some View {
+        HStack(spacing: 12) {
+            Picker("Type", selection: $recordType) {
+                ForEach(recordTypes, id: \.self) { t in Text(t).tag(t) }
+            }
+            .fixedSize()
+
+            HStack(spacing: 4) {
+                Text("DoH:").font(.caption).foregroundStyle(.secondary)
+                Picker("Server", selection: $useServer) {
+                    ForEach(dohProviders, id: \.self) { s in Text(s).tag(s) }
+                }
+                .fixedSize()   // a fixed 90 pt showed "1." instead of the resolver
+            }
+            .fixedSize()
+        }
+    }
+
+    @ViewBuilder
+    private var lookupActions: some View {
+        if !records.isEmpty {
+            ToolActionBar("DNS-Lookup",
+                          text: { "DNS \(recordType) \(host) via \(useServer)\n\n" + records.map { "\($0.type)\tTTL \($0.ttl)\t\($0.value)" }.joined(separator: "\n") },
+                          csv: { "type,ttl,value\n" + records.map { "\($0.type),\($0.ttl),\(csvEscape($0.value))" }.joined(separator: "\n") })
+                .fixedSize()
+        }
+        Button("Lookup") { startLookup() }
+            .buttonStyle(.borderedProminent)
+            .disabled(host.isEmpty || isRunning)
+            .keyboardShortcut(.return)
+            .fixedSize()
+
+        if isRunning { ProgressView().controlSize(.small) }
     }
 
     // MARK: - DNS over HTTPS (no raw sockets, sandbox-safe)

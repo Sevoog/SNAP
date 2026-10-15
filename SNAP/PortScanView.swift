@@ -83,53 +83,35 @@ struct PortScanView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "magnifyingglass.circle").foregroundStyle(.blue)
-                TextField("Hostname or IP", text: $host)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 220)
-                HistoryMenuButton(key: .portScan) { host = $0 }
-                Text("Preset:").font(.caption).foregroundStyle(.secondary)
-                Picker("", selection: $preset) {
-                    ForEach(PortPreset.allCases) { Text($0.rawValue).tag($0) }
+            // One row when the window is wide; narrow windows put the target and
+            // Scan on the first row and the scan options on a second row
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    targetIcon
+                    hostField.frame(width: 220)
+                    HistoryMenuButton(key: .portScan) { host = $0 }
+                    scanOptions(portsMin: 200, portsMax: 200)
+                    Spacer()
+                    scanActions
                 }
-                .pickerStyle(.menu)
-                .frame(width: 160)
-                .onChange(of: preset) { newPreset in
-                    if newPreset != .custom { portRange = newPreset.ports }
-                }
-                Text("Ports:").font(.caption).foregroundStyle(.secondary)
-                TextField("e.g. 1-1024 or 22,80,443", text: $portRange)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
-                    .onChange(of: portRange) { _ in preset = .custom }
-                Text("Timeout(s):").font(.caption).foregroundStyle(.secondary)
-                TextField("", text: $timeout)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 50)
-                Toggle("Open only", isOn: $onlyOpen)
-                    .toggleStyle(.checkbox)
-                Spacer()
-                if !results.isEmpty {
-                    ToolActionBar("Port-Scan",
-                                  text: { "Port scan \(host)\n\nport\tservice\tstatus\tbanner\n" + results.sorted { $0.port < $1.port }.map { "\($0.port)\t\($0.service)\t\($0.status.rawValue)\t\($0.banner)" }.joined(separator: "\n") },
-                                  csv: { "port,service,status,banner\n" + results.sorted { $0.port < $1.port }.map { "\($0.port),\(csvEscape($0.service)),\($0.status.rawValue),\(csvEscape($0.banner))" }.joined(separator: "\n") })
-                }
-                if isRunning {
-                    Button("Stop") { scanTask?.cancel(); isRunning = false }
-                        .buttonStyle(.bordered).tint(.red)
-                    ProgressView(value: progress)
-                        .frame(width: 80)
-                    Text("\(scannedCount)/\(totalCount)").font(.caption2).foregroundStyle(.secondary)
-                } else {
-                    Button("Scan") { startScan() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(host.isEmpty)
-                        .keyboardShortcut(.return)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 12) {
+                        targetIcon
+                        hostField.frame(minWidth: 120, maxWidth: .infinity)
+                        HistoryMenuButton(key: .portScan) { host = $0 }
+                        scanActions
+                    }
+                    HStack(spacing: 12) {
+                        scanOptions(portsMin: 100, portsMax: .infinity)
+                    }
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             .background(NS.bg0)
+            .onChange(of: preset) { newPreset in
+                if newPreset != .custom { portRange = newPreset.ports }
+            }
+            .onChange(of: portRange) { _ in preset = .custom }
 
             Divider()
 
@@ -180,6 +162,67 @@ struct PortScanView: View {
         // letting it probe up to 65k ports with no UI handle left to stop it
         .onDisappear { scanTask?.cancel(); isRunning = false }
         .consumeHandoff(for: .portScan) { host = $0 }
+    }
+
+    // MARK: - Toolbar pieces (shared by the one-row and two-row layouts)
+
+    private var targetIcon: some View {
+        Image(systemName: "magnifyingglass.circle").foregroundStyle(.blue)
+    }
+
+    private var hostField: some View {
+        TextField("Hostname or IP", text: $host)
+            .textFieldStyle(.roundedBorder)
+    }
+
+    private func optionLabel(_ title: String) -> some View {
+        Text(title).font(.caption).foregroundStyle(.secondary).fixedSize()
+    }
+
+    @ViewBuilder
+    private func scanOptions(portsMin: CGFloat, portsMax: CGFloat) -> some View {
+        optionLabel("Preset:")
+        Picker("", selection: $preset) {
+            ForEach(PortPreset.allCases) { Text($0.rawValue).tag($0) }
+        }
+        .pickerStyle(.menu)
+        .frame(width: 160)
+        optionLabel("Ports:")
+        TextField("e.g. 1-1024 or 22,80,443", text: $portRange)
+            .textFieldStyle(.roundedBorder)
+            .frame(minWidth: portsMin, maxWidth: portsMax)
+        optionLabel("Timeout(s):")
+        TextField("", text: $timeout)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 50)
+        Toggle("Open only", isOn: $onlyOpen)
+            .toggleStyle(.checkbox)
+            .fixedSize()
+    }
+
+    @ViewBuilder
+    private var scanActions: some View {
+        if !results.isEmpty {
+            ToolActionBar("Port-Scan",
+                          text: { "Port scan \(host)\n\nport\tservice\tstatus\tbanner\n" + results.sorted { $0.port < $1.port }.map { "\($0.port)\t\($0.service)\t\($0.status.rawValue)\t\($0.banner)" }.joined(separator: "\n") },
+                          csv: { "port,service,status,banner\n" + results.sorted { $0.port < $1.port }.map { "\($0.port),\(csvEscape($0.service)),\($0.status.rawValue),\(csvEscape($0.banner))" }.joined(separator: "\n") })
+                .fixedSize()
+        }
+        if isRunning {
+            Button("Stop") { scanTask?.cancel(); isRunning = false }
+                .buttonStyle(.bordered).tint(.red)
+                .fixedSize()
+            ProgressView(value: progress)
+                .frame(width: 80)
+            Text("\(scannedCount)/\(totalCount)").font(.caption2).foregroundStyle(.secondary)
+                .fixedSize()
+        } else {
+            Button("Scan") { startScan() }
+                .buttonStyle(.borderedProminent)
+                .disabled(host.isEmpty)
+                .keyboardShortcut(.return)
+                .fixedSize()
+        }
     }
 
     private func statusColor(_ s: PortResult.PortStatus) -> Color {

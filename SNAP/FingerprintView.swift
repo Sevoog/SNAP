@@ -40,35 +40,25 @@ struct FingerprintView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "person.badge.key").foregroundStyle(.blue)
-                TextField("Hostname or IP", text: $host)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 240)
-                Toggle("SNMP probe", isOn: $probeSNMP)
-                    .toggleStyle(.checkbox)
-                if probeSNMP {
-                    TextField("community", text: $snmpCommunity)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 100)
+            // One row when it fits; narrow windows move the SNMP options to a second row
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.badge.key").foregroundStyle(.blue)
+                    hostField.frame(width: 240)
+                    snmpOptions
+                    Spacer()
+                    fingerprintActions
                 }
-                Spacer()
-                if !results.isEmpty {
-                    ToolActionBar("Fingerprint", text: {
-                        var s = "Fingerprint — \(host)\n"
-                        if !classification.isEmpty { s += "Identified: \(classification.displayLine)\n" }
-                        s += "\n" + results.keys.sorted().map { "\($0): \(results[$0] ?? "")" }.joined(separator: "\n")
-                        return s
-                    })
-                }
-                if isRunning {
-                    ProgressView().controlSize(.small)
-                    Text("Fingerprinting...").font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Button("Fingerprint") { startFingerprint() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(host.isEmpty)
-                        .keyboardShortcut(.return)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.badge.key").foregroundStyle(.blue)
+                        hostField.frame(minWidth: 140, maxWidth: .infinity)
+                        fingerprintActions
+                    }
+                    HStack(spacing: 12) {
+                        snmpOptions
+                        Spacer()
+                    }
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
@@ -111,6 +101,50 @@ struct FingerprintView: View {
             }
         }
         .tabNavigationTitle(.fingerprint)
+    }
+
+    // MARK: - Toolbar pieces (shared by the one- and two-row layouts)
+
+    private var hostField: some View {
+        TextField("Hostname or IP", text: $host)
+            .textFieldStyle(.roundedBorder)
+    }
+
+    private var snmpOptions: some View {
+        HStack(spacing: 12) {
+            Toggle("SNMP probe", isOn: $probeSNMP)
+                .toggleStyle(.checkbox)
+                .fixedSize()
+            if probeSNMP {
+                TextField("community", text: $snmpCommunity)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 100)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var fingerprintActions: some View {
+        if !results.isEmpty {
+            ToolActionBar("Fingerprint", text: {
+                var s = "Fingerprint — \(host)\n"
+                if !classification.isEmpty { s += "Identified: \(classification.displayLine)\n" }
+                s += "\n" + results.keys.sorted().map { "\($0): \(results[$0] ?? "")" }.joined(separator: "\n")
+                return s
+            })
+            .fixedSize()
+        }
+        if isRunning {
+            ProgressView().controlSize(.small)
+            Text("Fingerprinting...").font(.caption).foregroundStyle(.secondary)
+                .fixedSize()
+        } else {
+            Button("Fingerprint") { startFingerprint() }
+                .buttonStyle(.borderedProminent)
+                .disabled(host.isEmpty)
+                .keyboardShortcut(.return)
+                .fixedSize()
+        }
     }
 
     private var classificationBanner: some View {

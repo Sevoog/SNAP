@@ -337,6 +337,9 @@ Current: **v1.5.5**. See [CHANGELOG.md](CHANGELOG.md).
 - **Fixed: plain-HTTP requests to the internet were blocked.** The Dashboard's GeoIP card, three of Network Health's captive-portal checks, and HTTP Probe on `http://` sites now work.
 - **Fixed: the window title and toolbar now follow the tab on screen.** After visiting Network Info, other tabs showed its title and its Refresh, Copy, and Export buttons.
 - **Fixed:** the Status Board's CPU row showed "%" with no number, and the Quick Tour said 38 tools (there are 35).
+- **Fixed: narrow windows.** At the smallest window size, some tools pushed the sidebar off the window's edge or squeezed their labels until they broke mid-word. Their toolbars now wrap onto two rows when space is tight, and the sidebar always stays fully visible.
+- **Easier to read and to find help.** The sidebar's status and version and the About panel's text are brighter in every theme. **Help → SNAP Help** opens this page, and the About window links to the source code and [sevag.ai](https://sevag.ai).
+- **Credit stays with the code.** Every source file carries its copyright notice, and [NOTICE.md](NOTICE.md) asks anyone who shares SNAP to keep the attribution (GPL v3 section 7(b)).
 - **Requires macOS 14.0**, now pinned instead of depending on the Xcode version used to build.
 
 ### What's new in v1.5.4 — persistent tabs, Daylight fix, real scan ranges

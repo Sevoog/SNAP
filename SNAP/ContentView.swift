@@ -298,12 +298,15 @@ struct ContentView: View {
             // Sidebar
             DarkSidebar(selectedTab: $selectedTab, searchText: $searchText)
 
-            // Main content area
+            // Main content area. minWidth 0 + clipped: a tool that needs more
+            // width than the window gives it is cut off inside its own area
+            // instead of pushing the rail and sidebar off the window's edge.
             ZStack {
                 NS.bg0.ignoresSafeArea()
                 detailView
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .clipped()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(NS.bg0)
@@ -744,10 +747,10 @@ struct AboutSheet: View {
                         .foregroundStyle(NS.text1)
                     Text("Sev's Network Analysis Platform")
                         .font(.system(size: 12))
-                        .foregroundStyle(NS.text3)
+                        .foregroundStyle(NS.text2)
                     Text("Version \(AppInfo.version)")
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(NS.text4)
+                        .foregroundStyle(NS.text2)
                         .padding(.top, 2)
                 }
 
@@ -785,7 +788,7 @@ struct AboutSheet: View {
                     }
                 }
                 .font(.system(size: 10))
-                .foregroundStyle(NS.text4)
+                .foregroundStyle(NS.text2)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 20)
             }
@@ -803,11 +806,11 @@ struct AboutSheet: View {
                 .frame(width: 16)
             Text(label)
                 .font(.system(size: 11))
-                .foregroundStyle(NS.text3)
+                .foregroundStyle(NS.text2)
             Spacer()
             Text(value)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(NS.text2)
+                .foregroundStyle(NS.text1)
         }
     }
 }

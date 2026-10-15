@@ -482,58 +482,111 @@ struct BulkDiscoveryView: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "square.grid.3x3.fill.square").foregroundStyle(.cyan)
-            Text("Bulk Subnet Discovery").font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(NS.text1)
-            if !model.status.isEmpty {
-                Text(model.status).font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(NS.text3)
+        // One row when it fits; narrow windows move the status line under the title
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                toolbarTitle
+                statusText
+                Spacer()
+                toolbarActions
             }
-            Spacer()
-            if !model.assets.isEmpty {
-                ToolActionBar("Bulk-Discovery",
-                              text: { model.exportText() },
-                              csv:  { model.exportCSV() },
-                              json: { model.exportJSON() })
-            }
-            if model.isRunning {
-                Button("Stop") { model.cancel() }
-                    .buttonStyle(.bordered).tint(.red)
-                ProgressView().controlSize(.small)
-            } else {
-                Button("Start") { model.start() }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.return)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 12) {
+                    toolbarTitle
+                    Spacer()
+                    toolbarActions
+                }
+                statusText
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(NS.bg0)
     }
 
+    @ViewBuilder
+    private var toolbarTitle: some View {
+        Image(systemName: "square.grid.3x3.fill.square").foregroundStyle(.cyan)
+        Text("Bulk Subnet Discovery").font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(NS.text1)
+            .fixedSize()
+    }
+
+    @ViewBuilder
+    private var statusText: some View {
+        if !model.status.isEmpty {
+            Text(model.status).font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(NS.text3)
+                .lineLimit(1)
+        }
+    }
+
+    @ViewBuilder
+    private var toolbarActions: some View {
+        if !model.assets.isEmpty {
+            ToolActionBar("Bulk-Discovery",
+                          text: { model.exportText() },
+                          csv:  { model.exportCSV() },
+                          json: { model.exportJSON() })
+                .fixedSize()
+        }
+        if model.isRunning {
+            Button("Stop") { model.cancel() }
+                .buttonStyle(.bordered).tint(.red)
+                .fixedSize()
+            ProgressView().controlSize(.small)
+        } else {
+            Button("Start") { model.start() }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return)
+                .fixedSize()
+        }
+    }
+
     private var configBar: some View {
-        HStack(spacing: 8) {
-            Text("Range:").font(.system(size: 11)).foregroundStyle(NS.text3)
-            TextField("192.168.1.0/24", text: $model.cidr)
-                .textFieldStyle(.roundedBorder).frame(width: 200)
-                .disabled(model.isRunning)
-                .help("A subnet (10.0.0.0/22), a range (10.0.0.1-10.0.3.254 or 192.168.1.100-150), a /24 shorthand (192.168.1), or a single address — several separated by commas.")
-            Toggle("Port scan", isOn: $model.includePortScan).toggleStyle(.checkbox).font(.system(size: 11))
-                .disabled(model.isRunning)
-            Toggle("SNMP probe", isOn: $model.probeSNMP).toggleStyle(.checkbox).font(.system(size: 11))
-                .disabled(model.isRunning)
-            if model.probeSNMP {
-                TextField("community", text: $model.community)
-                    .textFieldStyle(.roundedBorder).frame(width: 90)
-                    .disabled(model.isRunning)
+        // One row when it fits; narrow windows move the range hint to its own row
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                configControls
+                Spacer()
+                rangeHint
             }
-            Spacer()
-            // Previously read "Max /22 (1024 hosts)" while the code allowed 8,192.
-            Text("Up to \(BulkDiscoveryModel.maxHosts.formatted()) addresses (a /19) — keep scans focused")
-                .font(.system(size: 10)).foregroundStyle(NS.text3)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    configControls
+                    Spacer()
+                }
+                rangeHint
+            }
         }
         .padding(.horizontal, 16).padding(.vertical, 6)
         .background(NS.bg1)
+    }
+
+    @ViewBuilder
+    private var configControls: some View {
+        Text("Range:").font(.system(size: 11)).foregroundStyle(NS.text3).fixedSize()
+        TextField("192.168.1.0/24", text: $model.cidr)
+            .textFieldStyle(.roundedBorder).frame(width: 200)
+            .disabled(model.isRunning)
+            .help("A subnet (10.0.0.0/22), a range (10.0.0.1-10.0.3.254 or 192.168.1.100-150), a /24 shorthand (192.168.1), or a single address — several separated by commas.")
+        Toggle("Port scan", isOn: $model.includePortScan).toggleStyle(.checkbox).font(.system(size: 11))
+            .fixedSize()
+            .disabled(model.isRunning)
+        Toggle("SNMP probe", isOn: $model.probeSNMP).toggleStyle(.checkbox).font(.system(size: 11))
+            .fixedSize()
+            .disabled(model.isRunning)
+        if model.probeSNMP {
+            TextField("community", text: $model.community)
+                .textFieldStyle(.roundedBorder).frame(width: 90)
+                .disabled(model.isRunning)
+        }
+    }
+
+    // Previously read "Max /22 (1024 hosts)" while the code allowed 8,192.
+    private var rangeHint: some View {
+        Text("Up to \(BulkDiscoveryModel.maxHosts.formatted()) addresses (a /19) — keep scans focused")
+            .font(.system(size: 10)).foregroundStyle(NS.text3)
+            .lineLimit(1)
     }
 
     private var progressBar: some View {
