@@ -3,7 +3,7 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ---
 
-## [Unreleased]
+## [1.5.6] - 2026-10-15
 
 ### Fixed: switching themes left parts of some screens in the old theme
 

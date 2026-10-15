@@ -28,7 +28,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 
 ## Install
 
-1. Download `SNAP-1.5.5.zip` from the [latest release](https://github.com/Sevoog/SNAP/releases/latest).
+1. Download `SNAP-1.5.6.zip` from the [latest release](https://github.com/Sevoog/SNAP/releases/latest).
 2. Unzip it and drag **SNAP** into your Applications folder. It runs natively on Apple silicon and Intel Macs with macOS 14 or later.
 3. Open SNAP. The first time, macOS blocks it, because SNAP isn't notarized by Apple yet. To open it anyway:
    - In the warning ("Apple could not verify…"), click **Done**.
@@ -38,7 +38,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
    After that, SNAP opens normally. If you'd rather use Terminal, `xattr -dr com.apple.quarantine /Applications/SNAP.app` does the same thing.
 4. On first launch, SNAP asks for **Location** (macOS only shows Wi-Fi network names to apps that have it) and **Local Network** access. See [Privacy & Security](#privacy--security) for what each is used for. A short Quick Tour opens the first time; reopen it anytime from **Help → Quick Tour…**.
 
-**Check the download (optional):** the release page lists the zip's SHA-256. Compare it with the output of `shasum -a 256 SNAP-1.5.5.zip`.
+**Check the download (optional):** the release page lists the zip's SHA-256. Compare it with the output of `shasum -a 256 SNAP-1.5.6.zip`.
 
 **Build it yourself:** see [Building](#building). There are no dependencies, and Xcode signs it to run on your Mac automatically.
 
@@ -111,7 +111,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 - **Connection Quality Score** — 0–100 rating (Excellent → Critical) derived from latency, loss, jitter, retransmits, and DNS responsiveness
 - **Sandboxless Networking** — Direct `getifaddrs` / `sysctl` / raw UDP syscalls — no `netstat` spawning for hot-path sampling
 - **Dark-Only UI** — Custom 3-column layout (icon rail + sidebar + main) with NS design tokens throughout
-- **XCTest target** — 124 unit tests across SubnetCalculator, DNSWire, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip + sysObjectID), Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, WiFi band/channel helpers, connection-health scoring (incl. menu bar dot outage timelines), public-lookup caching, Status Board Wi-Fi readings, and scan-range parsing (CIDR, ranges, limits) — *added in v1.2.3, expanded through v1.5.4*
+- **XCTest target:** 326 unit tests across SubnetCalculator, DNSWire, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip, sysObjectID, walks and fallbacks against a fake agent, Health, Inventory, Interfaces and Watch, Neighbors, Where Is It?, remembered communities, the Status Board watch), iPerf3 output parsing and verdicts, theme contrast, Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, WiFi band/channel helpers, connection-health scoring (incl. menu bar dot outage timelines), public-lookup caching, Status Board Wi-Fi readings, and scan-range parsing (CIDR, ranges, limits) (added in v1.2.3, expanded through v1.5.6)
 
 ## Requirements
 - macOS 14.0 (Sonoma) or later
@@ -339,7 +339,16 @@ open SNAP.xcodeproj
 ```
 
 ## Version
-Current: **v1.5.5**. See [CHANGELOG.md](CHANGELOG.md).
+Current: **v1.5.6**. See [CHANGELOG.md](CHANGELOG.md).
+
+### What's new in v1.5.6: SNMP rebuilt, iPerf3 explained, readable in every theme
+- **SNMP, rebuilt.** Seven views in one menu: System Info; Health (printer toner and ink, UPS battery and minutes left, NAS and server storage and CPU, each with a one-line verdict); Inventory (models and serial numbers, with Copy buttons); Interfaces (port names and labels, correct speeds, errors, last change, a physical-ports filter, and **Watch live** for traffic per port); Neighbors (LLDP and CDP, with a button to query the next switch); Where Is It? (the switch port an IP or MAC address is on); and Custom OID Walk.
+- **Easier SNMP.** A how-to card, a "No answer" card that says what to check, Options (Auto, v2c, or v1; timeout; retries; row limit), opt-in **Remember** that keeps a host's community string in your Keychain, and **Query with SNMP** in every host's right-click menu.
+- **SNMP Watch tile.** Pin a device or a port to the Status Board to see its status, uptime, and live traffic.
+- **iPerf3 results, explained.** Summary cards, a plain-language verdict against your Mac's link speed, a per-second chart, and a key to iperf3's columns, next to iperf3's own output. Choose upload, download, or both; 1 to 8 streams; and 5 to 60 seconds. Recent LAN tests are saved separately from internet tests.
+- **Readable in every theme.** The menu bar popover's text now reaches at least 4.5:1 contrast in all 12 themes, with slightly larger captions. Switching themes updates every screen right away; iPerf3 results and chart labels used to keep the old theme's colors until their data changed.
+- **Fixed:** iPerf3 mode couldn't find iperf3 on Intel Macs (Homebrew and MacPorts folders are now checked); duplicate Copy and Export buttons in iPerf3 mode; byte units now match everywhere (1 KB = 1,000 bytes).
+- **Fixed in SNMP:** a misbehaving device could crash SNAP; Stop didn't stop a query; 10 Gbps ports showed as 4 Gbps; and Copy and Export included the community string.
 
 ### What's new in v1.5.5: open source, two e-ink themes, fixes
 - **Open source.** SNAP is now free and open source under the GNU GPL v3. Contributions are welcome under a [Contributor License Agreement](CLA.md).
