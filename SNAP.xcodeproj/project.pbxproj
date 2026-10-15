@@ -42,10 +42,22 @@
 		AA01000000000000000000AA /* oui_registry.txt in Resources */ = {isa = PBXBuildFile; fileRef = AA02000000000000000000AA /* oui_registry.txt */; };
 		AA03000000000000000000AA /* SNMPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA04000000000000000000AA /* SNMPClient.swift */; };
 		AA05000000000000000000AA /* SNMPView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA06000000000000000000AA /* SNMPView.swift */; };
+		5B0D0000000000000000005B /* SNMPInterfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B0E0000000000000000005B /* SNMPInterfaces.swift */; };
+		5B0B0000000000000000005B /* SNMPHealth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B0C0000000000000000005B /* SNMPHealth.swift */; };
+		5B090000000000000000005B /* SNMPInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B0A0000000000000000005B /* SNMPInventory.swift */; };
+		5B070000000000000000005B /* SNMPNeighbors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B080000000000000000005B /* SNMPNeighbors.swift */; };
+		5B050000000000000000005B /* SNMPWhereIs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B060000000000000000005B /* SNMPWhereIs.swift */; };
+		5B030000000000000000005B /* SNMPCommunityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B040000000000000000005B /* SNMPCommunityStore.swift */; };
+		5B010000000000000000005B /* SNMPBoardWatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B020000000000000000005B /* SNMPBoardWatch.swift */; };
 		AA07000000000000000000AA /* RoutingHelloView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA08000000000000000000AA /* RoutingHelloView.swift */; };
 		AA09000000000000000000AA /* SyslogReceiverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0A000000000000000000AA /* SyslogReceiverView.swift */; };
 		AA0908166CF4030DC0BF9C0B /* ConnectionSummaryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E5A81F9DD795FEB54BDAEF /* ConnectionSummaryCard.swift */; };
 		AA0B000000000000000000AA /* SNMPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0C000000000000000000AA /* SNMPTests.swift */; };
+		5B170000000000000000005B /* SNMPInterfacesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B180000000000000000005B /* SNMPInterfacesTests.swift */; };
+		5B150000000000000000005B /* SNMPHealthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B160000000000000000005B /* SNMPHealthTests.swift */; };
+		5B130000000000000000005B /* SNMPInventoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B140000000000000000005B /* SNMPInventoryTests.swift */; };
+		5B110000000000000000005B /* SNMPTopologyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B120000000000000000005B /* SNMPTopologyTests.swift */; };
+		5B0F0000000000000000005B /* SNMPBoardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B100000000000000000005B /* SNMPBoardTests.swift */; };
 		AA0D000000000000000000AA /* SyslogParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0E000000000000000000AA /* SyslogParserTests.swift */; };
 		AA39000000000000000000AA /* ConnectionHealthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3A000000000000000000AA /* ConnectionHealthTests.swift */; };
 		AA3B000000000000000000AA /* PublicLookupPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3C000000000000000000AA /* PublicLookupPolicyTests.swift */; };
@@ -135,9 +147,21 @@
 		AA02000000000000000000AA /* oui_registry.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = oui_registry.txt; sourceTree = "<group>"; };
 		AA04000000000000000000AA /* SNMPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPClient.swift; sourceTree = "<group>"; };
 		AA06000000000000000000AA /* SNMPView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPView.swift; sourceTree = "<group>"; };
+		5B0E0000000000000000005B /* SNMPInterfaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPInterfaces.swift; sourceTree = "<group>"; };
+		5B0C0000000000000000005B /* SNMPHealth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPHealth.swift; sourceTree = "<group>"; };
+		5B0A0000000000000000005B /* SNMPInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPInventory.swift; sourceTree = "<group>"; };
+		5B080000000000000000005B /* SNMPNeighbors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPNeighbors.swift; sourceTree = "<group>"; };
+		5B060000000000000000005B /* SNMPWhereIs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPWhereIs.swift; sourceTree = "<group>"; };
+		5B040000000000000000005B /* SNMPCommunityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPCommunityStore.swift; sourceTree = "<group>"; };
+		5B020000000000000000005B /* SNMPBoardWatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPBoardWatch.swift; sourceTree = "<group>"; };
 		AA08000000000000000000AA /* RoutingHelloView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingHelloView.swift; sourceTree = "<group>"; };
 		AA0A000000000000000000AA /* SyslogReceiverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyslogReceiverView.swift; sourceTree = "<group>"; };
 		AA0C000000000000000000AA /* SNMPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPTests.swift; sourceTree = "<group>"; };
+		5B180000000000000000005B /* SNMPInterfacesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPInterfacesTests.swift; sourceTree = "<group>"; };
+		5B160000000000000000005B /* SNMPHealthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPHealthTests.swift; sourceTree = "<group>"; };
+		5B140000000000000000005B /* SNMPInventoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPInventoryTests.swift; sourceTree = "<group>"; };
+		5B120000000000000000005B /* SNMPTopologyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPTopologyTests.swift; sourceTree = "<group>"; };
+		5B100000000000000000005B /* SNMPBoardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPBoardTests.swift; sourceTree = "<group>"; };
 		AA0E000000000000000000AA /* SyslogParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyslogParserTests.swift; sourceTree = "<group>"; };
 		AA3A000000000000000000AA /* ConnectionHealthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionHealthTests.swift; sourceTree = "<group>"; };
 		AA3C000000000000000000AA /* PublicLookupPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicLookupPolicyTests.swift; sourceTree = "<group>"; };
@@ -221,6 +245,11 @@
 				02160D3817B009DECFBD4896 /* OUIDatabaseTests.swift */,
 				9805D9A4CDDD0736B25F86BD /* NetworkMapModelTests.swift */,
 				AA0C000000000000000000AA /* SNMPTests.swift */,
+				5B180000000000000000005B /* SNMPInterfacesTests.swift */,
+				5B160000000000000000005B /* SNMPHealthTests.swift */,
+				5B140000000000000000005B /* SNMPInventoryTests.swift */,
+				5B120000000000000000005B /* SNMPTopologyTests.swift */,
+				5B100000000000000000005B /* SNMPBoardTests.swift */,
 				AA0E000000000000000000AA /* SyslogParserTests.swift */,
 				AA3A000000000000000000AA /* ConnectionHealthTests.swift */,
 				AA3C000000000000000000AA /* PublicLookupPolicyTests.swift */,
@@ -293,6 +322,13 @@
 				AA02000000000000000000AA /* oui_registry.txt */,
 				AA04000000000000000000AA /* SNMPClient.swift */,
 				AA06000000000000000000AA /* SNMPView.swift */,
+				5B0E0000000000000000005B /* SNMPInterfaces.swift */,
+				5B0C0000000000000000005B /* SNMPHealth.swift */,
+				5B0A0000000000000000005B /* SNMPInventory.swift */,
+				5B080000000000000000005B /* SNMPNeighbors.swift */,
+				5B060000000000000000005B /* SNMPWhereIs.swift */,
+				5B040000000000000000005B /* SNMPCommunityStore.swift */,
+				5B020000000000000000005B /* SNMPBoardWatch.swift */,
 				AA08000000000000000000AA /* RoutingHelloView.swift */,
 				AA0A000000000000000000AA /* SyslogReceiverView.swift */,
 				AA12000000000000000000AA /* BGPLookupView.swift */,
@@ -451,6 +487,13 @@
 				AA0908166CF4030DC0BF9C0B /* ConnectionSummaryCard.swift in Sources */,
 				AA03000000000000000000AA /* SNMPClient.swift in Sources */,
 				AA05000000000000000000AA /* SNMPView.swift in Sources */,
+				5B0D0000000000000000005B /* SNMPInterfaces.swift in Sources */,
+				5B0B0000000000000000005B /* SNMPHealth.swift in Sources */,
+				5B090000000000000000005B /* SNMPInventory.swift in Sources */,
+				5B070000000000000000005B /* SNMPNeighbors.swift in Sources */,
+				5B050000000000000000005B /* SNMPWhereIs.swift in Sources */,
+				5B030000000000000000005B /* SNMPCommunityStore.swift in Sources */,
+				5B010000000000000000005B /* SNMPBoardWatch.swift in Sources */,
 				AA07000000000000000000AA /* RoutingHelloView.swift in Sources */,
 				AA09000000000000000000AA /* SyslogReceiverView.swift in Sources */,
 				AA11000000000000000000AA /* BGPLookupView.swift in Sources */,
@@ -482,6 +525,11 @@
 				D8AAB53557C90DAA672AD59C /* OUIDatabaseTests.swift in Sources */,
 				45EF9F720715477F97E272B4 /* NetworkMapModelTests.swift in Sources */,
 				AA0B000000000000000000AA /* SNMPTests.swift in Sources */,
+				5B170000000000000000005B /* SNMPInterfacesTests.swift in Sources */,
+				5B150000000000000000005B /* SNMPHealthTests.swift in Sources */,
+				5B130000000000000000005B /* SNMPInventoryTests.swift in Sources */,
+				5B110000000000000000005B /* SNMPTopologyTests.swift in Sources */,
+				5B0F0000000000000000005B /* SNMPBoardTests.swift in Sources */,
 				AA0D000000000000000000AA /* SyslogParserTests.swift in Sources */,
 				AA39000000000000000000AA /* ConnectionHealthTests.swift in Sources */,
 				AA3B000000000000000000AA /* PublicLookupPolicyTests.swift in Sources */,

@@ -418,3 +418,84 @@ final class SNMPWalkTests: XCTestCase {
         XCTAssertEqual(client.localAddress, "127.0.0.1")
     }
 }
+
+// MARK: - Remember: filling in and forgetting saved communities
+
+private final class CountingSecrets: SNMPSecretStore {
+    var items: [String: String] = [:]
+    var reads = 0
+    func read(account: String) -> SNMPSecretLookup {
+        reads += 1
+        return items[account].map { .found($0) } ?? .missing
+    }
+    func write(account: String, secret: String) -> Bool { items[account] = secret; return true }
+    func delete(account: String) { items[account] = nil }
+}
+
+@MainActor
+final class SNMPRememberTests: XCTestCase {
+    private let suite = "snap.tests.snmp.remember"
+    private var secrets: CountingSecrets!
+    private var live: SNMPCommunityStore.Backend?
+
+    override func setUp() async throws {
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        secrets = CountingSecrets()
+        live = SNMPCommunityStore.backend
+        SNMPCommunityStore.backend = .init(secrets: secrets, defaults: defaults,
+                                           indexKey: "remembered", boardKey: "board")
+        SNMPCommunityStore.save(host: "10.0.0.2", port: 161, community: "s3cret")
+    }
+
+    override func tearDown() async throws {
+        if let live { SNMPCommunityStore.backend = live }
+        UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
+    }
+
+    /// Typing past a saved host used to leave its community in the field.
+    func test_savedHost_fillsIn_andLeavingItRestoresWhatWasTyped() {
+        let m = SNMPQueryModel()
+        m.community = "mine"
+        m.host = "10.0.0.2"; m.hostChanged()
+        XCTAssertEqual(m.community, "s3cret")
+        XCTAssertTrue(m.rememberCommunity)
+        m.host = "10.0.0.25"; m.hostChanged()
+        XCTAssertEqual(m.community, "mine")
+        XCTAssertFalse(m.rememberCommunity)
+        XCTAssertTrue(SNMPCommunityStore.hasSaved(host: "10.0.0.2", port: 161))   // nothing forgotten
+    }
+
+    func test_sameHost_readsTheKeychainOnce() {
+        let m = SNMPQueryModel()
+        m.host = "10.0.0.2"
+        m.hostChanged(); m.hostChanged(); m.hostChanged()
+        XCTAssertEqual(secrets.reads, 1)
+    }
+
+    func test_untickingRemember_forgetsThatHostOnly() {
+        SNMPCommunityStore.save(host: "10.0.0.3", port: 161, community: "other")
+        let m = SNMPQueryModel()
+        m.host = "10.0.0.2"; m.hostChanged()
+        m.userSetRemember(false)
+        XCTAssertFalse(SNMPCommunityStore.hasSaved(host: "10.0.0.2", port: 161))
+        XCTAssertTrue(SNMPCommunityStore.hasSaved(host: "10.0.0.3", port: 161))
+    }
+
+    /// A tick made by hand on an unsaved host survives editing the host.
+    func test_manualTick_onUnsavedHost_isKept() {
+        let m = SNMPQueryModel()
+        m.host = "192.168.1.1"; m.hostChanged()
+        m.userSetRemember(true)
+        m.host = "192.168.1.10"; m.hostChanged()
+        XCTAssertTrue(m.rememberCommunity)
+    }
+
+    func test_forgetAll_clearsAndUnticks() {
+        let m = SNMPQueryModel()
+        m.host = "10.0.0.2"; m.hostChanged()
+        m.forgetAllCommunities()
+        XCTAssertFalse(m.rememberCommunity)
+        XCTAssertEqual(SNMPCommunityStore.savedCount, 0)
+    }
+}

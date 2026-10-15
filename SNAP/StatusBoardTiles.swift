@@ -17,6 +17,8 @@ enum StatusTileKind: String, CaseIterable, Identifiable, Codable {
     case bandwidth, wifi, alerts, favorites, latency, speedTest
     // v1.5.2 additions:
     case dnsLatency, system, topTalkers
+    // v1.5.6:
+    case snmpWatch
 
     var id: String { rawValue }
 
@@ -31,6 +33,7 @@ enum StatusTileKind: String, CaseIterable, Identifiable, Codable {
         case .dnsLatency: "DNS Latency"
         case .system:     "System"
         case .topTalkers: "Top Talkers"
+        case .snmpWatch:  "SNMP Watch"
         }
     }
 
@@ -45,6 +48,7 @@ enum StatusTileKind: String, CaseIterable, Identifiable, Codable {
         case .dnsLatency: "magnifyingglass"
         case .system:     "cpu"
         case .topTalkers: "square.stack.3d.up.fill"
+        case .snmpWatch:  "rectangle.connected.to.line.below"
         }
     }
 
@@ -59,6 +63,7 @@ enum StatusTileKind: String, CaseIterable, Identifiable, Codable {
         case .dnsLatency: "Round-trip latency to configured DNS resolvers"
         case .system:     "Mac uptime, CPU load, memory pressure, battery"
         case .topTalkers: "Top processes by RX/TX right now (via nettop)"
+        case .snmpWatch:  "One device or port you pinned from the SNMP tab: status, uptime, live traffic"
         }
     }
 }
@@ -225,6 +230,7 @@ struct StatusTileBody: View {
         case .dnsLatency: SBDNSLatencyTile()
         case .system:     SBSystemTile()
         case .topTalkers: SBTopTalkersTile()
+        case .snmpWatch:  SBSNMPWatchTile()
         }
     }
 }

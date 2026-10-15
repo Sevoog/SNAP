@@ -564,6 +564,54 @@ struct SNMPMessage {
     }
 }
 
+// MARK: - Tables and typed values
+
+/// A walked table column. `order` keeps the device's order.
+struct SNMPColumn {
+    var values: [[UInt32]: SNMPValue] = [:]
+    var order: [[UInt32]] = []
+    var end: SNMPWalk.End = .complete
+
+    /// For single-number indexes (ifTable, ifXTable, hrStorageTable…).
+    var byIndex: [UInt32: SNMPValue] {
+        var out: [UInt32: SNMPValue] = [:]
+        for (k, v) in values where k.count == 1 { out[k[0]] = v }
+        return out
+    }
+    subscript(_ index: [UInt32]) -> SNMPValue? { values[index] }
+}
+
+extension SNMPValue {
+    /// Counters, gauges, ticks, and non-negative integers as a number.
+    var uint64: UInt64? {
+        switch self {
+        case .counter32(let v): return UInt64(v)
+        case .gauge32(let v):   return UInt64(v)
+        case .timeTicks(let v): return UInt64(v)
+        case .counter64(let v): return v
+        case .integer(let v):   return v >= 0 ? UInt64(v) : nil
+        default:                return nil
+        }
+    }
+    /// INTEGER values (enums, signed sizes; -2 / -3 "unknown" markers).
+    var int64: Int64? {
+        if case .integer(let v) = self { return v }
+        return uint64.map { Int64(clamping: $0) }
+    }
+    /// An octet string that reads as text (see `SNMPValue.text`).
+    var string: String? {
+        if case .octetString(let d) = self { return SNMPValue.text(d) }
+        return nil
+    }
+    /// Raw bytes of an octet string, opaque, or IP address.
+    var bytes: Data? {
+        switch self {
+        case .octetString(let d), .opaque(let d), .ipAddress(let d): return d
+        default: return nil
+        }
+    }
+}
+
 // MARK: - Client
 
 /// The result of a walk: the rows, and why it stopped.
@@ -782,6 +830,19 @@ final class SNMPClient: @unchecked Sendable {
         return SNMPWalk(rows: single.filter { !$0.value.isException }, end: .complete)
     }
 
+    /// One column of a table, keyed by row index: the OID components after
+    /// `column` (one number for ifTable, several for LLDP or bridge tables).
+    func column(_ column: OID, maxReps: Int = 30, maxRows: Int = 1024) async throws -> SNMPColumn {
+        let w = try await bulkWalk(column, maxReps: maxReps, maxRows: maxRows)
+        var col = SNMPColumn(end: w.end)
+        for vb in w.rows {
+            let index = Array(vb.oid.components.dropFirst(column.components.count))
+            if col.values[index] == nil { col.order.append(index) }
+            col.values[index] = vb.value
+        }
+        return col
+    }
+
     // MARK: Transport (UDP round trip + retries)
 
     private func round(_ msg: SNMPMessage) async throws -> [SNMPVarBind] {
@@ -796,7 +857,7 @@ final class SNMPClient: @unchecked Sendable {
                 } else {
                     reply = try await sendOnce(payload, expectedID: msg.requestID)
                 }
-                stateLock.lock(); _replies += 1; stateLock.unlock()
+                noteReply()
                 if reply.errorStatus != 0 {
                     throw SNMPError.errorStatus(Int(reply.errorStatus),
                                                 snmpErrorLabel(Int(reply.errorStatus)),
@@ -893,6 +954,11 @@ final class SNMPClient: @unchecked Sendable {
         default:
             return false
         }
+    }
+
+    /// Synchronous on purpose: NSLock can't be used directly in async code.
+    private func noteReply() {
+        stateLock.lock(); _replies += 1; stateLock.unlock()
     }
 
     private func setLocalAddress(_ a: String) {

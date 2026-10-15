@@ -5,6 +5,18 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ## [Unreleased]
 
+### SNMP: seven views, Watch live, and a Status Board tile
+
+The SNMP tab now has a menu of views, grouped Device, Ports, and Advanced.
+
+- **Health.** Printer toner and ink levels, UPS battery charge and minutes left, and storage and CPU on NAS boxes and servers, each with a one-line verdict such as "Black toner at 8%: replace it soon" or "On mains power. Battery 100%, about 42 min of runtime". Uses the standard Printer, UPS, and Host Resources MIBs, with APC's own MIB as a fallback for UPSes.
+- **Inventory.** Models and serial numbers of the chassis, modules, power supplies, and fans (ENTITY-MIB), with a Copy button on each serial and Copy All Serials. Printers, UPSes, and Synology NAS boxes fall back to their own MIBs.
+- **Interfaces, rebuilt.** Port names and the labels admins type, correct speeds, error counts, when each port last changed ("3 min ago"), and a Physical ports only filter, with a one-line summary above the table. **Watch live** polls the ports shown every 2 to 30 s and adds live in and out traffic, % of link, a trend line, and a chart for the selected port.
+- **Neighbors.** What's plugged into each port, from LLDP and Cisco's CDP: the neighbor's name, its port, what kind of device it is, and its address, with a Query button to hop to that switch.
+- **Where Is It?** Type an IP or MAC address and get the switch port it's on. SNAP finds the MAC address in the device's ARP table or your Mac's, looks it up in the switch's MAC table, and tells you when the port leads to another switch instead, with a button to keep looking there.
+- **Remember.** An opt-in checkbox keeps a host's community string in your Keychain and fills it in next time. Unticking it forgets that host; Options has Forget All.
+- **Status Board: SNMP Watch tile.** Pin a device from System Info, or a port from Interfaces, with Show on Status Board. The tile shows its status, uptime, and, for a port, live traffic with % of link. It asks the device every 10 s only while the board shows it, using its own saved copy of the community string.
+
 ### SNMP: easier to use, and several fixes
 
 New:

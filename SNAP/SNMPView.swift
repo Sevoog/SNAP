@@ -19,6 +19,12 @@
 //   • Custom OID Walk: type any OID; we GETBULK-walk it, or GET it when it's
 //     a single value.
 //
+// Health, Inventory, Neighbors, and Where Is It? live in their own files
+// (SNMPHealth.swift, SNMPInventory.swift, SNMPNeighbors.swift,
+// SNMPWhereIs.swift), as do Interfaces and its live Watch
+// (SNMPInterfaces.swift). This file is the shell: the toolbar, the query
+// lifecycle, failure cards, System Info, and the Custom OID Walk.
+//
 // Version "Auto" asks over v2c, then once over v1 when there's no answer.
 // SNAP only reads (GET, GETNEXT, GETBULK); the how-to card says so. Exports
 // never include the community string.
@@ -29,9 +35,48 @@ import SwiftUI
 
 enum SNMPMode: String, CaseIterable, Identifiable {
     case system     = "System Info"
+    case health     = "Health"
+    case inventory  = "Inventory"
     case interfaces = "Interfaces"
+    case neighbors  = "Neighbors"
+    case whereIs    = "Where Is It?"
     case walk       = "Custom OID Walk"
     var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .system:     return "info.circle"
+        case .health:     return "heart.text.square"
+        case .inventory:  return "shippingbox"
+        case .interfaces: return "rectangle.connected.to.line.below"
+        case .neighbors:  return "point.3.connected.trianglepath.dotted"
+        case .whereIs:    return "mappin.and.ellipse"
+        case .walk:       return "list.bullet.indent"
+        }
+    }
+
+    /// The mode menu's sections.
+    static let sections: [(title: String, modes: [SNMPMode])] = [
+        ("Device",   [.system, .health, .inventory]),
+        ("Ports",    [.interfaces, .neighbors, .whereIs]),
+        ("Advanced", [.walk]),
+    ]
+}
+
+/// Everything needed to ask the same device again (Watch, hops, the
+/// Status Board). Kept in memory only: it holds the community string.
+struct SNMPClientConfig: Equatable {
+    let host: String
+    let port: UInt16
+    let community: String
+    let version: SNMPVersion
+    let timeout: Double
+    let retries: Int
+
+    func makeClient() -> SNMPClient {
+        SNMPClient(host: host, port: port, community: community,
+                   version: version, timeout: timeout, retries: retries)
+    }
 }
 
 enum SNMPVersionChoice: String, CaseIterable, Identifiable {
@@ -44,17 +89,6 @@ extension SNMPVersion {
 }
 
 // MARK: - Row models
-
-struct SNMPInterfaceRow: Identifiable, Hashable {
-    let id: UInt32              // ifIndex
-    let descr: String
-    let operStatus: String      // "up", "down", "disabled" (admin down), …
-    let speed: String           // human-formatted
-    let speedRaw: UInt64        // for sorting
-    let inOctets: UInt64
-    let outOctets: UInt64
-    var counters64 = true       // false: 32-bit counters, which wrap every 4.29 GB
-}
 
 /// System Info values. nil = the device didn't provide it.
 struct SNMPSystemInfo: Equatable {
@@ -109,6 +143,10 @@ final class SNMPQueryModel: ObservableObject {
     @Published var port = "161"
     @Published var mode: SNMPMode = .system
     @Published var customOID = "1.3.6.1.2.1.1"
+    /// Where Is It?: the IP or MAC address to find.
+    @Published var locateQuery = ""
+    /// Opt-in: keep this host's community string in the Keychain.
+    @Published var rememberCommunity = false
 
     // Options (kept for this session only)
     @Published var versionChoice: SNMPVersionChoice = .auto
@@ -125,12 +163,17 @@ final class SNMPQueryModel: ObservableObject {
     @Published private(set) var failures: [SNMPMode: SNMPFailure] = [:]
     @Published private(set) var rawErrors: [SNMPMode: String] = [:]
     @Published var system: SNMPSystemInfo?
-    @Published var interfaces: [SNMPInterfaceRow] = []
-    /// Why the interface list may be incomplete, if it is.
-    @Published var interfacesNote: SNMPWalkNote?
+    @Published var interfaceReport: SNMPInterfaceReport?
+    @Published var health: SNMPHealthReport?
+    @Published var inventory: SNMPInventoryReport?
+    @Published var neighbors: SNMPNeighborReport?
+    @Published var locate: SNMPLocateReport?
     @Published var walkRows: [OIDWalkRow] = []
     @Published var walkNote: SNMPWalkNote?
     @Published private(set) var info: [SNMPMode: SNMPRunInfo] = [:]
+    /// How each mode's results were fetched, so Watch, neighbor hops, and the
+    /// Status Board can ask the same device again. Memory only.
+    @Published private(set) var configs: [SNMPMode: SNMPClientConfig] = [:]
 
     struct OIDWalkRow: Identifiable, Hashable {
         let id = UUID()
@@ -141,7 +184,11 @@ final class SNMPQueryModel: ObservableObject {
 
     private enum Outcome {
         case system(SNMPSystemInfo)
-        case interfaces([SNMPInterfaceRow], SNMPWalkNote?)
+        case interfaces(SNMPInterfaceReport)
+        case health(SNMPHealthReport)
+        case inventory(SNMPInventoryReport)
+        case neighbors(SNMPNeighborReport)
+        case locate(SNMPLocateReport)
         case walk([OIDWalkRow], SNMPWalkNote?)
     }
 
@@ -157,12 +204,72 @@ final class SNMPQueryModel: ObservableObject {
         return versionChoice == .auto ? first + timeoutSeconds : first
     }
 
-    func hasResults(for mode: SNMPMode) -> Bool {
-        switch mode {
-        case .system:     return system != nil
-        case .interfaces: return info[.interfaces] != nil
-        case .walk:       return info[.walk] != nil
+    func hasResults(for mode: SNMPMode) -> Bool { info[mode] != nil }
+
+    /// Neighbors: ask the device on the other end of a link, with the same
+    /// community and options.
+    func hop(to host: String) {
+        guard !isRunning else { return }
+        self.host = host
+        hostChanged()
+        run()
+    }
+
+    /// Fill in a remembered community when the host (or port) matches one.
+    /// The saved entry the fields were last filled from, and what the user
+    /// had typed before, so leaving that host puts their own values back.
+    private var autofill: (account: String, priorCommunity: String, priorRemember: Bool)?
+    /// The last (account, store revision) handled, so typing doesn't read
+    /// the Keychain on every keystroke and a denied read isn't retried.
+    private var lastHandled: (account: String?, revision: Int)?
+
+    private var currentAccount: String? {
+        let h = host.trimmingCharacters(in: .whitespaces)
+        guard let p = UInt16(port.trimmingCharacters(in: .whitespaces)), !h.isEmpty else { return nil }
+        return SNMPCommunityStore.account(host: h, port: p)
+    }
+
+    func hostChanged() {
+        let account = currentAccount
+        if let last = lastHandled, last.account == account, last.revision == SNMPCommunityStore.revision { return }
+        lastHandled = (account, SNMPCommunityStore.revision)
+
+        // Moved off a host whose saved community was filled in: restore what
+        // the user had typed (a keystroke can briefly match a saved host).
+        if let a = autofill, a.account != account {
+            community = a.priorCommunity
+            rememberCommunity = a.priorRemember
+            autofill = nil
         }
+        let h = host.trimmingCharacters(in: .whitespaces)
+        guard let account, autofill == nil,
+              let p = UInt16(port.trimmingCharacters(in: .whitespaces)),
+              SNMPCommunityStore.hasSaved(host: h, port: p),
+              let saved = SNMPCommunityStore.load(host: h, port: p) else { return }
+        autofill = (account, community, rememberCommunity)
+        community = saved
+        rememberCommunity = true
+    }
+
+    /// The Remember checkbox, when the user clicks it. Unticking forgets this
+    /// host's saved community at once. (Filling in a saved host changes
+    /// rememberCommunity too, but never forgets anything.)
+    func userSetRemember(_ on: Bool) {
+        rememberCommunity = on
+        guard !on else { return }
+        let h = host.trimmingCharacters(in: .whitespaces)
+        if let p = UInt16(port.trimmingCharacters(in: .whitespaces)), !h.isEmpty {
+            SNMPCommunityStore.forget(host: h, port: p)
+        }
+        autofill = nil
+    }
+
+    /// Options > Forget All.
+    func forgetAllCommunities() {
+        SNMPCommunityStore.forgetAll()
+        rememberCommunity = false
+        autofill = nil
+        lastHandled = nil
     }
 
     func cancel() {
@@ -189,6 +296,17 @@ final class SNMPQueryModel: ObservableObject {
                 return
             }
             walkBase = base
+        }
+        var find: SNMPLocateQuery?
+        if mode == .whereIs {
+            let trimmed = locateQuery.trimmingCharacters(in: .whitespaces)
+            guard let q = SNMPLocateQuery.parse(trimmed) else {
+                inputError = trimmed.isEmpty
+                    ? "Enter the IP or MAC address to look for."
+                    : "\u{201C}\(trimmed)\u{201D} isn't an IPv4 or MAC address. Try 192.168.1.20 or aa:bb:cc:dd:ee:ff."
+                return
+            }
+            find = q
         }
 
         task?.cancel()
@@ -217,7 +335,7 @@ final class SNMPQueryModel: ObservableObject {
             do {
                 let outcome: Outcome
                 do {
-                    outcome = try await Self.perform(mode, current, walkBase: walkBase, maxRows: maxRows)
+                    outcome = try await Self.perform(mode, current, walkBase: walkBase, find: find, maxRows: maxRows)
                 } catch SNMPError.timeout where choice == .auto && current.repliesReceived == 0 {
                     // Not a single v2c reply: some older devices only speak v1.
                     // Ask once over v1; only if it answers, run the query over v1
@@ -237,13 +355,22 @@ final class SNMPQueryModel: ObservableObject {
                     }
                     current = client(.v1, retries: retries)
                     fellBack = true
-                    outcome = try await Self.perform(mode, current, walkBase: walkBase, maxRows: maxRows)
+                    outcome = try await Self.perform(mode, current, walkBase: walkBase, find: find, maxRows: maxRows)
                 }
                 guard let self, self.runID == id else { return }
                 self.apply(outcome)
                 self.info[mode] = SNMPRunInfo(host: host, port: portNum, version: current.version,
                                               fellBackToV1: fellBack,
                                               defaultCommunity: community == "public", date: Date())
+                self.configs[mode] = SNMPClientConfig(host: host, port: portNum, community: community,
+                                                      version: current.version, timeout: timeout, retries: retries)
+                // Remember as it is now, not when the query started: unticking
+                // it during a query must win. Only for the host that answered.
+                if self.rememberCommunity,
+                   self.currentAccount == SNMPCommunityStore.account(host: host, port: portNum) {
+                    SNMPCommunityStore.save(host: host, port: portNum, community: community)
+                    self.lastHandled = nil
+                }
                 self.status = Self.summary(outcome) + (fellBack ? " (answered over v1)" : "")
                 self.isRunning = false
             } catch {
@@ -266,37 +393,56 @@ final class SNMPQueryModel: ObservableObject {
         rawErrors[mode] = nil
         switch mode {
         case .system:     system = nil
-        case .interfaces: interfaces = []; interfacesNote = nil
+        case .interfaces: interfaceReport = nil
+        case .health:     health = nil
+        case .inventory:  inventory = nil
+        case .neighbors:  neighbors = nil
+        case .whereIs:    locate = nil
         case .walk:       walkRows = []; walkNote = nil
         }
     }
 
     private func apply(_ outcome: Outcome) {
         switch outcome {
-        case .system(let s):                  system = s
-        case .interfaces(let rows, let note): interfaces = rows; interfacesNote = note
-        case .walk(let rows, let note):       walkRows = rows; walkNote = note
+        case .system(let s):             system = s
+        case .interfaces(let r):         interfaceReport = r
+        case .health(let r):             health = r
+        case .inventory(let r):          inventory = r
+        case .neighbors(let r):          neighbors = r
+        case .locate(let r):             locate = r
+        case .walk(let rows, let note):  walkRows = rows; walkNote = note
         }
     }
 
     private static func summary(_ outcome: Outcome) -> String {
         switch outcome {
         case .system:                return "System info retrieved"
-        case .interfaces(let r, _):  return "\(r.count) interface\(r.count == 1 ? "" : "s") retrieved"
+        case .interfaces(let r):     return SNMPInterfaces.summary(r)
+        case .health(let r):         return SNMPHealth.summary(r)
+        case .inventory(let r):      return SNMPInventory.summary(r)
+        case .neighbors(let r):      return SNMPNeighbors.summary(r)
+        case .locate(let r):         return SNMPWhereIs.summary(r)
         case .walk(let r, _):        return "\(r.count) row\(r.count == 1 ? "" : "s") returned"
         }
     }
 
     // MARK: Queries (off the main actor)
 
-    nonisolated private static func perform(_ mode: SNMPMode, _ client: SNMPClient,
-                                            walkBase: OID?, maxRows: Int) async throws -> Outcome {
+    nonisolated private static func perform(_ mode: SNMPMode, _ client: SNMPClient, walkBase: OID?,
+                                            find: SNMPLocateQuery?, maxRows: Int) async throws -> Outcome {
         switch mode {
         case .system:
             return .system(try await querySystem(client))
         case .interfaces:
-            let (rows, note) = try await queryInterfaces(client, maxRows: maxRows)
-            return .interfaces(rows, note)
+            return .interfaces(try await SNMPInterfaces.query(client, maxRows: maxRows))
+        case .health:
+            return .health(try await SNMPHealth.query(client, maxRows: maxRows))
+        case .inventory:
+            return .inventory(try await SNMPInventory.query(client, maxRows: maxRows))
+        case .neighbors:
+            return .neighbors(try await SNMPNeighbors.query(client, maxRows: maxRows))
+        case .whereIs:
+            return .locate(try await SNMPWhereIs.query(client, find: find ?? .ip("0.0.0.0"), maxRows: maxRows))
         case .walk:
             let base = walkBase ?? OID([1,3,6,1,2,1,1])
             let w = try await client.walkSubtree(base, maxReps: 25, maxRows: maxRows)
@@ -336,66 +482,6 @@ final class SNMPQueryModel: ObservableObject {
             s.matchedModel = m.model
         }
         return s
-    }
-
-    nonisolated private static func queryInterfaces(_ client: SNMPClient, maxRows: Int) async throws -> ([SNMPInterfaceRow], SNMPWalkNote?) {
-        // One column at a time: gentler on small agents than nine parallel walks.
-        var note: SNMPWalkNote?
-        func column(_ oid: OID) async throws -> [UInt32: SNMPValue] {
-            let w = try await client.bulkWalk(oid, maxReps: 30, maxRows: maxRows)
-            switch w.end {
-            case .complete:             break
-            case .limit:                note = note ?? .limit(maxRows)
-            case .notIncreasing:        note = note ?? .notIncreasing(w.rows.count)
-            case .error(let c, let l):  note = note ?? .error(c, l)
-            }
-            return Dictionary(w.rows.map { ($0.oid.components.last ?? 0, $0.value) },
-                              uniquingKeysWith: { first, _ in first })
-        }
-        /// Columns older or simpler devices may not have. An error with no
-        /// rows means the column isn't there; v1 can't carry 64-bit counters.
-        func optionalColumn(_ oid: OID) async throws -> [UInt32: SNMPValue] {
-            do { return try await column(oid) } catch SNMPError.errorStatus(_, _, _) { return [:] }
-        }
-
-        let descr  = try await column(SNMPOID.ifDescr)
-        let oper   = try await column(SNMPOID.ifOperStatus)
-        let admin  = try await optionalColumn(SNMPOID.ifAdminStatus)
-        let speed  = try await optionalColumn(SNMPOID.ifSpeed)
-        let high   = try await optionalColumn(SNMPOID.ifHighSpeed)
-        let hcIn   = try await optionalColumn(SNMPOID.ifHCInOctets)
-        let hcOut  = try await optionalColumn(SNMPOID.ifHCOutOctets)
-        // 64-bit counters are only required on ports faster than 20 Mbps
-        // (RFC 2863), so fall back per port, not only when the column is empty.
-        let indexes = Set(descr.keys).union(oper.keys)
-        let in32   = indexes.isSubset(of: hcIn.keys)  ? [:] : try await optionalColumn(SNMPOID.ifInOctets)
-        let out32  = indexes.isSubset(of: hcOut.keys) ? [:] : try await optionalColumn(SNMPOID.ifOutOctets)
-
-        let rows: [SNMPInterfaceRow] = indexes.sorted().map { idx in
-            let speedRaw = SNMPInterfaceFormat.effectiveSpeedBps(ifSpeed: unsigned(speed[idx]),
-                                                                 highSpeedMbps: high[idx].map(unsigned))
-            return SNMPInterfaceRow(
-                id: idx,
-                descr: descr[idx]?.description ?? "",
-                operStatus: SNMPInterfaceFormat.statusLabel(admin: admin[idx], oper: oper[idx]),
-                speed: SNMPInterfaceFormat.formatSpeed(speedRaw),
-                speedRaw: speedRaw,
-                inOctets: unsigned(hcIn[idx] ?? in32[idx]),
-                outOctets: unsigned(hcOut[idx] ?? out32[idx]),
-                counters64: hcIn[idx] != nil && hcOut[idx] != nil
-            )
-        }
-        return (rows, note)
-    }
-
-    nonisolated private static func unsigned(_ v: SNMPValue?) -> UInt64 {
-        switch v {
-        case .gauge32(let g):   return UInt64(g)
-        case .counter32(let c): return UInt64(c)
-        case .counter64(let c): return c
-        case .integer(let i):   return UInt64(max(0, i))
-        default:                return 0
-        }
     }
 
     nonisolated private static func failure(for error: Error, host: String, port: UInt16, attempts: Int,
@@ -448,15 +534,11 @@ final class SNMPQueryModel: ObservableObject {
             s += line("sysName:", sys.sysName) + line("sysDescr:", sys.sysDescr)
                + line("sysObjectID:", sys.sysObjectID) + line("sysUpTime:", sys.sysUpTime)
                + line("sysContact:", sys.sysContact) + line("sysLocation:", sys.sysLocation)
-        case .interfaces:
-            s += "idx\tname\tstatus\tspeed\ttotal in (bytes)\ttotal out (bytes)\n"
-            for r in interfaces {
-                s += "\(r.id)\t\(r.descr)\t\(r.operStatus)\t\(r.speed)\t\(r.inOctets)\t\(r.outOctets)\n"
-            }
-            if interfaces.contains(where: { !$0.counters64 }) {
-                s += "(some totals are 32-bit counters, which wrap every 4.29 GB)\n"
-            }
-            s += Self.exportNote(interfacesNote)
+        case .interfaces: s += interfaceReport.map(SNMPInterfaces.exportText) ?? ""
+        case .health:     s += health.map(SNMPHealth.exportText) ?? ""
+        case .inventory:  s += inventory.map(SNMPInventory.exportText) ?? ""
+        case .neighbors:  s += neighbors.map(SNMPNeighbors.exportText) ?? ""
+        case .whereIs:    s += locate.map(SNMPWhereIs.exportText) ?? ""
         case .walk:
             for r in walkRows { s += "\(r.oid)\t\(r.typeLabel)\t\(r.value)\n" }
             s += Self.exportNote(walkNote)
@@ -464,7 +546,8 @@ final class SNMPQueryModel: ObservableObject {
         return s
     }
 
-    private static func exportNote(_ note: SNMPWalkNote?) -> String {
+    /// The export line for a walk that stopped early. Shared by the views.
+    nonisolated static func exportNote(_ note: SNMPWalkNote?) -> String {
         switch note {
         case .limit?:                 return "(stopped at the row limit)\n"
         case .notIncreasing?:         return "(stopped: the device returned an OID out of order)\n"
@@ -473,53 +556,6 @@ final class SNMPQueryModel: ObservableObject {
         case nil:                     return ""
         }
     }
-}
-
-/// Interface table helpers, kept pure for tests.
-enum SNMPInterfaceFormat {
-    /// ifSpeed is a Gauge32: anything over 4,294,967,295 bps reports exactly
-    /// that, and RFC 2863 says to read ifHighSpeed (Mbps) instead.
-    static func effectiveSpeedBps(ifSpeed: UInt64, highSpeedMbps: UInt64?) -> UInt64 {
-        if ifSpeed == 0 || ifSpeed >= UInt64(UInt32.max), let hs = highSpeedMbps, hs > 0 {
-            return hs * 1_000_000
-        }
-        return ifSpeed
-    }
-
-    /// "10 Gbps", "2.5 Gbps", "1.5 Mbps". Decimal units.
-    static func formatSpeed(_ bps: UInt64) -> String {
-        if bps == 0 { return "—" }
-        func f(_ v: Double, _ unit: String) -> String {
-            String(format: v == v.rounded() ? "%.0f %@" : "%.1f %@", v, unit)
-        }
-        if bps >= 1_000_000_000 { return f(Double(bps) / 1_000_000_000, "Gbps") }
-        if bps >= 1_000_000     { return f(Double(bps) / 1_000_000, "Mbps") }
-        if bps >= 1_000         { return f(Double(bps) / 1_000, "kbps") }
-        return "\(bps) bps"
-    }
-
-    /// A port someone turned off (ifAdminStatus 2) reads "disabled", not a
-    /// red "down": it isn't a fault.
-    static func statusLabel(admin: SNMPValue?, oper: SNMPValue?) -> String {
-        if case .integer(2) = admin { return "disabled" }
-        return ifStatusLabel(oper)
-    }
-}
-
-private func ifStatusLabel(_ v: SNMPValue?) -> String {
-    if case .integer(let i) = v {
-        switch i {
-        case 1: return "up"
-        case 2: return "down"
-        case 3: return "testing"
-        case 4: return "unknown"
-        case 5: return "dormant"
-        case 6: return "notPresent"
-        case 7: return "lowerLayerDown"
-        default: return "—"
-        }
-    }
-    return "—"
 }
 
 private func snmpTypeLabel(_ v: SNMPValue) -> String {
@@ -562,7 +598,9 @@ struct SNMPView: View {
         .tabNavigationTitle(.snmp)
         // "Query with SNMP" from any host's right-click menu, or ⌘K "snmp HOST"
         .consumeHandoff(for: .snmp) { model.host = $0 }
-        .onChange(of: model.mode) { _ in model.inputError = nil }
+        .onChange(of: model.mode) { _, _ in model.inputError = nil }
+        .onChange(of: model.host) { _, _ in model.hostChanged() }
+        .onChange(of: model.port) { _, _ in model.hostChanged() }
         // Runs when the window closes (tabs stay alive across switches)
         .onDisappear { if model.isRunning { model.cancel() } }
     }
@@ -599,8 +637,8 @@ struct SNMPView: View {
                     HistoryMenuButton(key: .snmp) { model.host = $0 }
                     connectionFields
                     modePicker
-                    if model.mode == .walk {
-                        oidField.frame(minWidth: 160, idealWidth: 160, maxWidth: 240)
+                    if model.mode == .walk || model.mode == .whereIs {
+                        modeInputField.frame(minWidth: 160, idealWidth: 160, maxWidth: 240)
                             .layoutPriority(1)
                     }
                     Spacer()
@@ -615,8 +653,8 @@ struct SNMPView: View {
                     }
                     HStack(spacing: 8) {
                         modePicker
-                        if model.mode == .walk {
-                            oidField.frame(minWidth: 120, maxWidth: .infinity)
+                        if model.mode == .walk || model.mode == .whereIs {
+                            modeInputField.frame(minWidth: 120, maxWidth: .infinity)
                         } else {
                             Spacer()
                         }
@@ -641,23 +679,44 @@ struct SNMPView: View {
             .textFieldStyle(.roundedBorder)
             .frame(width: 110)
             .help("The community string: a read-only password set on the device. Many devices use public.")
+        Toggle("Remember", isOn: Binding(get: { model.rememberCommunity },
+                                         set: { model.userSetRemember($0) }))
+            .toggleStyle(.checkbox)
+            .font(.system(size: 11))
+            .fixedSize()
+            .help("Save this host's community string in your Keychain after the next successful query, and fill it in next time. Untick to forget it.")
         TextField("Port", text: $model.port)
             .textFieldStyle(.roundedBorder)
             .frame(width: 60)
             .help("SNMP normally uses UDP port 161.")
     }
 
+    /// One pop-up menu, grouped Device / Ports / Advanced.
     private var modePicker: some View {
-        Picker("", selection: $model.mode) {
-            ForEach(SNMPMode.allCases) { Text($0.rawValue).tag($0) }
-        }
-        .pickerStyle(.segmented)
+        Picker(selection: $model.mode) {
+            ForEach(SNMPMode.sections, id: \.title) { section in
+                Section(section.title) {
+                    ForEach(section.modes) { m in
+                        Label(m.rawValue, systemImage: m.icon).tag(m)
+                    }
+                }
+            }
+        } label: { EmptyView() }
+        .pickerStyle(.menu)
         .fixedSize()
+        .help("Choose what to read from the device")
     }
 
-    private var oidField: some View {
-        TextField("OID (e.g. 1.3.6.1.2.1.2.2)", text: $model.customOID)
-            .textFieldStyle(.roundedBorder)
+    @ViewBuilder
+    private var modeInputField: some View {
+        if model.mode == .whereIs {
+            TextField("IP or MAC to find", text: $model.locateQuery)
+                .textFieldStyle(.roundedBorder)
+                .help("An IPv4 address (192.168.1.20) or a MAC address (aa:bb:cc:dd:ee:ff)")
+        } else {
+            TextField("OID (e.g. 1.3.6.1.2.1.2.2)", text: $model.customOID)
+                .textFieldStyle(.roundedBorder)
+        }
     }
 
     private var optionsButton: some View {
@@ -700,7 +759,11 @@ struct SNMPView: View {
             if let i = model.info[model.mode] { sourceLine(i) }
             switch model.mode {
             case .system:     systemPane
-            case .interfaces: interfacesPane
+            case .interfaces: if let r = model.interfaceReport { SNMPInterfacesPane(model: model, report: r) }
+            case .health:     if let r = model.health { SNMPHealthPane(model: model, report: r) }
+            case .inventory:  if let r = model.inventory { SNMPInventoryPane(model: model, report: r) }
+            case .neighbors:  if let r = model.neighbors { SNMPNeighborsPane(model: model, report: r) }
+            case .whereIs:    if let r = model.locate { SNMPWhereIsPane(model: model, report: r) }
             case .walk:       walkPane
             }
         } else {
@@ -845,6 +908,16 @@ struct SNMPView: View {
                     .background(NS.amber.opacity(0.08))
                     Divider().background(NS.borderMid)
                 }
+                if let config = model.configs[.system] {
+                    HStack {
+                        Spacer()
+                        SNMPPinButton(config: config,
+                                      target: SNMPBoardTarget(host: config.host, port: config.port,
+                                                              version: config.version.rawValue,
+                                                              deviceName: s.sysName.flatMap { $0.isEmpty ? nil : $0 }))
+                    }
+                    .padding(.horizontal, 16).padding(.top, 10)
+                }
                 VStack(alignment: .leading, spacing: 12) {
                     sysRow("sysName",     s.sysName)
                     sysRow("sysDescr",    s.sysDescr)
@@ -875,59 +948,6 @@ struct SNMPView: View {
         }
     }
 
-    // MARK: Interfaces
-
-    private var interfacesPane: some View {
-        VStack(spacing: 0) {
-            if let note = model.interfacesNote {
-                noteStrip(Self.interfacesNoteText(note))
-            }
-            Table(model.interfaces) {
-                TableColumn("Idx") { r in Text(String(r.id)).font(.system(.body, design: .monospaced)) }
-                    .width(40)
-                TableColumn("Name", value: \.descr)
-                TableColumn("Status") { r in
-                    Text(r.operStatus)
-                        .foregroundStyle(r.operStatus == "up" ? NS.green : (r.operStatus == "down" ? NS.red : NS.text3))
-                        .help(r.operStatus == "disabled" ? "Turned off in the device's settings (ifAdminStatus down)" : "")
-                }
-                .width(70)
-                TableColumn("Speed") { r in Text(r.speed).font(.system(.body, design: .monospaced)) }
-                    .width(80)
-                TableColumn("Total in") { r in
-                    Text(byteFormat(r.inOctets) + (r.counters64 ? "" : "*")).font(.system(.body, design: .monospaced))
-                        .help(r.counters64 ? "Bytes received since the device's counter last reset, usually at its last restart"
-                                           : Self.counter32Help)
-                }
-                .width(84)
-                TableColumn("Total out") { r in
-                    Text(byteFormat(r.outOctets) + (r.counters64 ? "" : "*")).font(.system(.body, design: .monospaced))
-                        .help(r.counters64 ? "Bytes sent since the device's counter last reset, usually at its last restart"
-                                           : Self.counter32Help)
-                }
-                .width(84)
-            }
-        }
-    }
-
-    private static let counter32Help = "* A 32-bit counter: it starts over at zero after every 4.29 GB, so on a busy port this isn't the total since restart."
-
-    private static func interfacesNoteText(_ note: SNMPWalkNote) -> String {
-        switch note {
-        case .limit(let n):          return "Some columns stopped at the row limit (\(n.formatted())), so this list may be incomplete. Raise the limit in Options."
-        case .notIncreasing:         return "The device sent an OID out of order, so SNAP stopped reading one column early. This list may be incomplete."
-        case .error(_, let label):   return "The device returned an error (\(label)) partway through, so this list may be incomplete."
-        case .nothing:               return ""
-        }
-    }
-
-    private func byteFormat(_ b: UInt64) -> String {
-        let units = ["B", "KB", "MB", "GB", "TB"]
-        var v = Double(b); var i = 0
-        while v >= 1_000 && i < units.count - 1 { v /= 1_000; i += 1 }
-        return String(format: "%.1f %@", v, units[i])
-    }
-
     // MARK: Walk
 
     private var walkPane: some View {
@@ -942,11 +962,11 @@ struct SNMPView: View {
                         .padding(16)
                 }
             case .limit(let n)?:
-                noteStrip("Stopped at \(n.formatted()) rows, the row limit. Raise it in Options, or walk a smaller part of the tree.")
+                SNMPNoteStrip(text: "Stopped at \(n.formatted()) rows, the row limit. Raise it in Options, or walk a smaller part of the tree.")
             case .notIncreasing(let n)?:
-                noteStrip("Stopped after \(n.formatted()) rows: the device sent an OID out of order, which would make the walk loop. The rows shown came before that.")
+                SNMPNoteStrip(text: "Stopped after \(n.formatted()) rows: the device sent an OID out of order, which would make the walk loop. The rows shown came before that.")
             case .error(_, let label)?:
-                noteStrip("Stopped after \(model.walkRows.count.formatted()) rows: the device returned an error (\(label)). The rows shown came before that.")
+                SNMPNoteStrip(text: "Stopped after \(model.walkRows.count.formatted()) rows: the device returned an error (\(label)). The rows shown came before that.")
             case nil:
                 EmptyView()
             }
@@ -963,7 +983,14 @@ struct SNMPView: View {
         }
     }
 
-    private func noteStrip(_ text: String) -> some View {
+}
+
+// MARK: - Shared pieces for the SNMP views
+
+/// A one-line note above a result ("stopped at the row limit", …).
+struct SNMPNoteStrip: View {
+    let text: String
+    var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "info.circle").foregroundStyle(.blue)
             Text(text).font(.system(size: 11)).foregroundStyle(NS.text2)
@@ -975,10 +1002,78 @@ struct SNMPView: View {
     }
 }
 
+enum SNMPFormat {
+    /// Decimal byte units, like the rest of SNAP.
+    static func bytes(_ b: UInt64) -> String {
+        let units = ["B", "KB", "MB", "GB", "TB"]
+        var v = Double(b); var i = 0
+        while v >= 1_000 && i < units.count - 1 { v /= 1_000; i += 1 }
+        return String(format: "%.1f %@", v, units[i])
+    }
+
+    /// Bits per second: "940 Mbps", "9.41 Gbps", "512 kbps".
+    static func rate(_ bps: Double) -> String {
+        if bps >= 1e9 { return String(format: "%.2f Gbps", bps / 1e9) }
+        if bps >= 1e6 { return String(format: bps >= 1e8 ? "%.0f Mbps" : "%.1f Mbps", bps / 1e6) }
+        if bps >= 1e3 { return String(format: "%.0f kbps", bps / 1e3) }
+        return String(format: "%.0f bps", bps)
+    }
+
+    /// "3 min ago", "2 h ago", "5 d ago" for a span in seconds.
+    static func ago(_ seconds: Double) -> String {
+        if seconds < 90 { return "\(max(0, Int(seconds))) s ago" }
+        if seconds < 5400 { return "\(Int(seconds / 60)) min ago" }
+        if seconds < 172_800 { return "\(Int(seconds / 3600)) h ago" }
+        return "\(Int(seconds / 86_400)) d ago"
+    }
+}
+
+/// "Show on Status Board" for a device or a port. The board has to keep
+/// asking the device, so it needs the community string: this asks before
+/// saving it in the Keychain.
+struct SNMPPinButton: View {
+    let config: SNMPClientConfig
+    let target: SNMPBoardTarget
+    @ObservedObject private var watch = SNMPBoardWatch.shared
+    @State private var confirming = false
+
+    /// Pinned means the same device (host and port) and the same port on it.
+    /// Names and speeds can change between queries.
+    private var isPinned: Bool {
+        guard let t = watch.target else { return false }
+        return t.ifIndex == target.ifIndex
+            && SNMPCommunityStore.account(host: t.host, port: t.port)
+            == SNMPCommunityStore.account(host: target.host, port: target.port)
+    }
+
+    private var displayName: String {
+        [target.portName, target.deviceName].compactMap { $0 }.first { !$0.isEmpty } ?? target.host
+    }
+
+    var body: some View {
+        Button {
+            if isPinned { watch.unpin() } else { confirming = true }
+        } label: {
+            Label(isPinned ? "On Status Board" : "Show on Status Board",
+                  systemImage: isPinned ? "pin.fill" : "pin")
+        }
+        .buttonStyle(.bordered).controlSize(.small)
+        .help(isPinned ? "Remove from the Status Board's SNMP Watch tile" : "Watch this on the Status Board's SNMP Watch tile")
+        .confirmationDialog("Show \(displayName) on the Status Board?",
+                            isPresented: $confirming) {
+            Button("Save Community and Show") { watch.pin(target, community: config.community) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The SNMP Watch tile asks \(target.host) every 10 seconds while the Status Board is open. To do that it needs the community string, so SNAP saves it in your Keychain. The tile replaces anything it watched before.")
+        }
+    }
+}
+
 // MARK: - Options
 
 private struct SNMPOptionsForm: View {
     @ObservedObject var model: SNMPQueryModel
+    @State private var savedCount = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1007,7 +1102,22 @@ private struct SNMPOptionsForm: View {
             Text("If a device never answers, a query gives up after about \(Int(model.worstCaseWait.rounded())) s.")
                 .font(.caption).foregroundStyle(NS.text3)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+            HStack {
+                Text(savedCount == 0 ? "No communities saved in the Keychain"
+                     : "\(savedCount) \(savedCount == 1 ? "community" : "communities") saved in the Keychain")
+                    .font(.caption).foregroundStyle(NS.text3)
+                Spacer()
+                Button("Forget All") {
+                    model.forgetAllCommunities()
+                    savedCount = SNMPCommunityStore.savedCount
+                }
+                .controlSize(.small)
+                .disabled(savedCount == 0)
+            }
         }
+        .onAppear { savedCount = SNMPCommunityStore.savedCount }
         .padding(16)
         .frame(width: 320)
     }
@@ -1036,7 +1146,11 @@ private struct SNMPHowToCard: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 mode("System Info", "the device's name, description, maker, uptime, contact, and location.")
-                mode("Interfaces", "every port, with its status, speed, and total traffic.")
+                mode("Health", "printer toner and ink, UPS battery and minutes left, and storage and CPU on NAS boxes and servers.")
+                mode("Inventory", "models and serial numbers of the chassis, modules, and power supplies.")
+                mode("Interfaces", "every port, with its name, status, speed, errors, and traffic. Watch shows live traffic per port.")
+                mode("Neighbors", "which device is plugged into which port, so you can hop from switch to switch.")
+                mode("Where Is It?", "the switch port an IP or MAC address is on.")
                 mode("Custom OID Walk", "every value under an OID you choose. 1.3.6.1.2.1.1 is the system group; 1.3.6.1.2.1.2.2 is the interface table.")
             }
 
