@@ -64,7 +64,7 @@ final class StatusBoardManager: ObservableObject {
 
 struct StatusBoardView: View {
     @ObservedObject private var mgr = StatusBoardManager.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     @ObservedObject private var layout = StatusBoardLayout.shared
     @ObservedObject var bwMonitor: BandwidthDashMonitor
     @ObservedObject private var alerts = AlertManager.shared
@@ -382,7 +382,7 @@ extension CWSecurity {
 /// stays visible always without eating a tile slot.
 struct PublicIPChip: View {
     @ObservedObject private var pub = PublicIPMonitor.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         if let ip = pub.ip {

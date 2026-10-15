@@ -418,7 +418,8 @@ struct SpeedTestView: View {
     // MARK: - Live Chart
 
     private var liveChart: some View {
-        GroupBox {
+        let axisText = ChartAxis.text
+        return GroupBox {
             if livePoints.count > 1 {
                 Chart(livePoints) { pt in
                     LineMark(x: .value("s", pt.index), y: .value("Mbps", pt.mbps))
@@ -429,8 +430,8 @@ struct SpeedTestView: View {
                         .foregroundStyle((phase == .upload ? Color.orange : Color.blue).opacity(0.1))
                         .interpolationMethod(.catmullRom)
                 }
-                .chartYAxisLabel("Mbps").chartXAxis(.hidden)
-                .chartYAxis { AxisMarks { AxisGridLine(stroke: StrokeStyle(lineWidth:0.5,dash:[4,4])); AxisValueLabel() } }
+                .chartYAxisLabel { Text("Mbps").foregroundStyle(axisText) }.chartXAxis(.hidden)
+                .chartYAxis { AxisMarks { AxisGridLine(stroke: StrokeStyle(lineWidth:0.5,dash:[4,4])); AxisValueLabel().foregroundStyle(axisText) } }
                 .frame(height: 110).padding(.top, 4)
             } else {
                 Text("Collecting samples…").font(.caption).foregroundStyle(.secondary)
@@ -464,7 +465,8 @@ struct SpeedTestView: View {
     // MARK: - History
 
     private var historySection: some View {
-        VStack(spacing: 12) {
+        let axisText = ChartAxis.text
+        return VStack(spacing: 12) {
             GroupBox {
                 Chart(historyStore.results.prefix(10).reversed() as [SpeedResult]) { r in
                     BarMark(x: .value("t", r.date, unit: .second), y: .value("↓", r.download))
@@ -475,8 +477,8 @@ struct SpeedTestView: View {
                     BarMark(x: .value("t", r.date, unit: .second), y: .value("↑", r.upload))
                         .foregroundStyle(.orange.opacity(0.75))
                 }
-                .chartYAxisLabel("Mbps")
-                .chartYAxis { AxisMarks { AxisGridLine(stroke:StrokeStyle(lineWidth:0.5,dash:[4,4])); AxisValueLabel() } }
+                .chartYAxisLabel { Text("Mbps").foregroundStyle(axisText) }
+                .chartYAxis { AxisMarks { AxisGridLine(stroke:StrokeStyle(lineWidth:0.5,dash:[4,4])); AxisValueLabel().foregroundStyle(axisText) } }
                 .frame(height: 130).padding(.top, 4)
             } label: {
                 HStack {
@@ -1281,12 +1283,12 @@ private struct IperfStatCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(title, systemImage: icon)
-                .font(.caption).foregroundStyle(NS.text3)
+                .font(.caption).foregroundStyle(NS.text2)
             Text(value)
                 .font(.title3.bold().monospacedDigit()).foregroundStyle(NS.text1)
                 .lineLimit(1).minimumScaleFactor(0.7)
             Text(caption)
-                .font(.caption2).foregroundStyle(NS.text3)
+                .font(.caption2).foregroundStyle(NS.text2)
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1333,6 +1335,7 @@ private struct IperfIntervalChart: View {
     }
 
     var body: some View {
+        let axisText = ChartAxis.text
         GroupBox {
             Chart {
                 ForEach(bars) { b in
@@ -1341,24 +1344,24 @@ private struct IperfIntervalChart: View {
                 }
                 if let l = ruleBps {
                     RuleMark(y: .value("Link", l / scale))
-                        .foregroundStyle(NS.text3)
+                        .foregroundStyle(axisText)
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
                         .annotation(position: .top, alignment: .leading) {
-                            Text(linkName).font(.caption2).foregroundStyle(NS.text3)
+                            Text(linkName).font(.caption2).foregroundStyle(axisText)
                         }
                 }
             }
             .chartXScale(domain: labels)
-            .chartXAxis { AxisMarks(values: axisLabels) { _ in AxisValueLabel() } }
-            .chartYAxisLabel(unit)
-            .chartYAxis { AxisMarks { AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4])); AxisValueLabel() } }
+            .chartXAxis { AxisMarks(values: axisLabels) { _ in AxisValueLabel().foregroundStyle(axisText) } }
+            .chartYAxisLabel { Text(unit).foregroundStyle(axisText) }
+            .chartYAxis { AxisMarks { AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4])); AxisValueLabel().foregroundStyle(axisText) } }
             .frame(height: 140).padding(.top, 4)
         } label: {
             HStack {
                 Label("Each second", systemImage: "chart.bar").font(.caption.bold())
                 Spacer()
                 if linkBps != nil && ruleBps == nil {
-                    Text("\(linkName), above this scale").font(.caption2).foregroundStyle(NS.text3)
+                    Text("\(linkName), above this scale").font(.caption2).foregroundStyle(NS.text2)
                 }
             }
         }
@@ -1449,18 +1452,18 @@ struct IperfHistoryList: View {
                             .frame(width: 14)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(e.date.formatted(date: .abbreviated, time: .shortened))
-                                .font(.caption2).foregroundStyle(NS.text3)
+                                .font(.caption2).foregroundStyle(NS.text2)
                             Text("\(e.server):\(e.port)").font(.caption).foregroundStyle(NS.text1)
                         }
                         Text("\(e.direction.rawValue) \u{00B7} \(e.streams == 1 ? "1 stream" : "\(e.streams) streams") \u{00B7} \(e.seconds) sec")
-                            .font(.caption2).foregroundStyle(NS.text3).lineLimit(1)
+                            .font(.caption2).foregroundStyle(NS.text2).lineLimit(1)
                         Spacer(minLength: 8)
                         if let link = e.linkMbps {
                             Text("link \(IperfAdvisor.linkRate(link))")
-                                .font(.caption2).foregroundStyle(NS.text3).lineLimit(1)
+                                .font(.caption2).foregroundStyle(NS.text2).lineLimit(1)
                         }
                         if let r = e.retransmits {
-                            Text("\(r) retr").font(.caption2.monospacedDigit()).foregroundStyle(NS.text3)
+                            Text("\(r) retr").font(.caption2.monospacedDigit()).foregroundStyle(NS.text2)
                         }
                         Text(IperfAdvisor.rate(e.receiverBps))
                             .font(.caption.bold().monospacedDigit()).foregroundStyle(NS.text1)

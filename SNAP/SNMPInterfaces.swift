@@ -1705,6 +1705,7 @@ private struct SNMPPortTrafficChart: View {
     private var speedName: String { "Port speed \(SNMPInterfaceFormat.formatSpeed(speedBps))" }
 
     var body: some View {
+        let axisText = ChartAxis.text
         GroupBox {
             Chart {
                 ForEach(bars) { b in
@@ -1724,8 +1725,8 @@ private struct SNMPPortTrafficChart: View {
             .chartForegroundStyleScale(["In": inColor, "Out": outColor])
             .chartXScale(domain: slotLabels)
             .chartXAxis(.hidden)
-            .chartYAxisLabel(scale.unit)
-            .chartYAxis { AxisMarks { AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4])); AxisValueLabel() } }
+            .chartYAxisLabel { Text(scale.unit).foregroundStyle(axisText) }
+            .chartYAxis { AxisMarks { AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4])); AxisValueLabel().foregroundStyle(axisText) } }
             .chartLegend(position: .top, alignment: .trailing)
             .frame(height: 140).padding(.top, 4)
         } label: {

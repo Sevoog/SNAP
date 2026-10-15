@@ -167,7 +167,7 @@ struct ToolNoteCard<Actions: View>: View {
                     }
                 }
                 if let footnote {
-                    Text(footnote).font(.caption).foregroundStyle(NS.text3)
+                    Text(footnote).font(.caption).foregroundStyle(NS.text2)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -189,3 +189,15 @@ extension ToolNoteCard where Actions == EmptyView {
                   notes: notes, footnote: footnote) { EmptyView() }
     }
 }
+
+// MARK: - Chart axis text
+
+/// Axis labels and titles in the theme's secondary text color. Swift Charts
+/// draws its default axis text in the system color and doesn't restyle it
+/// when the theme switches, so a chart kept the old theme's axis colors
+/// (dark on dark, or white on paper) until its data changed. Read it in the
+/// view's body so the chart redraws on a theme switch.
+enum ChartAxis {
+    static var text: Color { NS.text2 }
+}
+

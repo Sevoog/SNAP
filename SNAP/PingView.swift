@@ -132,6 +132,7 @@ struct PingView: View {
                         Text("No data yet").foregroundStyle(.secondary).frame(maxWidth: .infinity)
                         Spacer()
                     } else {
+                        let axisText = ChartAxis.text
                         Chart(successResults) { r in
                             LineMark(x: .value("Seq", r.seq), y: .value("ms", r.ms ?? 0))
                                 .foregroundStyle(.blue)
@@ -145,8 +146,10 @@ struct PingView: View {
                                     .symbolSize(30)
                             }
                         }
-                        .chartYAxisLabel("ms")
-                        .chartXAxisLabel("Sequence")
+                        .chartYAxisLabel { Text("ms").foregroundStyle(axisText) }
+                        .chartXAxisLabel { Text("Sequence").foregroundStyle(axisText) }
+                        .chartXAxis { AxisMarks { AxisGridLine(); AxisTick(); AxisValueLabel().foregroundStyle(axisText) } }
+                        .chartYAxis { AxisMarks { AxisGridLine(); AxisTick(); AxisValueLabel().foregroundStyle(axisText) } }
                         .padding()
                     }
                 }

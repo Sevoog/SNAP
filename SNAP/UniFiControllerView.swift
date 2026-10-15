@@ -890,7 +890,7 @@ func formatUptime(_ seconds: TimeInterval) -> String {
 
 struct UniFiControllerView: View {
     @StateObject private var model = UniFiControllerModel()
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1129,7 +1129,7 @@ private struct CertificateTrustSheet: View {
     let pending: UniFiControllerModel.PendingCertificate
     let onTrust: () -> Void
     let onCancel: () -> Void
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     private var changed: Bool { pending.previousFingerprint != nil }
 

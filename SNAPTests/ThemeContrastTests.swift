@@ -7,6 +7,7 @@
 
 import XCTest
 import SwiftUI
+import Observation
 @testable import SNAP
 
 final class ThemeContrastTests: XCTestCase {
@@ -37,6 +38,18 @@ final class ThemeContrastTests: XCTestCase {
                     4.5, "\(t.id) badge")
             }
         }
+    }
+
+    /// Reading a theme color in a view body must register a dependency, so the
+    /// view redraws on a theme switch even when its own inputs didn't change.
+    /// (The iPerf3 results kept the previous theme's colors until a new test.)
+    func test_themeTokens_areObservable() {
+        let saved = ThemeManager.shared.current
+        defer { ThemeManager.shared.current = saved }
+        var fired = false
+        withObservationTracking { _ = NS.text1 } onChange: { fired = true }
+        ThemeManager.shared.current = saved.id == Theme.midnight.id ? Theme.daylight : Theme.midnight
+        XCTAssertTrue(fired)
     }
 
     /// A color that already passes is left exactly as the theme defines it.

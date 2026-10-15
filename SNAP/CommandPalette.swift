@@ -148,7 +148,7 @@ enum CommandRegistry {
 
 struct CommandPaletteView: View {
     @ObservedObject private var mgr = CommandPaletteManager.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     @Binding var selectedTab: SNAPTab
 
     @State private var query = ""

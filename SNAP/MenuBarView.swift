@@ -394,7 +394,7 @@ struct NetworkDetail {
 
 struct MenuBarView: View {
     @StateObject private var monitor = MenuBarMonitor.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     @State private var externalIP = "Loading…"
     @State private var interfaces: [(String, String)] = []
     @State private var wifiInfo = WiFiInfo()

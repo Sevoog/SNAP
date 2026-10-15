@@ -712,7 +712,7 @@ struct BandwidthMonitorView: View {
                             .symbolSize(20)
                     }
                 }
-                .chartYAxisLabel("ms")
+                .chartYAxisLabel { Text("ms").foregroundStyle(ChartAxis.text) }
                 .chartXAxis(.hidden)
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
@@ -721,7 +721,7 @@ struct BandwidthMonitorView: View {
                         AxisTick()
                         AxisValueLabel {
                             if let v = value.as(Double.self) {
-                                Text(String(format: "%.0f", v)).font(.caption2)
+                                Text(String(format: "%.0f", v)).font(.caption2).foregroundStyle(ChartAxis.text)
                             }
                         }
                     }
@@ -800,7 +800,7 @@ struct BandwidthMonitorView: View {
                         }
                     }
                 }
-                .chartYAxisLabel("%")
+                .chartYAxisLabel { Text("%").foregroundStyle(ChartAxis.text) }
                 .chartXAxis(.hidden)
                 .chartYScale(domain: 0...(Swift.max(10, (monitor.packetLossHistory.max() ?? 0) * 1.3)))
                 .chartPlotStyle { plot in plot.padding(.trailing, 0) }
@@ -811,7 +811,7 @@ struct BandwidthMonitorView: View {
                         AxisTick()
                         AxisValueLabel {
                             if let v = value.as(Double.self) {
-                                Text(String(format: "%.0f%%", v)).font(.caption2)
+                                Text(String(format: "%.0f%%", v)).font(.caption2).foregroundStyle(ChartAxis.text)
                             }
                         }
                     }
@@ -875,7 +875,7 @@ struct BandwidthMonitorView: View {
                         .foregroundStyle(color.opacity(0.1)).interpolationMethod(.catmullRom)
                 }
             }
-            .chartYAxisLabel(unit)
+            .chartYAxisLabel { Text(unit).foregroundStyle(ChartAxis.text) }
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4,4]))
@@ -883,7 +883,7 @@ struct BandwidthMonitorView: View {
                     AxisTick()
                     AxisValueLabel {
                         if let v = value.as(Double.self) {
-                            Text(String(format: v >= 100 ? "%.0f" : "%.1f", v)).font(.caption2)
+                            Text(String(format: v >= 100 ? "%.0f" : "%.1f", v)).font(.caption2).foregroundStyle(ChartAxis.text)
                         }
                     }
                 }
@@ -893,7 +893,7 @@ struct BandwidthMonitorView: View {
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4,4]))
                         .foregroundStyle(Color.secondary.opacity(0.3))
                     AxisTick()
-                    AxisValueLabel(format: .dateTime.minute().second())
+                    AxisValueLabel(format: .dateTime.minute().second()).foregroundStyle(ChartAxis.text)
                 }
             }
             .frame(height: 160)

@@ -177,7 +177,7 @@ struct DashCardChrome<Content: View>: View {
     let editing: Bool
     let onRemove: () -> Void
     let content: () -> Content
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
 
     /// E-ink: the kind is told by shape. Live = inverted, Functional =
@@ -280,7 +280,7 @@ struct DashCardBody: View {
     @Binding var selectedTab: SNAPTab
     let bwMonitor: BandwidthDashMonitor
     let mapModel: NetworkMapModel
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         switch spec.id {
@@ -344,7 +344,7 @@ private struct LauncherCardBody<Content: View>: View {
     let spec: DashCardSpec
     @Binding var selectedTab: SNAPTab
     let content: () -> Content
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -365,7 +365,7 @@ private struct LauncherCardBody<Content: View>: View {
 
 private struct LauncherTagline: View {
     let text: String
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     init(_ text: String) { self.text = text }
     var body: some View {
         Text(text)
@@ -378,7 +378,7 @@ private struct LauncherTagline: View {
 
 private struct NetworkMapPreview: View {
     @ObservedObject var model: NetworkMapModel
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
@@ -508,7 +508,7 @@ private struct PingDashCard: View {
     @State private var summary = "—"
     @State private var running = false
     @State private var process: Process?
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -644,7 +644,7 @@ private struct LookupDashCard: View {
     @State private var rows: [(String, String)] = []
     @State private var note = ""
     @State private var running = false
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     private let types = ["A", "AAAA"]
 
@@ -745,7 +745,7 @@ private struct PortScanDashCard: View {
     @State private var host = "192.168.1.1"
     @State private var results: [(Int, Bool)] = []
     @State private var running = false
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     private let ports = [22, 80, 443, 53, 161, 8080, 8443]
 
     var body: some View {
@@ -851,7 +851,7 @@ private struct PortScanDashCard: View {
 
 private struct SubnetDashCard: View {
     @State private var input = "192.168.1.0/24"
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         let info = Self.compute(input)
@@ -916,7 +916,7 @@ private struct SubnetDashCard: View {
 
 private struct BGPDashCard: View {
     @StateObject private var model = BGPLookupModel()
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -968,7 +968,7 @@ private struct BGPDashCard: View {
 private struct BandwidthDashCard: View {
     @ObservedObject var monitor: BandwidthDashMonitor
     @Binding var selectedTab: SNAPTab
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1027,7 +1027,7 @@ private struct WiFiDashCard: View {
     @State private var channel: String = "—"
     @State private var band: String = "—"
     @State private var timer: Timer?
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1126,7 +1126,7 @@ private struct WiFiDashCard: View {
 
 private struct AlertsDashCard: View {
     @ObservedObject private var alerts = AlertManager.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     @Binding var selectedTab: SNAPTab
 
     var body: some View {
@@ -1179,7 +1179,7 @@ private struct AlertsDashCard: View {
 
 private struct SpeedTestDashCard: View {
     @ObservedObject private var history = SpeedTestHistoryStore.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     @Binding var selectedTab: SNAPTab
 
     var body: some View {
@@ -1218,7 +1218,7 @@ private struct TracerouteDashCard: View {
     @State private var summary = "—"
     @State private var running = false
     @State private var process: Process?
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1309,7 +1309,7 @@ private struct GeoIPDashCard: View {
     @State private var asn = ""
     @State private var note = ""
     @State private var running = false
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1381,7 +1381,7 @@ private struct WhoisDashCard: View {
     @State private var lines: [String] = []
     @State private var running = false
     @State private var process: Process?
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1466,7 +1466,7 @@ private struct HTTPDashCard: View {
     @State private var bytes = 0
     @State private var note = ""
     @State private var running = false
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1547,7 +1547,7 @@ private struct WoLDashCard: View {
     @State private var mac = ""
     @State private var note = ""
     @State private var success = false
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1688,7 +1688,7 @@ struct CardReorderDropDelegate: DropDelegate {
 struct FavoritesStripView: View {
     @Binding var selectedTab: SNAPTab
     @ObservedObject private var favs = FavoritesManager.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     @State private var showAddPopover = false
     @State private var newHost = ""
     @State private var newLabel = ""

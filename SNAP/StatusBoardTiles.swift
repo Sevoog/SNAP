@@ -175,7 +175,7 @@ struct StatusTileChrome<Content: View>: View {
     let editing: Bool
     let onRemove: () -> Void
     let content: () -> Content
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -217,7 +217,7 @@ struct StatusTileChrome<Content: View>: View {
 struct StatusTileBody: View {
     let kind: StatusTileKind
     @ObservedObject var bwMonitor: BandwidthDashMonitor
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         switch kind {
@@ -370,7 +370,7 @@ enum ByteFormat {
 // ─── BANDWIDTH — dual area sparklines + peaks + session totals + interfaces
 private struct SBBandwidthTile: View {
     @ObservedObject var bwMonitor: BandwidthDashMonitor
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     @State private var sessionStart = Date()
     @State private var peakRx: Double = 0
     @State private var peakTx: Double = 0
@@ -479,7 +479,7 @@ private struct SBWiFiTile: View {
     /// no Wi-Fi interface.
     @State private var info: StatusBoardWiFi.Info?
     @State private var timer: Timer?
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     private var rssi: Int { info?.rssi ?? 0 }
 
@@ -592,7 +592,7 @@ private struct SBWiFiTile: View {
 private struct SBAlertsTile: View {
     @ObservedObject private var alerts = AlertManager.shared
     @ObservedObject private var mon = MenuBarMonitor.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     /// Wi-Fi signal (0–100), only while Wi-Fi carries the default route —
     /// on Ethernet a weak Wi-Fi signal doesn't affect the connection.
     @State private var wifiQuality: Int?
@@ -743,7 +743,7 @@ private extension AlertMetric {
 // ─── FAVORITES — kept from v1.5.1, unchanged
 private struct SBFavoritesTile: View {
     @ObservedObject private var favs = FavoritesManager.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     @State private var showAdd = false
     @State private var newHost = ""
     @State private var newLabel = ""
@@ -858,7 +858,7 @@ private struct SBFavoritesTile: View {
 // ─── GATEWAY LATENCY — ring gauge + sparkline + min/max/avg/jitter/loss
 private struct SBLatencyTile: View {
     @ObservedObject private var mon = MenuBarMonitor.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -956,7 +956,7 @@ private struct SBLatencyTile: View {
 // ─── SPEED TEST — big numbers + history sparkline + Run Now
 private struct SBSpeedTestTile: View {
     @ObservedObject private var history = SpeedTestHistoryStore.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1045,7 +1045,7 @@ private struct SBSpeedTestTile: View {
 // ─── DNS LATENCY — bar chart per resolver
 private struct SBDNSLatencyTile: View {
     @ObservedObject private var dns = DNSLatencyMonitor.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1096,7 +1096,7 @@ private struct SBDNSLatencyTile: View {
 // ─── SYSTEM — uptime, CPU, memory, battery
 private struct SBSystemTile: View {
     @ObservedObject private var sys = SystemStatsMonitor.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1171,7 +1171,7 @@ private struct SBSystemTile: View {
 // ─── TOP TALKERS — per-process bandwidth via nettop
 private struct SBTopTalkersTile: View {
     @ObservedObject private var tt = TopTalkersMonitor.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

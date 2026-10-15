@@ -507,7 +507,7 @@ final class PublicInfoCache {
 struct ConnectionSummaryCard: View {
     @StateObject private var summary = ConnectionSummary()
     @State private var tick: Timer?
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

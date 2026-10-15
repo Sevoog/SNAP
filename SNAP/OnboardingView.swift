@@ -40,7 +40,7 @@ final class OnboardingManager: ObservableObject {
 
 struct OnboardingView: View {
     @ObservedObject private var mgr = OnboardingManager.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     @State private var slide = 1
     private let total = 5
 

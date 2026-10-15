@@ -109,6 +109,7 @@ struct TracerouteView: View {
                         Spacer()
                     } else {
                         let chartHops = hops.filter { $0.avgRTT != nil }
+                        let axisText = ChartAxis.text
                         Chart(chartHops) { h in
                             BarMark(x: .value("Hop", h.hop), y: .value("ms", h.avgRTT ?? 0))
                                 .foregroundStyle(
@@ -116,8 +117,10 @@ struct TracerouteView: View {
                                     (h.avgRTT ?? 0) < 150 ? Color.yellow : Color.red
                                 )
                         }
-                        .chartYAxisLabel("ms")
-                        .chartXAxisLabel("Hop")
+                        .chartYAxisLabel { Text("ms").foregroundStyle(axisText) }
+                        .chartXAxisLabel { Text("Hop").foregroundStyle(axisText) }
+                        .chartXAxis { AxisMarks { AxisGridLine(); AxisTick(); AxisValueLabel().foregroundStyle(axisText) } }
+                        .chartYAxis { AxisMarks { AxisGridLine(); AxisTick(); AxisValueLabel().foregroundStyle(axisText) } }
                         .padding()
                     }
                 }

@@ -11,6 +11,7 @@
 
 import SwiftUI
 import AppKit
+import Observation
 
 // MARK: - Theme model
 
@@ -267,7 +268,7 @@ struct StatusDot: View {
     let level: StatusLevel
     let color: Color
     var size: CGFloat = 7
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         if themeMgr.current.inkCues {
@@ -295,7 +296,7 @@ struct StatusDot: View {
 private struct StatusPillModifier: ViewModifier {
     let level: StatusLevel
     let color: Color
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     func body(content: Content) -> some View {
         if themeMgr.current.inkColors {
@@ -349,11 +350,17 @@ private func hex(_ rgb: UInt32) -> Color {
 
 // MARK: - Manager
 
-final class ThemeManager: ObservableObject {
+/// Observable (not ObservableObject): every view whose body reads a theme
+/// color, directly or through the NS tokens, is redrawn when the theme
+/// changes. With ObservableObject only views holding an @ObservedObject were,
+/// and SwiftUI skips redrawing a child whose inputs didn't change, so such a
+/// child kept the old theme's colors until something else changed.
+@Observable
+final class ThemeManager {
     static let shared = ThemeManager()
-    private let key = "com.bardaklabs.snap.theme.v1"
+    @ObservationIgnored private let key = "com.bardaklabs.snap.theme.v1"
 
-    @Published var current: Theme
+    var current: Theme
 
     private init() {
         let stored = UserDefaults.standard.string(forKey: key)
@@ -380,7 +387,7 @@ final class ThemeManager: ObservableObject {
 // MARK: - Picker UI (used in the Dashboard toolbar)
 
 struct ThemePicker: View {
-    @ObservedObject private var mgr = ThemeManager.shared
+    private var mgr = ThemeManager.shared
 
     var body: some View {
         Menu {

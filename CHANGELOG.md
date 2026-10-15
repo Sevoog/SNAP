@@ -5,6 +5,10 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ## [Unreleased]
 
+### Fixed: switching themes left parts of some screens in the old theme
+
+After a theme switch, views whose content hadn't changed kept the previous theme's colors, often dark text on a dark background or white on a light one, until their data changed. This was most visible on Speed Test's iPerf3 results, which stayed that way until the next test; the new SNMP views and others could do it too. Every view now redraws when the theme changes. Chart axis labels and titles (Speed Test, iPerf3, SNMP Watch, Ping, Traceroute, Multi-Host, Bandwidth) also follow the theme now, and the iPerf3 results use the theme's secondary text color for captions, which reads better in darker themes.
+
 ### Fixed: hard-to-read text in the menu bar popover
 
 Captions, labels, section headers, the peak readouts, the sample notes, text field placeholders, and the version number were drawn in faint white or black (15 to 30% opacity), which measured under 3:1 contrast in every theme. They now use the theme's text colors, checked against the surface they sit on, so every piece of text reaches at least 4.5:1 in all 12 themes. Accent-colored text (the rates, Online, Open SNAP, badges) keeps its color but is deepened where a theme's accent was too faint, such as Nord's blue. Icons reach at least 3:1, and the Ping and DNS fields and buttons have a crisp one-point outline (a half-point one looked smeared on non-Retina displays). The smallest captions and badges are also a size larger (9 pt instead of 8 pt).

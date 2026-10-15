@@ -15,9 +15,10 @@ import Combine
 
 // MARK: - Design Tokens
 
-// All NS tokens forward to the currently selected Theme. As long as the top-
-// level view (ContentView, MenuBarView) observes ThemeManager, a theme switch
-// re-evaluates every body in the hierarchy and the new colors propagate.
+// All NS tokens forward to the currently selected Theme. ThemeManager is
+// @Observable, so reading any token in a view's body makes that view redraw
+// when the theme changes. (Observing it only at the top level wasn't enough:
+// SwiftUI skips children whose inputs are unchanged, and they kept old colors.)
 struct NS {
     static var bg0:       Color { ThemeManager.shared.current.bg0 }
     static var bg1:       Color { ThemeManager.shared.current.bg1 }
@@ -283,7 +284,7 @@ struct ContentView: View {
     /// see `detailView`.
     @State private var openedTabs: Set<SNAPTab> = []
     @State private var searchText = ""
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     @ObservedObject private var onboarding = OnboardingManager.shared
     @ObservedObject private var palette = CommandPaletteManager.shared
     @ObservedObject private var statusBoard = StatusBoardManager.shared
@@ -435,7 +436,7 @@ struct ContentView: View {
 
 struct IconRail: View {
     @Binding var selectedTab: SNAPTab
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     // Groups of tabs shown as icon-only buttons in the rail
     private let railGroups: [[SNAPTab]] = [
@@ -490,7 +491,7 @@ struct RailButton: View {
     let isSelected: Bool
     let action: () -> Void
     @State private var isHovered = false
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         let ink = themeMgr.current.inkCues
@@ -517,7 +518,7 @@ struct RailButton: View {
 struct DarkSidebar: View {
     @Binding var selectedTab: SNAPTab
     @Binding var searchText: String
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     private var filteredCategories: [(SNAPTab.TabCategory, [SNAPTab])] {
         let tabs = searchText.isEmpty
@@ -626,7 +627,7 @@ struct SidebarFooter: View {
     @State private var isOnline = true
     @State private var showAbout = false
     @State private var pingMs: String = "—"
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     let timer = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
 
@@ -714,7 +715,7 @@ struct SidebarFooter: View {
 
 struct AboutSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -820,7 +821,7 @@ struct DarkNavRow: View {
     let isSelected: Bool
     let action: () -> Void
     @State private var isHovered = false
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         let ink = themeMgr.current.inkCues
@@ -857,7 +858,7 @@ struct DashboardView: View {
     @StateObject private var bwMonitor = BandwidthDashMonitor()
     @StateObject private var mapModel = NetworkMapModel()
     @ObservedObject private var layout = DashboardLayout.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     @ObservedObject private var favs = FavoritesManager.shared
     @State private var editing = false
     @State private var showAddSheet = false
@@ -1043,7 +1044,7 @@ struct MiniSparkline: View {
     let color: Color
     /// How to draw this series under an e-ink theme. nil = like any theme.
     var ink: InkSeries? = nil
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
 
     var body: some View {
         GeometryReader { geo in

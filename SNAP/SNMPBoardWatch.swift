@@ -723,7 +723,7 @@ enum SNMPWatchFormat {
 
 struct SBSNMPWatchTile: View {
     @ObservedObject private var watch = SNMPBoardWatch.shared
-    @ObservedObject private var themeMgr = ThemeManager.shared
+    private var themeMgr = ThemeManager.shared
     @State private var tileID = UUID()
 
     init() {}

@@ -142,6 +142,7 @@ struct MultiHostCompareView: View {
 
                             // Bar chart comparison
                             if results.compactMap({ $0.pingAvg }).count > 1 {
+                                let axisText = ChartAxis.text
                                 GroupBox("Ping Comparison") {
                                     Chart(results.filter { $0.pingAvg != nil }) { r in
                                         BarMark(x: .value("Host", r.host), y: .value("ms", r.pingAvg ?? 0))
@@ -151,7 +152,9 @@ struct MultiHostCompareView: View {
                                                     .font(.caption2)
                                             }
                                     }
-                                    .chartYAxisLabel("ms")
+                                    .chartYAxisLabel { Text("ms").foregroundStyle(axisText) }
+                                    .chartXAxis { AxisMarks { AxisGridLine(); AxisTick(); AxisValueLabel().foregroundStyle(axisText) } }
+                                    .chartYAxis { AxisMarks { AxisGridLine(); AxisTick(); AxisValueLabel().foregroundStyle(axisText) } }
                                     .frame(height: 160)
                                     .padding()
                                 }
@@ -159,6 +162,7 @@ struct MultiHostCompareView: View {
                             }
 
                             // Sparklines
+                            let axisText = ChartAxis.text
                             ForEach(results.filter { !$0.samples.isEmpty }) { r in
                                 GroupBox("\(r.host) — Response Time") {
                                     Chart(r.samples.indices, id: \.self) { i in
@@ -166,7 +170,9 @@ struct MultiHostCompareView: View {
                                             .foregroundStyle(pingQualityColor(r.pingAvg))
                                             .interpolationMethod(.catmullRom)
                                     }
-                                    .chartYAxisLabel("ms")
+                                    .chartYAxisLabel { Text("ms").foregroundStyle(axisText) }
+                                    .chartXAxis { AxisMarks { AxisGridLine(); AxisTick(); AxisValueLabel().foregroundStyle(axisText) } }
+                                    .chartYAxis { AxisMarks { AxisGridLine(); AxisTick(); AxisValueLabel().foregroundStyle(axisText) } }
                                     .frame(height: 80)
                                     .padding(.horizontal)
                                 }
