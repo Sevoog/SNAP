@@ -5,6 +5,29 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ## [Unreleased]
 
+### SNMP: easier to use, and several fixes
+
+New:
+
+- **How to use SNMP.** Before your first query, the SNMP tab explains what SNMP is, how to turn it on in a device, what the community string is, and what each mode shows. It also says plainly that SNAP only reads and never changes device settings.
+- **"No answer" explained.** When a device doesn't reply, a card explains the usual reason (with v1 and v2c, a wrong community string looks exactly like SNMP being off) and lists what to check, including this Mac's address as the device sees it, with a Send to Ping button. Other errors get plain-language explanations too, including a device that stops answering partway through.
+- **Options:** SNMP version (Auto, v2c, or v1), timeout, retries, and row limit. Auto asks over v2c and, if there's no answer, once more over v1, for older devices that only speak v1.
+- **Query with SNMP** from any host's right-click menu, `snmp HOST` in the ⌘K palette, and a recent-hosts menu next to the Host field. Only hosts are saved, never the community string.
+
+Fixed:
+
+- A device that repeated or reordered its replies could crash SNAP in the SNMP tab, Fingerprint, or Bulk Discovery. Walks now stop when a device goes out of order, as `snmpwalk` does.
+- Stop didn't stop. A stopped query kept running and could later show its result, or a "timed out" error, over the next query.
+- After a failed query, the previous device's results stayed on screen, and Copy and Export labeled results with whatever was in the Host field at that moment. Results now show which device they came from and when, and exports use that.
+- Copy and Export included the community string, and so did Fingerprint's log. They now say only "default (public)" or "custom (not shown)".
+- Ports of 10 Gbps and faster showed as "4 Gbps", and 2.5 Gbps ports as "2 Gbps". Speeds now come from ifHighSpeed when needed and show a decimal where it matters.
+- Ports turned off in the device's settings showed as a red "down". They now read "disabled".
+- The In and Out columns are now Total in and Total out (bytes since the device's counter last reset) and use 64-bit counters when the device has them, so they no longer wrap at 4.29 GB.
+- Text with Windows-style line breaks (common in Cisco descriptions) or trailing null bytes (common on printers) showed as hex.
+- Walking a single value such as `sysName.0` returned 0 rows. It now returns the value. A walk that finds nothing says so, and so does a walk cut short by the row limit.
+- When a device rejects GETBULK or says a reply is too big, walks now carry on with smaller requests or GETNEXT instead of failing.
+- On v1 devices, System Info no longer fails outright when one value is missing.
+
 ### New: iPerf3 results, explained
 
 Speed Test's iPerf3 mode still shows iperf3's output exactly as iperf3 prints it, and now adds:

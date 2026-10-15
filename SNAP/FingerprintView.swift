@@ -263,7 +263,9 @@ struct FingerprintView: View {
             // community. Two retries × 2s timeout means at most ~4s if the
             // host doesn't speak SNMP, then we move on.
             if useSNMP {
-                logLines += "→ SNMP probe (community=\(community))...\n"
+                // Name the community only as default or custom: the log is
+                // copied and exported, and the community is a password.
+                logLines += "→ SNMP probe (\(community == "public" ? "default community" : "custom community"))...\n"
                 let client = SNMPClient(host: target,
                                         community: community,
                                         version: .v2c,
@@ -273,7 +275,7 @@ struct FingerprintView: View {
                     let vbs = try await client.get([SNMPOID.sysDescr,
                                                     SNMPOID.sysObjectID,
                                                     SNMPOID.sysName])
-                    let byOID = Dictionary(uniqueKeysWithValues: vbs.map { ($0.oid, $0.value) })
+                    let byOID = Dictionary(vbs.map { ($0.oid, $0.value) }, uniquingKeysWith: { first, _ in first })
                     if let d = byOID[SNMPOID.sysDescr] {
                         gathered["SNMP sysDescr"] = d.description
                         logLines += "  sysDescr: \(d.description)\n"

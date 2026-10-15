@@ -871,7 +871,8 @@ final class UniFiControllerModel: ObservableObject {
 /// or newline. Shared across the inventory exports in NetworkMap, UniFi,
 /// and BulkDiscovery.
 func csvEscape(_ s: String) -> String {
-    if s.contains(",") || s.contains("\"") || s.contains("\n") {
+    // Scalars, not Characters: "\r\n" is one Character that isn't "\n".
+    if s.unicodeScalars.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" }) {
         return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
     return s

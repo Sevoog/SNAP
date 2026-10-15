@@ -126,4 +126,66 @@ struct ToolActionBar: View {
     }
 }
 
+// MARK: - Note card (verdicts, errors, how-to)
 
+/// A headline, a plain-language explanation, optional bullet points, and
+/// optional buttons. Used for iPerf3 verdicts and for SNMP's how-to and
+/// "why didn't it answer?" cards.
+struct ToolNoteCard<Actions: View>: View {
+    let icon: String
+    let tint: Color
+    let headline: String
+    let detail: String
+    let notes: [String]
+    var footnote: String? = nil      // small print under the notes, e.g. the raw error
+    let actions: Actions
+
+    init(icon: String, tint: Color, headline: String, detail: String,
+         notes: [String] = [], footnote: String? = nil,
+         @ViewBuilder actions: () -> Actions) {
+        self.icon = icon
+        self.tint = tint
+        self.headline = headline
+        self.detail = detail
+        self.notes = notes
+        self.footnote = footnote
+        self.actions = actions()
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon).foregroundStyle(tint).font(.title3)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(headline).font(.subheadline.bold()).foregroundStyle(NS.text1)
+                Text(detail).font(.callout).foregroundStyle(NS.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(notes, id: \.self) { note in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\u{2022}").foregroundStyle(NS.text3)
+                        Text(note).font(.callout).foregroundStyle(NS.text2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if let footnote {
+                    Text(footnote).font(.caption).foregroundStyle(NS.text3)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                actions
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(tint.opacity(0.07))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(tint.opacity(0.25)))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+extension ToolNoteCard where Actions == EmptyView {
+    init(icon: String, tint: Color, headline: String, detail: String,
+         notes: [String] = [], footnote: String? = nil) {
+        self.init(icon: icon, tint: tint, headline: headline, detail: detail,
+                  notes: notes, footnote: footnote) { EmptyView() }
+    }
+}

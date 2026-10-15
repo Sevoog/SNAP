@@ -64,6 +64,7 @@ final class ToolHandoff: ObservableObject {
 
 enum ToolHistoryKey: String, CaseIterable {
     case ping, lookup, whois, http, geoIP, bgp, traceroute, portScan
+    case snmp   // hosts only; the community string is never saved
 }
 
 final class ToolHistory {

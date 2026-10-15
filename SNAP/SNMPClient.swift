@@ -1,11 +1,11 @@
 // SNMPClient.swift
-// SNAP — SNMP v2c client (ASN.1 BER encoder/decoder + GET/GETNEXT/GETBULK/WALK)
+// SNAP — SNMP v1/v2c client (ASN.1 BER encoder/decoder + GET/GETNEXT/GETBULK/WALK)
 // Created by Sevag Bardakjian
 // Copyright © 2026 Sevag Bardakjian
 // SPDX-License-Identifier: GPL-3.0-only
 // Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
-// Self-contained SNMP v2c implementation. No external dependencies.
+// Self-contained SNMP v1/v2c implementation. No external dependencies.
 //
 // What's here:
 //   • ASN1 — minimal BER encoder/decoder for the tags SNMP uses
@@ -13,7 +13,8 @@
 //                          gauge32, timeticks, ipaddress, counter64,
 //                          noSuchObject, noSuchInstance, endOfMibView}
 //   • SNMPClient — async send/receive over NWConnection (UDP/161)
-//   • get(_:), getNext(_:), walk(_:), bulkWalk(_:) high-level helpers
+//   • get(_:), getTolerant(_:), getNext(_:), walk(_:), bulkWalk(_:),
+//     walkSubtree(_:) high-level helpers
 //
 // What's NOT here (deferred):
 //   • SNMPv3 (USM auth+priv crypto) — v2c first
@@ -49,8 +50,9 @@ enum ASN1Tag: UInt8 {
     case endOfMibView   = 0x82
 }
 
-/// Object Identifier (1.3.6.1.2.1.1.1.0 style).
-struct OID: Hashable, CustomStringConvertible {
+/// Object Identifier (1.3.6.1.2.1.1.1.0 style). Ordered the way agents
+/// walk the MIB: component by component, a prefix before its children.
+struct OID: Hashable, Comparable, CustomStringConvertible {
     let components: [UInt32]
 
     init(_ components: [UInt32]) { self.components = components }
@@ -74,6 +76,10 @@ struct OID: Hashable, CustomStringConvertible {
     }
 
     var description: String { components.map(String.init).joined(separator: ".") }
+
+    static func < (a: OID, b: OID) -> Bool {
+        a.components.lexicographicallyPrecedes(b.components)
+    }
 
     /// True if `other` is `self` or a descendant of `self` (lexicographic prefix).
     func isAncestorOrEqual(_ other: OID) -> Bool {
@@ -106,10 +112,7 @@ enum SNMPValue: CustomStringConvertible, Hashable {
         switch self {
         case .integer(let i):       return String(i)
         case .octetString(let d):
-            if let s = String(data: d, encoding: .utf8),
-               s.unicodeScalars.allSatisfy({ $0.value >= 0x20 || $0 == "\n" || $0 == "\t" }) {
-                return s
-            }
+            if let s = SNMPValue.text(d) { return s }
             return d.map { String(format: "%02X", $0) }.joined(separator: " ")
         case .oid(let o):           return o.description
         case .null:                 return "(null)"
@@ -124,6 +127,43 @@ enum SNMPValue: CustomStringConvertible, Hashable {
         case .noSuchObject:         return "(noSuchObject)"
         case .noSuchInstance:       return "(noSuchInstance)"
         case .endOfMibView:         return "(endOfMibView)"
+        }
+    }
+
+    /// An octet string as text, or nil when it's binary (a MAC address, a
+    /// bit map). Allows CR/LF line breaks (Cisco IOS sysDescr uses CRLF) and
+    /// ignores trailing NULs (common on printers), but only when what's left
+    /// clearly reads as text: BITS and PortList values such as 28 00 or
+    /// 60 00 00 00 end in zero bytes too, and must stay hex.
+    static func text(_ d: Data) -> String? {
+        if d.isEmpty { return "" }
+        var bytes = d
+        while bytes.last == 0 { bytes.removeLast() }
+        let padding = d.count - bytes.count
+        guard let s = String(data: bytes, encoding: .utf8), !bytes.isEmpty,
+              s.unicodeScalars.allSatisfy({
+                  ($0.value >= 0x20 && $0.value != 0x7F) || $0 == "\n" || $0 == "\r" || $0 == "\t"
+              }) else { return nil }
+        if padding > 0 {
+            guard bytes.count >= 2, padding <= bytes.count,
+                  s.unicodeScalars.contains(where: { CharacterSet.alphanumerics.contains($0) })
+            else { return nil }
+        }
+        return s
+    }
+
+    /// True for octet strings that display as text (see `text(_:)`).
+    var isText: Bool {
+        if case .octetString(let d) = self { return SNMPValue.text(d) != nil }
+        return false
+    }
+
+    /// The device answered, but has nothing at this OID (or hides it from
+    /// this community).
+    var isException: Bool {
+        switch self {
+        case .noSuchObject, .noSuchInstance, .endOfMibView: return true
+        default: return false
         }
     }
 
@@ -526,8 +566,20 @@ struct SNMPMessage {
 
 // MARK: - Client
 
-/// Async SNMP v2c client. One instance per query host.
-final class SNMPClient {
+/// The result of a walk: the rows, and why it stopped.
+struct SNMPWalk {
+    enum End: Equatable {
+        case complete        // left the subtree, or the end of the MIB
+        case limit           // reached maxRows
+        case notIncreasing   // the agent repeated or went backwards; stopped to avoid looping
+        case error(Int, String)   // the device returned an error status after some rows
+    }
+    var rows: [SNMPVarBind]
+    var end: End
+}
+
+/// Async SNMP v1/v2c client. One instance per query host.
+final class SNMPClient: @unchecked Sendable {
     let host: String
     let port: UInt16
     let community: String
@@ -535,21 +587,43 @@ final class SNMPClient {
     let timeout: TimeInterval
     let retries: Int
 
+    /// Stands in for the network in tests: takes a request, returns the reply.
+    typealias Transport = (SNMPMessage) async throws -> SNMPMessage
+    private let transport: Transport?
+
     private static var requestCounter: Int32 = Int32.random(in: 1..<10000)
     private static let counterLock = NSLock()
+
+    private let stateLock = NSLock()
+    private var _localAddress: String?
+    private var _replies = 0
+    /// Replies received so far, error-status replies included. Zero means
+    /// the device never answered this client.
+    var repliesReceived: Int {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return _replies
+    }
+    /// This Mac's address on the path to the device, as of the last request.
+    /// Devices often only answer listed addresses, so it's worth showing.
+    var localAddress: String? {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return _localAddress
+    }
 
     init(host: String,
          port: UInt16 = 161,
          community: String = "public",
          version: SNMPVersion = .v2c,
          timeout: TimeInterval = 3.0,
-         retries: Int = 2) {
+         retries: Int = 2,
+         transport: Transport? = nil) {
         self.host = host
         self.port = port
         self.community = community
         self.version = version
         self.timeout = timeout
         self.retries = retries
+        self.transport = transport
     }
 
     private func nextRequestID() -> Int32 {
@@ -579,6 +653,27 @@ final class SNMPClient {
         return v
     }
 
+    /// GET that survives missing OIDs on v1. A v1 agent fails the whole
+    /// request with noSuchName when any one OID is missing (v2c marks just
+    /// that varbind noSuchObject), so on noSuchName ask for each OID alone
+    /// and mark the missing ones noSuchObject. Small agents can also refuse
+    /// a multi-OID reply as tooBig; asking one at a time fixes that too.
+    func getTolerant(_ oids: [OID]) async throws -> [SNMPVarBind] {
+        do {
+            return try await get(oids)
+        } catch SNMPError.errorStatus(let code, _, _) where (code == 1 || code == 2) && oids.count > 1 {
+            var out: [SNMPVarBind] = []
+            for oid in oids {
+                do {
+                    out.append(contentsOf: try await get([oid]))
+                } catch SNMPError.errorStatus(2, _, _) {
+                    out.append(SNMPVarBind(oid: oid, value: .noSuchObject))
+                }
+            }
+            return out
+        }
+    }
+
     // MARK: GETNEXT
 
     func getNext(_ oids: [OID]) async throws -> [SNMPVarBind] {
@@ -598,63 +693,93 @@ final class SNMPClient {
 
     /// Walk the subtree rooted at `base` using repeated GETNEXT. Stops when
     /// the returned OID is no longer a descendant of `base`, on endOfMibView,
-    /// or after `maxRows` results (safety cap).
-    func walk(_ base: OID, maxRows: Int = 1024) async throws -> [SNMPVarBind] {
-        var results: [SNMPVarBind] = []
-        var current = base
+    /// when the agent stops moving forward, or after `maxRows` results.
+    func walk(_ base: OID, maxRows: Int = 1024) async throws -> SNMPWalk {
+        try await walk(base, from: base, rows: [], maxRows: maxRows)
+    }
+
+    /// GETNEXT walk that continues from `start` after `rows` already found
+    /// (used when a GETBULK walk falls back partway through).
+    private func walk(_ base: OID, from start: OID, rows: [SNMPVarBind], maxRows: Int) async throws -> SNMPWalk {
+        var results = rows
+        var current = start
         while results.count < maxRows {
+            try Task.checkCancellation()
             let next: [SNMPVarBind]
             do {
                 next = try await getNext([current])
-            } catch SNMPError.errorStatus(_, _, _) {
-                // Some agents return tooBig/noSuchName instead of endOfMibView.
-                break
+            } catch SNMPError.errorStatus(2, _, _) {
+                break                            // v1 end of the MIB: noSuchName
+            } catch SNMPError.errorStatus(let code, let label, _) where !results.isEmpty {
+                return SNMPWalk(rows: results, end: .error(code, label))
             }
             guard let vb = next.first else { break }
             if !base.isAncestorOrEqual(vb.oid) { break }
-            if case .endOfMibView = vb.value { break }
-            if case .noSuchObject = vb.value { break }
-            if case .noSuchInstance = vb.value { break }
+            if vb.value.isException { break }
+            // A buggy agent can repeat an OID forever; net-snmp stops here too.
+            if vb.oid <= current { return SNMPWalk(rows: results, end: .notIncreasing) }
             results.append(vb)
             current = vb.oid
         }
-        return results
+        return SNMPWalk(rows: results, end: results.count >= maxRows ? .limit : .complete)
     }
 
-    /// Faster walk using GETBULK (v2c only). One round-trip returns up to
-    /// `maxReps` rows. Falls back to plain walk semantics on bulk-unsupported
-    /// agents (some SOHO gear still does v2c without GETBULK).
-    func bulkWalk(_ base: OID, maxReps: Int = 25, maxRows: Int = 1024) async throws -> [SNMPVarBind] {
+    /// Faster walk using GETBULK (v2c only). One round trip returns up to
+    /// `maxReps` rows. On tooBig it halves `maxReps` and asks again; on any
+    /// other error status (some SOHO agents reject GETBULK) it carries on
+    /// with GETNEXT from where it got to. v1 always uses GETNEXT.
+    func bulkWalk(_ base: OID, maxReps: Int = 25, maxRows: Int = 1024) async throws -> SNMPWalk {
         guard version == .v2c else { return try await walk(base, maxRows: maxRows) }
 
         var results: [SNMPVarBind] = []
         var current = base
+        var reps = max(1, maxReps)
         while results.count < maxRows {
+            try Task.checkCancellation()
             let msg = SNMPMessage(
                 version: .v2c,
                 community: community,
                 pduTag: ASN1Tag.getBulkRequest.rawValue,
                 requestID: nextRequestID(),
                 errorStatus: 0,                 // non-repeaters
-                errorIndex: Int32(maxReps),     // max-repetitions
+                errorIndex: Int32(reps),        // max-repetitions
                 varBinds: [SNMPVarBind(oid: current, value: .null)]
             )
-            let chunk = try await round(msg)
+            let chunk: [SNMPVarBind]
+            do {
+                chunk = try await round(msg)
+            } catch SNMPError.errorStatus(1, _, _) where reps > 1 {
+                reps = max(1, reps / 2)          // tooBig: ask for fewer rows
+                continue
+            } catch SNMPError.errorStatus(_, _, _) {
+                return try await walk(base, from: current, rows: results, maxRows: maxRows)
+            }
             if chunk.isEmpty { break }
-            var didAdvance = false
             for vb in chunk {
-                if !base.isAncestorOrEqual(vb.oid) { return results }
-                if case .endOfMibView = vb.value { return results }
-                if case .noSuchObject = vb.value { return results }
-                if case .noSuchInstance = vb.value { return results }
+                if !base.isAncestorOrEqual(vb.oid) { return SNMPWalk(rows: results, end: .complete) }
+                if vb.value.isException { return SNMPWalk(rows: results, end: .complete) }
+                if vb.oid <= current { return SNMPWalk(rows: results, end: .notIncreasing) }
                 results.append(vb)
                 current = vb.oid
-                didAdvance = true
-                if results.count >= maxRows { return results }
+                if results.count >= maxRows { return SNMPWalk(rows: results, end: .limit) }
             }
-            if !didAdvance { break }
         }
-        return results
+        return SNMPWalk(rows: results, end: results.count >= maxRows ? .limit : .complete)
+    }
+
+    /// Walk for the Custom OID Walk: like `snmpwalk`, if nothing sits under
+    /// `base` (it's a single value such as sysName.0), GET `base` itself.
+    /// Returns no rows when the device has nothing there.
+    func walkSubtree(_ base: OID, maxReps: Int = 25, maxRows: Int = 1024) async throws -> SNMPWalk {
+        let w = try await bulkWalk(base, maxReps: maxReps, maxRows: maxRows)
+        guard w.rows.isEmpty, w.end == .complete else { return w }
+        let single: [SNMPVarBind]
+        do {
+            single = try await get([base])
+        } catch SNMPError.errorStatus(2, _, _) {
+            single = []                          // v1: noSuchName
+        }
+        return SNMPWalk(rows: single.filter { !$0.value.isException }, end: .complete)
     }
 
     // MARK: Transport (UDP round trip + retries)
@@ -662,9 +787,16 @@ final class SNMPClient {
     private func round(_ msg: SNMPMessage) async throws -> [SNMPVarBind] {
         let payload = msg.encode()
         var lastError: Error = SNMPError.timeout
-        for _ in 0...retries {
+        for _ in 0...max(0, retries) {
+            try Task.checkCancellation()
             do {
-                let reply = try await sendOnce(payload, expectedID: msg.requestID)
+                let reply: SNMPMessage
+                if let transport {
+                    reply = try await transport(msg)
+                } else {
+                    reply = try await sendOnce(payload, expectedID: msg.requestID)
+                }
+                stateLock.lock(); _replies += 1; stateLock.unlock()
                 if reply.errorStatus != 0 {
                     throw SNMPError.errorStatus(Int(reply.errorStatus),
                                                 snmpErrorLabel(Int(reply.errorStatus)),
@@ -682,75 +814,128 @@ final class SNMPClient {
     }
 
     private func sendOnce(_ payload: Data, expectedID: Int32) async throws -> SNMPMessage {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<SNMPMessage, Error>) in
-            guard let nwPort = NWEndpoint.Port(rawValue: port) else {
-                cont.resume(throwing: SNMPError.transport("invalid port")); return
-            }
-            let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: nwPort)
-            let params = NWParameters.udp
-            let conn = NWConnection(to: endpoint, using: params)
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else {
+            throw SNMPError.transport("invalid port")
+        }
+        let pending = PendingSNMPRequest()
+        // Stop (Task.cancel) closes the socket and returns at once, instead of
+        // waiting out the timeout and then reporting on a query nobody wants.
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<SNMPMessage, Error>) in
+                let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: nwPort)
+                let conn = NWConnection(to: endpoint, using: NWParameters.udp)
+                guard pending.start(cont, conn) else { return }   // already cancelled
 
-            var resumed = false
-            let lock = NSLock()
-            func finish(_ result: Result<SNMPMessage, Error>) {
-                lock.lock()
-                let already = resumed
-                resumed = true
-                lock.unlock()
-                if already { return }
-                conn.cancel()
-                switch result {
-                case .success(let m): cont.resume(returning: m)
-                case .failure(let e): cont.resume(throwing: e)
+                DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                    pending.finish(.failure(SNMPError.timeout))
                 }
-            }
 
-            let deadline = DispatchTime.now() + timeout
-            DispatchQueue.global().asyncAfter(deadline: deadline) {
-                finish(.failure(SNMPError.timeout))
-            }
-
-            conn.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    conn.send(content: payload, completion: .contentProcessed { sendErr in
-                        if let sendErr = sendErr {
-                            finish(.failure(SNMPError.transport(sendErr.localizedDescription)))
-                            return
+                conn.stateUpdateHandler = { [weak self] state in
+                    switch state {
+                    case .ready:
+                        if let local = conn.currentPath?.localEndpoint,
+                           case .hostPort(let h, _) = local {
+                            self?.setLocalAddress("\(h)")
                         }
-                        conn.receiveMessage { data, _, _, recvErr in
-                            if let recvErr = recvErr {
-                                finish(.failure(SNMPError.transport(recvErr.localizedDescription)))
+                        conn.send(content: payload, completion: .contentProcessed { sendErr in
+                            if let sendErr = sendErr {
+                                pending.finish(.failure(SNMPError.transport(sendErr.localizedDescription)))
                                 return
                             }
-                            guard let data = data else {
-                                finish(.failure(SNMPError.truncated)); return
-                            }
-                            do {
-                                let m = try SNMPMessage.decode(data)
-                                if m.requestID != expectedID {
-                                    // Stale reply for a previous attempt — keep waiting on
-                                    // the receiver. Realistically we just bail here since
-                                    // our retries open a fresh connection each time.
-                                    finish(.failure(SNMPError.truncated))
+                            conn.receiveMessage { data, _, _, recvErr in
+                                if let recvErr = recvErr {
+                                    pending.finish(.failure(SNMPError.transport(recvErr.localizedDescription)))
                                     return
                                 }
-                                finish(.success(m))
-                            } catch {
-                                finish(.failure(error))
+                                guard let data = data else {
+                                    pending.finish(.failure(SNMPError.truncated)); return
+                                }
+                                do {
+                                    let m = try SNMPMessage.decode(data)
+                                    if m.requestID != expectedID {
+                                        // Each attempt uses a fresh socket, so a
+                                        // mismatched ID means a garbled reply.
+                                        pending.finish(.failure(SNMPError.truncated))
+                                        return
+                                    }
+                                    pending.finish(.success(m))
+                                } catch {
+                                    pending.finish(.failure(error))
+                                }
                             }
+                        })
+                    case .failed(let e):
+                        pending.finish(.failure(SNMPError.transport(e.debugDescription)))
+                    case .waiting(let e):
+                        // A name that doesn't resolve, or no route: UDP waits
+                        // here instead of failing. Say so now rather than
+                        // timing out and blaming the community string.
+                        if Self.isUnreachable(e) {
+                            pending.finish(.failure(SNMPError.transport(e.debugDescription)))
                         }
-                    })
-                case .failed(let e):
-                    finish(.failure(SNMPError.transport(e.localizedDescription)))
-                case .cancelled:
-                    break
-                default:
-                    break
+                    default:
+                        break
+                    }
                 }
+                conn.start(queue: DispatchQueue.global(qos: .userInitiated))
             }
-            conn.start(queue: DispatchQueue.global(qos: .userInitiated))
+        } onCancel: {
+            pending.cancel()
         }
+    }
+
+    private static func isUnreachable(_ e: NWError) -> Bool {
+        switch e {
+        case .dns:
+            return true
+        case .posix(let code):
+            return [.ENETDOWN, .ENETUNREACH, .EHOSTUNREACH, .EHOSTDOWN].contains(code)
+        default:
+            return false
+        }
+    }
+
+    private func setLocalAddress(_ a: String) {
+        stateLock.lock(); _localAddress = a; stateLock.unlock()
+    }
+}
+
+/// One UDP request in flight. Resumes its continuation exactly once, from
+/// the reply, the timeout, a socket error, or Stop, and closes the socket.
+private final class PendingSNMPRequest: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cont: CheckedContinuation<SNMPMessage, Error>?
+    private var conn: NWConnection?
+    private var cancelled = false
+
+    /// False (and the continuation already resumed) if Stop came first.
+    func start(_ c: CheckedContinuation<SNMPMessage, Error>, _ connection: NWConnection) -> Bool {
+        lock.lock()
+        if cancelled {
+            lock.unlock()
+            c.resume(throwing: CancellationError())
+            return false
+        }
+        cont = c
+        conn = connection
+        lock.unlock()
+        return true
+    }
+
+    func finish(_ result: Result<SNMPMessage, Error>) {
+        lock.lock()
+        guard let c = cont else { lock.unlock(); return }
+        cont = nil
+        let connection = conn
+        conn = nil
+        lock.unlock()
+        connection?.cancel()
+        c.resume(with: result)
+    }
+
+    func cancel() {
+        lock.lock(); cancelled = true; lock.unlock()
+        finish(.failure(CancellationError()))
     }
 }
 
@@ -769,12 +954,21 @@ enum SNMPOID {
     static let ifDescr      = OID([1,3,6,1,2,1,2,2,1,2])
     /// ifTable column 5 (ifSpeed).
     static let ifSpeed      = OID([1,3,6,1,2,1,2,2,1,5])
+    /// ifTable column 7 (ifAdminStatus: 1 up, 2 down = turned off, 3 testing).
+    static let ifAdminStatus = OID([1,3,6,1,2,1,2,2,1,7])
     /// ifTable column 8 (ifOperStatus).
     static let ifOperStatus = OID([1,3,6,1,2,1,2,2,1,8])
     /// ifTable column 10 (ifInOctets).
     static let ifInOctets   = OID([1,3,6,1,2,1,2,2,1,10])
     /// ifTable column 16 (ifOutOctets).
     static let ifOutOctets  = OID([1,3,6,1,2,1,2,2,1,16])
+    /// ifXTable column 6 (ifHCInOctets, 64-bit; v2c only).
+    static let ifHCInOctets  = OID([1,3,6,1,2,1,31,1,1,1,6])
+    /// ifXTable column 10 (ifHCOutOctets, 64-bit; v2c only).
+    static let ifHCOutOctets = OID([1,3,6,1,2,1,31,1,1,1,10])
+    /// ifXTable column 15 (ifHighSpeed, in Mbps). ifSpeed is a Gauge32 that
+    /// tops out at 4,294,967,295 bps, so 10 Gbps and faster ports need this.
+    static let ifHighSpeed   = OID([1,3,6,1,2,1,31,1,1,1,15])
     /// ipNetToMediaTable (ARP cache on the device).
     static let ipNetToMedia = OID([1,3,6,1,2,1,4,22,1])
     /// LLDP remote systems table.

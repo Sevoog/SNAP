@@ -337,7 +337,7 @@ final class BulkDiscoveryModel: ObservableObject {
             let vbs = try await client.get([SNMPOID.sysDescr,
                                             SNMPOID.sysObjectID,
                                             SNMPOID.sysName])
-            let byOID = Dictionary(uniqueKeysWithValues: vbs.map { ($0.oid, $0.value) })
+            let byOID = Dictionary(vbs.map { ($0.oid, $0.value) }, uniquingKeysWith: { first, _ in first })
             let descr = byOID[SNMPOID.sysDescr]?.description
             let name  = byOID[SNMPOID.sysName]?.description
             var oidStr: String?

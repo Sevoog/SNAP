@@ -1201,7 +1201,7 @@ struct IperfRunSection: View {
             }
 
             if let error = result.error {
-                IperfNoteCard(icon: "exclamationmark.triangle", tint: .red,
+                ToolNoteCard(icon: "exclamationmark.triangle", tint: .red,
                               headline: "iperf3 couldn't run the test",
                               detail: error.prefix(1).uppercased() + error.dropFirst(),
                               notes: ["Check that iperf3 -s is running on the server, that the address and port are right, and that the server's firewall allows the port."])
@@ -1217,7 +1217,7 @@ struct IperfRunSection: View {
             }
 
             if !live, let v = IperfAdvisor.verdict(for: result, link: link, streams: streams) {
-                IperfNoteCard(icon: "lightbulb", tint: .blue, headline: v.headline, detail: v.detail, notes: v.notes)
+                ToolNoteCard(icon: "lightbulb", tint: .blue, headline: v.headline, detail: v.detail, notes: v.notes)
             }
 
             if !result.intervalsBps.isEmpty {
@@ -1292,38 +1292,6 @@ private struct IperfStatCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .background(NS.bg3)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-}
-
-/// The verdict, or an error, in plain language.
-private struct IperfNoteCard: View {
-    let icon: String
-    let tint: Color
-    let headline: String
-    let detail: String
-    let notes: [String]
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon).foregroundStyle(tint).font(.title3)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(headline).font(.subheadline.bold()).foregroundStyle(NS.text1)
-                Text(detail).font(.callout).foregroundStyle(NS.text2)
-                    .fixedSize(horizontal: false, vertical: true)
-                ForEach(notes, id: \.self) { note in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("\u{2022}").foregroundStyle(NS.text3)
-                        Text(note).font(.callout).foregroundStyle(NS.text2)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .background(tint.opacity(0.07))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(tint.opacity(0.25)))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }

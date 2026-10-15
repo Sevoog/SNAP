@@ -132,10 +132,11 @@ enum CommandRegistry {
             "geoip":      (.geoIP,      "GeoIP of"),
             "bgp":        (.bgp,        "BGP/ASN lookup of"),
             "http":       (.http,       "HTTP probe of"),
+            "snmp":       (.snmp,       "SNMP query of"),
         ]
         guard let (tab, prefix) = mapping[verb] else { return nil }
         return .init(section: "Run", icon: "play.fill",
-                     title: "\(verb.capitalized) \(host)",
+                     title: "\(verb == "snmp" ? "SNMP" : verb.capitalized) \(host)",
                      subtitle: "\(prefix) \(host)",
                      kind: .run) {
             ToolHandoff.shared.send(host, to: tab)

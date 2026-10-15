@@ -6,7 +6,7 @@
 // Additional attribution term (GPL-3.0 section 7(b)): see NOTICE.md
 //
 // Attach via `.hostMenu(host)`. The menu offers Copy, send-to-tool actions
-// (Ping / Traceroute / Port Scan / Lookup / Whois), and "Find in Network Map"
+// (Ping / Traceroute / Port Scan / SNMP / Lookup / Whois), and "Find in Network Map"
 // / "Add to Favorites". Tab navigation is routed via `ToolHandoff.shared`
 // so call sites don't need a `selectedTab` binding plumbed through.
 
@@ -50,6 +50,10 @@ struct HostContextMenu: ViewModifier {
             Button {
                 ToolHandoff.shared.send(host, to: .portScan)
             } label: { Label("Send to Port Scan", systemImage: "circle.grid.3x3") }
+
+            Button {
+                ToolHandoff.shared.send(host, to: .snmp)
+            } label: { Label("Query with SNMP", systemImage: "rectangle.connected.to.line.below") }
 
             Button {
                 ToolHandoff.shared.send(host, to: .lookup)
