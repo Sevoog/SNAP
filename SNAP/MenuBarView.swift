@@ -513,13 +513,13 @@ struct MenuBarView: View {
     private func rateCell(label: String, value: String, peak: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.system(size: 8, design: .monospaced))
+                .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(secondary(on: bg1))
             Text(value)
                 .font(.system(size: 15, weight: .medium, design: .monospaced))
                 .foregroundStyle(accent(color, on: bg1))
             Text("peak \(peak)")
-                .font(.system(size: 8))
+                .font(.system(size: 9))
                 .foregroundStyle(secondary(on: bg1))
         }
         .padding(.horizontal, 13).padding(.vertical, 9)
@@ -547,14 +547,14 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
                 Text(label)
-                    .font(.system(size: 8, design: .monospaced))
+                    .font(.system(size: 9, design: .monospaced))
                     .foregroundStyle(secondary(on: bg1))
                 Text(rateStr)
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundStyle(accent(color, on: bg1))
                 Spacer()
                 Text(isTop ? "\(monitor.activeInterface) · 2s" : "last 30 samples")
-                    .font(.system(size: 8))
+                    .font(.system(size: 9))
                     .foregroundStyle(secondary(on: bg1))
             }
             GeometryReader { geo in
@@ -599,7 +599,7 @@ struct MenuBarView: View {
                         Spacer()
                         signalBars(rssi: wifiInfo.rssi)
                         Text(wifiInfo.security)
-                            .font(.system(size: 8)).padding(.horizontal, 5).padding(.vertical, 2)
+                            .font(.system(size: 9)).padding(.horizontal, 5).padding(.vertical, 2)
                             .background(NS.green.opacity(0.15)).cornerRadius(3)
                             .foregroundStyle(accent(NS.green, on: tinted(NS.green, over: bg0)))
                     }
@@ -678,7 +678,7 @@ struct MenuBarView: View {
                                 .font(.system(size: 10, design: .monospaced))
                                 .foregroundStyle(secondary(on: bg0))
                             Text("Active")
-                                .font(.system(size: 8)).padding(.horizontal, 5).padding(.vertical, 2)
+                                .font(.system(size: 9)).padding(.horizontal, 5).padding(.vertical, 2)
                                 .background(NS.amber.opacity(0.12)).cornerRadius(3)
                                 .foregroundStyle(accent(NS.amber, on: tinted(NS.amber, over: bg0)))
                         }
@@ -823,7 +823,7 @@ struct MenuBarView: View {
                     .foregroundStyle(NS.text1)
                 if let badge = badge {
                     Text(badge)
-                        .font(.system(size: 8)).padding(.horizontal, 5).padding(.vertical, 1)
+                        .font(.system(size: 9)).padding(.horizontal, 5).padding(.vertical, 1)
                         .background(badgeColor.opacity(0.15)).cornerRadius(3)
                         .foregroundStyle(accent(badgeColor, on: tinted(badgeColor, over: bg2)))
                 }
@@ -873,7 +873,7 @@ struct MenuBarView: View {
 
     private func infoCell(label: String, value: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(label).font(.system(size: 8)).foregroundStyle(secondary(on: bg0))
+            Text(label).font(.system(size: 9)).foregroundStyle(secondary(on: bg0))
             Text(value).font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(color)
         }
@@ -893,7 +893,7 @@ struct MenuBarView: View {
 
     private func toolLabel(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 8, design: .monospaced))
+            .font(.system(size: 9, design: .monospaced))
             .foregroundStyle(secondary(on: bg0))
     }
 
