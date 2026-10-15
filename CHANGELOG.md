@@ -7,7 +7,7 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ### Fixed: hard-to-read text in the menu bar popover
 
-Captions, labels, section headers, the peak readouts, the sample notes, text field placeholders, and the version number were drawn in faint white or black (15 to 30% opacity), which measured under 3:1 contrast in every theme. They now use the theme's text colors, checked against the surface they sit on, so every piece of text reaches at least 4.5:1 in all 12 themes. Accent-colored text (the rates, Online, Open SNAP, badges) keeps its color but is deepened where a theme's accent was too faint, such as Nord's blue. Icons and text field borders reach at least 3:1. The smallest captions and badges are also a size larger (9 pt instead of 8 pt).
+Captions, labels, section headers, the peak readouts, the sample notes, text field placeholders, and the version number were drawn in faint white or black (15 to 30% opacity), which measured under 3:1 contrast in every theme. They now use the theme's text colors, checked against the surface they sit on, so every piece of text reaches at least 4.5:1 in all 12 themes. Accent-colored text (the rates, Online, Open SNAP, badges) keeps its color but is deepened where a theme's accent was too faint, such as Nord's blue. Icons reach at least 3:1, and the Ping and DNS fields and buttons have a crisp one-point outline (a half-point one looked smeared on non-Retina displays). The smallest captions and badges are also a size larger (9 pt instead of 8 pt).
 
 ### SNMP: seven views, Watch live, and a Status Board tile
 

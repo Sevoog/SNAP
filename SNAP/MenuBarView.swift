@@ -435,7 +435,7 @@ struct MenuBarView: View {
     private func accent(_ c: Color, on bg: Color) -> Color {
         ThemeContrast.readable(c, on: bg, toward: NS.text1)
     }
-    /// Icons and control borders: at least 3:1.
+    /// Icons: at least 3:1.
     private func glyph(_ c: Color, on bg: Color) -> Color {
         ThemeContrast.readable(c, on: bg, toward: NS.text1, minimum: 3)
     }
@@ -703,6 +703,8 @@ struct MenuBarView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     // Ping
                     toolLabel("PING")
+                    // Fields and buttons: a 1 pt outline. A 0.5 pt one can't
+                    // land on a pixel on 1x displays and smears into a soft edge.
                     HStack(spacing: 6) {
                         TextField("Host or IP", text: $quickHost,
                                   prompt: Text("Host or IP").foregroundColor(secondary(on: fieldBg)))
@@ -713,7 +715,7 @@ struct MenuBarView: View {
                             .background(fieldBg)
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(glyph(NS.text3, on: bg0), lineWidth: 0.5))
+                                .strokeBorder(ink(0.16), lineWidth: 1))
                         Button("Ping") { quickPing() }
                             .font(.system(size: 11))
                             .buttonStyle(.plain)
@@ -721,7 +723,7 @@ struct MenuBarView: View {
                             .background(ink(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(glyph(NS.text3, on: bg0), lineWidth: 0.5))
+                                .strokeBorder(ink(0.16), lineWidth: 1))
                             // Primary text: macOS dims it while disabled, and
                             // a dimmer starting color made it unreadable.
                             .foregroundStyle(NS.text1)
@@ -745,7 +747,7 @@ struct MenuBarView: View {
                             .background(fieldBg)
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(glyph(NS.text3, on: bg0), lineWidth: 0.5))
+                                .strokeBorder(ink(0.16), lineWidth: 1))
                         Button("Look up") { quickDNS() }
                             .font(.system(size: 11))
                             .buttonStyle(.plain)
@@ -753,7 +755,7 @@ struct MenuBarView: View {
                             .background(ink(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(glyph(NS.text3, on: bg0), lineWidth: 0.5))
+                                .strokeBorder(ink(0.16), lineWidth: 1))
                             // Primary text: macOS dims it while disabled, and
                             // a dimmer starting color made it unreadable.
                             .foregroundStyle(NS.text1)
