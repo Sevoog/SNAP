@@ -76,3 +76,24 @@ final class ParserTests: XCTestCase {
         XCTAssertFalse(WiFiChannelInfo.subBand(.sixGHz, 200).1)
     }
 }
+
+// MARK: - iperf3 location (Speed Test)
+
+final class IperfLocatorTests: XCTestCase {
+
+    func test_prefersFirstInstalledCandidate() {
+        let installed: Set<String> = ["/usr/local/bin/iperf3", "/usr/bin/iperf3"]
+        XCTAssertEqual(IperfLocator.firstExecutable(in: IperfLocator.candidates, isExecutable: installed.contains),
+                       "/usr/local/bin/iperf3")
+    }
+
+    func test_nilWhenNotInstalled() {
+        XCTAssertNil(IperfLocator.firstExecutable(in: IperfLocator.candidates, isExecutable: { _ in false }))
+    }
+
+    /// The Finder-launched app's PATH misses both Homebrew prefixes.
+    func test_coversBothHomebrewPrefixes() {
+        XCTAssertTrue(IperfLocator.candidates.contains("/opt/homebrew/bin/iperf3"))
+        XCTAssertTrue(IperfLocator.candidates.contains("/usr/local/bin/iperf3"))
+    }
+}

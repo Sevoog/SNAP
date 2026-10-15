@@ -219,8 +219,8 @@ SNAP launches these directly, never through a shell:
 - `/usr/bin/whois`
 - `/usr/bin/nettop` (Top Talkers, see above)
 - `/usr/sbin/tcpdump`
-- `/usr/bin/which` (to find `iperf3`)
-- `iperf3`, if `which` finds it on SNAP's PATH (`iperf3 -c <host> -p <port> -t 10 --forceflush`). For an app opened from Finder that PATH is usually `/usr/bin:/bin:/usr/sbin:/sbin`, so a Homebrew copy usually isn't found.
+- `/usr/bin/which` (to find `iperf3` if it isn't in one of the folders below)
+- `iperf3`, if it's installed (`iperf3 -c <host> -p <port> -t 10 --forceflush`). SNAP looks in `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`, and `/usr/bin` (Homebrew on Apple silicon and Intel, MacPorts, the system), then asks `which`.
 
 SNAP never asks for your admin password, and it installs no helpers, daemons, or login items.
 

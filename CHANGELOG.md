@@ -5,6 +5,10 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ## [Unreleased]
 
+### Fixed: Speed Test's iPerf3 mode couldn't find iperf3
+
+SNAP looked for `iperf3` only with `which`, using the app's own PATH. An app opened from Finder gets just `/usr/bin:/bin:/usr/sbin:/sbin`, so it missed Homebrew installs (`/opt/homebrew/bin` on Apple silicon, `/usr/local/bin` on Intel) and reported "iperf3 not found" even when Terminal could run it. It now checks those folders, MacPorts (`/opt/local/bin`), and `/usr/bin` first, then `which`; the not-found message lists where it looked. Found on an Intel Mac mini.
+
 ### Fixed: byte units differed between screens
 
 Some screens counted 1 KB as 1,024 bytes and others as 1,000, so the same traffic could read differently. The Bandwidth tab (rates, totals, and its chart axis), the Dashboard's Bandwidth card, Interface Stats, Network Info, SNMP, and a Dashboard card's size readout used 1,024; the menu bar, the Status Board, and Speed Test used 1,000. All now use **1,000** (1 KB = 1,000 bytes, 1 MB = 1,000,000), matching Speed Test's megabits and macOS's own byte counts. Each readout keeps its decimal places. Speed Test itself is unchanged: it reports megabits per second (Mbps).

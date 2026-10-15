@@ -646,16 +646,20 @@ struct SpeedTestView: View {
         phase = .download
 
         testTask = Task {
-            // Check iperf3 binary exists. Shell.run does the blocking work on
-            // a background queue — waitUntilExit here would pin a cooperative
-            // pool thread.
-            let binaryPath = (await Shell.run("/usr/bin/which", args: ["iperf3"]))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            // Find iperf3: the usual install folders first, then `which`.
+            // Shell.run does the blocking work on a background queue —
+            // waitUntilExit here would pin a cooperative pool thread.
+            var binaryPath = IperfLocator.firstExecutable(in: IperfLocator.candidates) ?? ""
+            if binaryPath.isEmpty {
+                binaryPath = (await Shell.run("/usr/bin/which", args: ["iperf3"]))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
 
             guard !binaryPath.isEmpty, !binaryPath.hasPrefix("Error:") else {
                 await MainActor.run {
                     self.iperfOutput = """
                     iperf3 not found.
+                    SNAP looked in \(IperfLocator.candidates.map { ($0 as NSString).deletingLastPathComponent }.joined(separator: ", ")), then on its PATH.
 
                     Install with Homebrew:
                       brew install iperf3
@@ -747,5 +751,24 @@ final class DownloadDelegate: NSObject, URLSessionDataDelegate {
                     task: URLSessionTask,
                     didCompleteWithError error: Error?) {
         onDone?()
+    }
+}
+
+// MARK: - Finding iperf3
+
+/// Apps opened from Finder don't get the shell's PATH (it's just
+/// /usr/bin:/bin:/usr/sbin:/sbin), so `which iperf3` misses Homebrew and
+/// MacPorts installs. Check their folders directly.
+enum IperfLocator {
+    static let candidates = [
+        "/opt/homebrew/bin/iperf3",   // Homebrew, Apple silicon
+        "/usr/local/bin/iperf3",      // Homebrew, Intel
+        "/opt/local/bin/iperf3",      // MacPorts
+        "/usr/bin/iperf3",
+    ]
+
+    static func firstExecutable(in paths: [String],
+                                isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }) -> String? {
+        paths.first(where: isExecutable)
     }
 }
