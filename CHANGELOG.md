@@ -17,6 +17,7 @@ Speed Test's iPerf3 mode still shows iperf3's output exactly as iperf3 prints it
 - **Streams:** 1, 2, 4, or 8 parallel connections (`-P`). One connection sometimes can't fill a fast link.
 - **Duration:** 5, 10, 20, 30, or 60 seconds (`-t`). It was always 10.
 - **Recent LAN tests:** the last 100 iPerf3 results are saved. They're kept apart from internet speed tests, so they don't show up in that history or on the Status Board's Speed Test tile.
+- The internet test's Size picker no longer shows in iPerf3 mode, where it never applied.
 
 To find the connection and its speed, SNAP runs `route -n get <server>`, then reads the link speed from `ifconfig` for Ethernet or the current transmit rate from macOS for Wi-Fi.
 

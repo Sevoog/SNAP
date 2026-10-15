@@ -194,17 +194,21 @@ struct SpeedTestView: View {
             } label: { EmptyView() }
             .pickerStyle(.menu).fixedSize().disabled(isRunning)
 
-            Divider().frame(height: 18)
+            // Test size applies only to internet tests; iPerf3 has its own
+            // Duration and Streams options in the row below.
+            if provider.isInternetProvider {
+                Divider().frame(height: 18)
 
-            Label("Size", systemImage: "arrow.up.and.down.circle")
-                .font(.caption).foregroundStyle(.secondary).labelStyle(.iconOnly)
-            Picker(selection: $testSize) {
-                ForEach(TestSize.allCases) { s in Text(s.rawValue).tag(s) }
-            } label: { EmptyView() }
-            .pickerStyle(.menu).fixedSize().disabled(isRunning || !provider.isInternetProvider)
+                Label("Size", systemImage: "arrow.up.and.down.circle")
+                    .font(.caption).foregroundStyle(.secondary).labelStyle(.iconOnly)
+                Picker(selection: $testSize) {
+                    ForEach(TestSize.allCases) { s in Text(s.rawValue).tag(s) }
+                } label: { EmptyView() }
+                .pickerStyle(.menu).fixedSize().disabled(isRunning)
 
-            Text("· \(testSize.description) · \(testSize.uploadDescription)")
-                .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                Text("· \(testSize.description) · \(testSize.uploadDescription)")
+                    .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+            }
 
             Spacer()
 
