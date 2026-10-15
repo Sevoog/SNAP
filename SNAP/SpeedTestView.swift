@@ -199,7 +199,9 @@ struct SpeedTestView: View {
 
             Spacer()
 
-            if phase == .done {
+            // Internet results only: in iPerf3 mode the iPerf3 row has its
+            // own Copy/Export for the iperf3 output.
+            if phase == .done && provider.isInternetProvider {
                 ToolActionBar("Speed Test", text: { resultText },
                     csv: { historyStore.exportCSV() },
                     json: { historyStore.exportJSON() })

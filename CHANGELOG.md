@@ -7,7 +7,11 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ### Fixed: Speed Test's iPerf3 mode couldn't find iperf3
 
-SNAP looked for `iperf3` only with `which`, using the app's own PATH. An app opened from Finder gets just `/usr/bin:/bin:/usr/sbin:/sbin`, so it missed Homebrew installs (`/opt/homebrew/bin` on Apple silicon, `/usr/local/bin` on Intel) and reported "iperf3 not found" even when Terminal could run it. It now checks those folders, MacPorts (`/opt/local/bin`), and `/usr/bin` first, then `which`; the not-found message lists where it looked. Found on an Intel Mac mini.
+SNAP looked for `iperf3` only with `which`, using the app's own PATH. An app opened from Finder gets just `/usr/bin:/bin:/usr/sbin:/sbin`, so it missed Homebrew installs (`/opt/homebrew/bin` on Apple silicon, `/usr/local/bin` on Intel) and reported "iperf3 not found" even when Terminal could run it. It now checks those folders, MacPorts (`/opt/local/bin`), and `/usr/bin` first, then `which`; the not-found message lists where it looked. Found on Intel Macs.
+
+### Fixed: duplicate Copy and Export buttons in Speed Test's iPerf3 mode
+
+After a test, the top bar showed Copy and Export for the internet speed test results even in iPerf3 mode, next to the iPerf3 row's own Copy and Export for the iperf3 output. The top set now appears only for internet tests.
 
 ### Fixed: byte units differed between screens
 
@@ -79,7 +83,7 @@ SNAP's source is now published under the **GNU General Public License v3.0** (`G
 The project-level setting said macOS 13.0, but the SNAP app and test targets overrode it with `$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)`, a value each Xcode release picks for itself. Two consequences:
 
 - **Builds made with Xcode 27 — including v1.5.3 and v1.5.4 — actually require macOS 14.0**, not the 13.0 the README, the About window, and these notes claimed.
-- **Xcode 26.2 picks a minimum below macOS 12**, so the same project failed to compile there (on an Intel Mac mini running Sequoia) with errors like "'dismiss' is only available in macOS 12.0 or newer" for `dismiss`, `KeyPathComparator`, `GraphicsContext`, `FocusState`, and `ProposedViewSize`. Nothing on that Mac was outdated; the project was asking it to build for an older macOS than SNAP supports.
+- **Xcode 26.2 picks a minimum below macOS 12**, so the same project failed to compile there (on an Intel Mac running Sequoia) with errors like "'dismiss' is only available in macOS 12.0 or newer" for `dismiss`, `KeyPathComparator`, `GraphicsContext`, `FocusState`, and `ProposedViewSize`. Nothing on that Mac was outdated; the project was asking it to build for an older macOS than SNAP supports.
 
 Changes:
 
