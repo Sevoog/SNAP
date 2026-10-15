@@ -423,6 +423,28 @@ struct MenuBarView: View {
         themeMgr.current.isLight ? Color.black.opacity(alpha) : Color.white.opacity(alpha)
     }
 
+    // Text uses the theme's text colors, checked against the surface it sits
+    // on: faint white or black (ink at 15 to 30%) measured under 3:1 in
+    // every theme. ink() is left for hairlines and fills only.
+
+    /// Captions and labels: secondary text, nudged to 4.5:1 where a theme falls short.
+    private func secondary(on bg: Color) -> Color {
+        ThemeContrast.readable(NS.text2, on: bg, toward: NS.text1)
+    }
+    /// An accent used as text (rates, Online, links, badges): same hue, at least 4.5:1.
+    private func accent(_ c: Color, on bg: Color) -> Color {
+        ThemeContrast.readable(c, on: bg, toward: NS.text1)
+    }
+    /// Icons and control borders: at least 3:1.
+    private func glyph(_ c: Color, on bg: Color) -> Color {
+        ThemeContrast.readable(c, on: bg, toward: NS.text1, minimum: 3)
+    }
+    /// The surface under a tinted badge.
+    private func tinted(_ c: Color, over bg: Color) -> Color {
+        ThemeContrast.flatten(c.opacity(0.15), over: bg)
+    }
+    private var fieldBg: Color { ThemeContrast.flatten(ink(0.06), over: bg0) }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -454,9 +476,9 @@ struct MenuBarView: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text("SNAP").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(ink(0.88))
+                    .foregroundStyle(NS.text1)
                 Text("Live Monitor").font(.system(size: 9))
-                    .foregroundStyle(ink(0.3))
+                    .foregroundStyle(secondary(on: bg2))
             }
             Spacer()
             HStack(spacing: 4) {
@@ -464,7 +486,7 @@ struct MenuBarView: View {
                     .frame(width: 5, height: 5)
                 Text(monitor.isOnline ? "Online" : "Offline")
                     .font(.system(size: 9))
-                    .foregroundStyle(monitor.isOnline ? NS.green : NS.red)
+                    .foregroundStyle(accent(monitor.isOnline ? NS.green : NS.red, on: bg2))
             }
         }
         .padding(.horizontal, 13)
@@ -492,13 +514,13 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(.system(size: 8, design: .monospaced))
-                .foregroundStyle(ink(0.25))
+                .foregroundStyle(secondary(on: bg1))
             Text(value)
                 .font(.system(size: 15, weight: .medium, design: .monospaced))
-                .foregroundStyle(color)
+                .foregroundStyle(accent(color, on: bg1))
             Text("peak \(peak)")
                 .font(.system(size: 8))
-                .foregroundStyle(ink(0.2))
+                .foregroundStyle(secondary(on: bg1))
         }
         .padding(.horizontal, 13).padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -526,14 +548,14 @@ struct MenuBarView: View {
             HStack {
                 Text(label)
                     .font(.system(size: 8, design: .monospaced))
-                    .foregroundStyle(ink(0.25))
+                    .foregroundStyle(secondary(on: bg1))
                 Text(rateStr)
                     .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    .foregroundStyle(color.opacity(0.8))
+                    .foregroundStyle(accent(color, on: bg1))
                 Spacer()
                 Text(isTop ? "\(monitor.activeInterface) · 2s" : "last 30 samples")
                     .font(.system(size: 8))
-                    .foregroundStyle(ink(0.15))
+                    .foregroundStyle(secondary(on: bg1))
             }
             GeometryReader { geo in
                 let peakVal = Swift.max(1.0, history.max() ?? 1.0)
@@ -573,19 +595,19 @@ struct MenuBarView: View {
                     HStack {
                         Text(wifiInfo.ssid)
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(ink(0.85))
+                            .foregroundStyle(NS.text1)
                         Spacer()
                         signalBars(rssi: wifiInfo.rssi)
                         Text(wifiInfo.security)
                             .font(.system(size: 8)).padding(.horizontal, 5).padding(.vertical, 2)
                             .background(NS.green.opacity(0.15)).cornerRadius(3)
-                            .foregroundStyle(NS.green)
+                            .foregroundStyle(accent(NS.green, on: tinted(NS.green, over: bg0)))
                     }
                     HStack(spacing: 16) {
                         infoCell(label: "RSSI", value: "\(wifiInfo.rssi) dBm",
-                                 color: wifiInfo.rssi > -60 ? NS.green : wifiInfo.rssi > -75 ? NS.amber : NS.red)
+                                 color: accent(wifiInfo.rssi > -60 ? NS.green : wifiInfo.rssi > -75 ? NS.amber : NS.red, on: bg0))
                         infoCell(label: "TX RATE", value: "\(Int(wifiInfo.txRate)) Mbps",
-                                 color: ink(0.75))
+                                 color: NS.text1)
                     }
                 }
                 .padding(.horizontal, 13).padding(.vertical, 8)
@@ -650,15 +672,15 @@ struct MenuBarView: View {
                             Circle().fill(NS.amber).frame(width: 5, height: 5)
                             Text(vpn.name)
                                 .font(.system(size: 10))
-                                .foregroundStyle(ink(0.7))
+                                .foregroundStyle(NS.text1)
                             Spacer()
                             Text(vpn.ip)
                                 .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(ink(0.5))
+                                .foregroundStyle(secondary(on: bg0))
                             Text("Active")
                                 .font(.system(size: 8)).padding(.horizontal, 5).padding(.vertical, 2)
                                 .background(NS.amber.opacity(0.12)).cornerRadius(3)
-                                .foregroundStyle(NS.amber)
+                                .foregroundStyle(accent(NS.amber, on: tinted(NS.amber, over: bg0)))
                         }
                     }
                 }
@@ -682,15 +704,16 @@ struct MenuBarView: View {
                     // Ping
                     toolLabel("PING")
                     HStack(spacing: 6) {
-                        TextField("Host or IP", text: $quickHost)
+                        TextField("Host or IP", text: $quickHost,
+                                  prompt: Text("Host or IP").foregroundColor(secondary(on: fieldBg)))
                             .textFieldStyle(.plain)
                             .font(.system(size: 11))
-                            .foregroundStyle(ink(0.75))
+                            .foregroundStyle(NS.text1)
                             .padding(.horizontal, 8).padding(.vertical, 5)
-                            .background(ink(0.06))
+                            .background(fieldBg)
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(ink(0.1), lineWidth: 0.5))
+                                .strokeBorder(glyph(NS.text3, on: bg0), lineWidth: 0.5))
                         Button("Ping") { quickPing() }
                             .font(.system(size: 11))
                             .buttonStyle(.plain)
@@ -698,28 +721,31 @@ struct MenuBarView: View {
                             .background(ink(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(ink(0.12), lineWidth: 0.5))
-                            .foregroundStyle(ink(0.65))
+                                .strokeBorder(glyph(NS.text3, on: bg0), lineWidth: 0.5))
+                            // Primary text: macOS dims it while disabled, and
+                            // a dimmer starting color made it unreadable.
+                            .foregroundStyle(NS.text1)
                             .disabled(quickHost.isEmpty)
                     }
                     if !pingResult.isEmpty {
                         Text(pingResult)
                             .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(pingResult.contains("ms") ? NS.green : NS.red)
+                            .foregroundStyle(accent(pingResult.contains("ms") ? NS.green : NS.red, on: bg0))
                     }
 
                     // DNS
                     toolLabel("DNS LOOKUP")
                     HStack(spacing: 6) {
-                        TextField("Domain", text: $dnsHost)
+                        TextField("Domain", text: $dnsHost,
+                                  prompt: Text("Domain").foregroundColor(secondary(on: fieldBg)))
                             .textFieldStyle(.plain)
                             .font(.system(size: 11))
-                            .foregroundStyle(ink(0.75))
+                            .foregroundStyle(NS.text1)
                             .padding(.horizontal, 8).padding(.vertical, 5)
-                            .background(ink(0.06))
+                            .background(fieldBg)
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(ink(0.1), lineWidth: 0.5))
+                                .strokeBorder(glyph(NS.text3, on: bg0), lineWidth: 0.5))
                         Button("Look up") { quickDNS() }
                             .font(.system(size: 11))
                             .buttonStyle(.plain)
@@ -727,14 +753,16 @@ struct MenuBarView: View {
                             .background(ink(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(ink(0.12), lineWidth: 0.5))
-                            .foregroundStyle(ink(0.65))
+                                .strokeBorder(glyph(NS.text3, on: bg0), lineWidth: 0.5))
+                            // Primary text: macOS dims it while disabled, and
+                            // a dimmer starting color made it unreadable.
+                            .foregroundStyle(NS.text1)
                             .disabled(dnsHost.isEmpty)
                     }
                     if !dnsResult.isEmpty {
                         Text(dnsResult)
                             .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(ink(0.5))
+                            .foregroundStyle(NS.text1)
                             .lineLimit(3)
                     }
                 }
@@ -761,18 +789,18 @@ struct MenuBarView: View {
                     Image(systemName: "network").font(.system(size: 10))
                     Text("Open SNAP").font(.system(size: 10))
                 }
-                .foregroundStyle(NS.blue)
+                .foregroundStyle(accent(NS.blue, on: bg2))
             }
             .buttonStyle(.plain)
 
             Spacer()
             Text("v\(AppInfo.version)")
                 .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(ink(0.18))
+                .foregroundStyle(secondary(on: bg2))
             Button { refreshAll() } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 11))
-                    .foregroundStyle(ink(isRefreshing ? 0.2 : 0.3))
+                    .foregroundStyle(secondary(on: bg2).opacity(isRefreshing ? 0.4 : 1))
             }
             .buttonStyle(.plain)
             .disabled(isRefreshing)
@@ -789,21 +817,21 @@ struct MenuBarView: View {
             HStack(spacing: 6) {
                 Image(systemName: expanded.wrappedValue ? "chevron.down" : "chevron.right")
                     .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(ink(0.2))
+                    .foregroundStyle(secondary(on: bg2))
                 Text(label)
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(ink(0.4))
+                    .foregroundStyle(NS.text1)
                 if let badge = badge {
                     Text(badge)
                         .font(.system(size: 8)).padding(.horizontal, 5).padding(.vertical, 1)
                         .background(badgeColor.opacity(0.15)).cornerRadius(3)
-                        .foregroundStyle(badgeColor)
+                        .foregroundStyle(accent(badgeColor, on: tinted(badgeColor, over: bg2)))
                 }
                 Spacer()
                 if let trailing = trailing {
                     Text(trailing)
                         .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(ink(0.2))
+                        .foregroundStyle(secondary(on: bg2))
                 }
             }
             .padding(.horizontal, 13).padding(.vertical, 7)
@@ -819,13 +847,13 @@ struct MenuBarView: View {
     private func netRow(icon: String, label: String, value: String, copyable: Bool) -> some View {
         HStack(spacing: 7) {
             Image(systemName: icon)
-                .font(.system(size: 10)).foregroundStyle(NS.blue).frame(width: 12)
+                .font(.system(size: 10)).foregroundStyle(glyph(NS.blue, on: bg0)).frame(width: 12)
             Text(label)
-                .font(.system(size: 10)).foregroundStyle(ink(0.28))
+                .font(.system(size: 10)).foregroundStyle(secondary(on: bg0))
                 .frame(width: 76, alignment: .leading)
             Text(value)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(ink(0.75))
+                .foregroundStyle(NS.text1)
                 .textSelection(.enabled)
                 .lineLimit(1)
             Spacer()
@@ -835,7 +863,7 @@ struct MenuBarView: View {
                     NSPasteboard.general.setString(value, forType: .string)
                 } label: {
                     Image(systemName: "doc.on.doc")
-                        .font(.system(size: 9)).foregroundStyle(ink(0.25))
+                        .font(.system(size: 9)).foregroundStyle(secondary(on: bg0))
                 }
                 .buttonStyle(.plain)
             }
@@ -845,7 +873,7 @@ struct MenuBarView: View {
 
     private func infoCell(label: String, value: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(label).font(.system(size: 8)).foregroundStyle(ink(0.22))
+            Text(label).font(.system(size: 8)).foregroundStyle(secondary(on: bg0))
             Text(value).font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(color)
         }
@@ -857,7 +885,7 @@ struct MenuBarView: View {
                 let active = rssi > -90 && (h == 4 || (rssi > -75 && h == 7) ||
                              (rssi > -65 && h == 10) || (rssi > -55 && h == 13))
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(active ? NS.green : ink(0.15))
+                    .fill(active ? NS.green : ink(0.25))
                     .frame(width: 3, height: CGFloat(h))
             }
         }
@@ -866,7 +894,7 @@ struct MenuBarView: View {
     private func toolLabel(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 8, design: .monospaced))
-            .foregroundStyle(ink(0.22))
+            .foregroundStyle(secondary(on: bg0))
     }
 
     // MARK: - Actions

@@ -53,6 +53,7 @@
 		AA09000000000000000000AA /* SyslogReceiverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0A000000000000000000AA /* SyslogReceiverView.swift */; };
 		AA0908166CF4030DC0BF9C0B /* ConnectionSummaryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E5A81F9DD795FEB54BDAEF /* ConnectionSummaryCard.swift */; };
 		AA0B000000000000000000AA /* SNMPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0C000000000000000000AA /* SNMPTests.swift */; };
+		6C010000000000000000006C /* ThemeContrastTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C020000000000000000006C /* ThemeContrastTests.swift */; };
 		5B170000000000000000005B /* SNMPInterfacesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B180000000000000000005B /* SNMPInterfacesTests.swift */; };
 		5B150000000000000000005B /* SNMPHealthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B160000000000000000005B /* SNMPHealthTests.swift */; };
 		5B130000000000000000005B /* SNMPInventoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B140000000000000000005B /* SNMPInventoryTests.swift */; };
@@ -157,6 +158,7 @@
 		AA08000000000000000000AA /* RoutingHelloView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingHelloView.swift; sourceTree = "<group>"; };
 		AA0A000000000000000000AA /* SyslogReceiverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyslogReceiverView.swift; sourceTree = "<group>"; };
 		AA0C000000000000000000AA /* SNMPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPTests.swift; sourceTree = "<group>"; };
+		6C020000000000000000006C /* ThemeContrastTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeContrastTests.swift; sourceTree = "<group>"; };
 		5B180000000000000000005B /* SNMPInterfacesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPInterfacesTests.swift; sourceTree = "<group>"; };
 		5B160000000000000000005B /* SNMPHealthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPHealthTests.swift; sourceTree = "<group>"; };
 		5B140000000000000000005B /* SNMPInventoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPInventoryTests.swift; sourceTree = "<group>"; };
@@ -245,6 +247,7 @@
 				02160D3817B009DECFBD4896 /* OUIDatabaseTests.swift */,
 				9805D9A4CDDD0736B25F86BD /* NetworkMapModelTests.swift */,
 				AA0C000000000000000000AA /* SNMPTests.swift */,
+				6C020000000000000000006C /* ThemeContrastTests.swift */,
 				5B180000000000000000005B /* SNMPInterfacesTests.swift */,
 				5B160000000000000000005B /* SNMPHealthTests.swift */,
 				5B140000000000000000005B /* SNMPInventoryTests.swift */,
@@ -525,6 +528,7 @@
 				D8AAB53557C90DAA672AD59C /* OUIDatabaseTests.swift in Sources */,
 				45EF9F720715477F97E272B4 /* NetworkMapModelTests.swift in Sources */,
 				AA0B000000000000000000AA /* SNMPTests.swift in Sources */,
+				6C010000000000000000006C /* ThemeContrastTests.swift in Sources */,
 				5B170000000000000000005B /* SNMPInterfacesTests.swift in Sources */,
 				5B150000000000000000005B /* SNMPHealthTests.swift in Sources */,
 				5B130000000000000000005B /* SNMPInventoryTests.swift in Sources */,

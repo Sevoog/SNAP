@@ -426,3 +426,66 @@ struct ThemePicker: View {
         .help("Change theme")
     }
 }
+
+// MARK: - Contrast
+
+/// WCAG contrast math for theme colors, so small text can be checked (and
+/// nudged) against the surface it actually sits on in every theme.
+enum ThemeContrast {
+    private typealias RGB = (r: Double, g: Double, b: Double)
+
+    private static func rgba(_ c: Color) -> (RGB, Double) {
+        let n = NSColor(c).usingColorSpace(.sRGB) ?? .black
+        return ((Double(n.redComponent), Double(n.greenComponent), Double(n.blueComponent)),
+                Double(n.alphaComponent))
+    }
+
+    /// `fg` as it shows on `bg` (translucent colors blended in).
+    private static func composite(_ fg: Color, on bg: Color) -> RGB {
+        let (f, a) = rgba(fg)
+        let (b, _) = rgba(bg)
+        return (f.r * a + b.r * (1 - a), f.g * a + b.g * (1 - a), f.b * a + b.b * (1 - a))
+    }
+
+    private static func luminance(_ c: RGB) -> Double {
+        func ch(_ v: Double) -> Double { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b)
+    }
+
+    private static func ratio(_ a: RGB, _ b: RGB) -> Double {
+        let la = luminance(a), lb = luminance(b)
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+    }
+
+    /// Contrast of `fg` on `bg`, 1 to 21. Small text needs 4.5, icons and
+    /// field borders 3.
+    static func ratio(_ fg: Color, on bg: Color) -> Double {
+        let (b, _) = rgba(bg)
+        return ratio(composite(fg, on: bg), b)
+    }
+
+    /// `top` laid over `base`, as one opaque color (a tinted badge background).
+    static func flatten(_ top: Color, over base: Color) -> Color {
+        let c = composite(top, on: base)
+        return Color(.sRGB, red: c.r, green: c.g, blue: c.b, opacity: 1)
+    }
+
+    /// `color` if it already reaches `minimum` on `bg`; otherwise the same hue
+    /// blended toward `toward` (the theme's primary text) just far enough.
+    static func readable(_ color: Color, on bg: Color, toward: Color, minimum: Double = 4.5) -> Color {
+        let (b, _) = rgba(bg)
+        let start = composite(color, on: bg)
+        if ratio(start, b) >= minimum { return color }
+        let end = composite(toward, on: bg)
+        for step in 1...10 {
+            let t = Double(step) / 10
+            let mixed: RGB = (start.r + (end.r - start.r) * t,
+                              start.g + (end.g - start.g) * t,
+                              start.b + (end.b - start.b) * t)
+            if ratio(mixed, b) >= minimum || step == 10 {
+                return Color(.sRGB, red: mixed.r, green: mixed.g, blue: mixed.b, opacity: 1)
+            }
+        }
+        return toward
+    }
+}
