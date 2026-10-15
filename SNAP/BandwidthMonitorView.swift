@@ -848,9 +848,9 @@ struct BandwidthMonitorView: View {
         let values = samples.map { $0[keyPath: valueKey] }
         let peakBps = values.max() ?? 1
         let (divisor, unit): (Double, String) = {
-            if peakBps >= 1024*1024*1024 { return (1024*1024*1024, "GB/s") }
-            if peakBps >= 1024*1024      { return (1024*1024,      "MB/s") }
-            if peakBps >= 1024           { return (1024,           "KB/s") }
+            if peakBps >= 1_000_000_000 { return (1_000_000_000, "GB/s") }
+            if peakBps >= 1_000_000     { return (1_000_000,     "MB/s") }
+            if peakBps >= 1_000         { return (1_000,         "KB/s") }
             return (1, "B/s")
         }()
         VStack(alignment: .leading, spacing: 0) {
@@ -964,14 +964,14 @@ struct BandwidthMonitorView: View {
     // MARK: Formatters
 
     func formatBps(_ bps: Double) -> String {
-        if bps < 1024         { return String(format: "%.0f B/s",  bps) }
-        if bps < 1024*1024    { return String(format: "%.1f KB/s", bps/1024) }
-        return                         String(format: "%.2f MB/s", bps/1024/1024)
+        if bps < 1_000        { return String(format: "%.0f B/s",  bps) }
+        if bps < 1_000_000    { return String(format: "%.1f KB/s", bps/1_000) }
+        return                         String(format: "%.2f MB/s", bps/1_000_000)
     }
     func formatBytes(_ b: Double) -> String {
-        if b < 1024           { return String(format: "%.0f B",    b) }
-        if b < 1024*1024      { return String(format: "%.1f KB",   b/1024) }
-        if b < 1024*1024*1024 { return String(format: "%.2f MB",   b/1024/1024) }
-        return                         String(format: "%.2f GB",   b/1024/1024/1024)
+        if b < 1_000          { return String(format: "%.0f B",    b) }
+        if b < 1_000_000      { return String(format: "%.1f KB",   b/1_000) }
+        if b < 1_000_000_000  { return String(format: "%.2f MB",   b/1_000_000) }
+        return                         String(format: "%.2f GB",   b/1_000_000_000)
     }
 }

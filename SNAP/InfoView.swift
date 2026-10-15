@@ -655,7 +655,7 @@ private struct TrafficCard: View {
     private func formatBytes(_ n: Double) -> String {
         let units = ["B", "KB", "MB", "GB", "TB", "PB"]
         var v = n; var i = 0
-        while v >= 1024 && i < units.count - 1 { v /= 1024; i += 1 }
+        while v >= 1_000 && i < units.count - 1 { v /= 1_000; i += 1 }
         return String(format: i == 0 ? "%.0f %@" : "%.2f %@", v, units[i])
     }
 }

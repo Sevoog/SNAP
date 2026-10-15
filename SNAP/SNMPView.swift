@@ -533,7 +533,7 @@ struct SNMPView: View {
     private func byteFormat(_ b: UInt64) -> String {
         let units = ["B", "KB", "MB", "GB", "TB"]
         var v = Double(b); var i = 0
-        while v >= 1024 && i < units.count - 1 { v /= 1024; i += 1 }
+        while v >= 1_000 && i < units.count - 1 { v /= 1_000; i += 1 }
         return String(format: "%.1f %@", v, units[i])
     }
 

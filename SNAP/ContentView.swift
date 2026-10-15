@@ -1163,9 +1163,11 @@ final class BandwidthDashMonitor: ObservableObject {
     }
 
     private func formatRate(_ bps: Double) -> String {
-        if bps < 1024 { return String(format: "%.0f B/s", bps) }
-        if bps < 1024*1024 { return String(format: "%.1f KB/s", bps/1024) }
-        return String(format: "%.2f MB/s", bps/1024/1024)
+        // Decimal units (1 KB = 1,000 bytes) throughout SNAP, like Speed Test's
+        // megabits and macOS's own byte counts.
+        if bps < 1_000 { return String(format: "%.0f B/s", bps) }
+        if bps < 1_000_000 { return String(format: "%.1f KB/s", bps/1_000) }
+        return String(format: "%.2f MB/s", bps/1_000_000)
     }
 }
 

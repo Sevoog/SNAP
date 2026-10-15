@@ -3,6 +3,14 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ---
 
+## [Unreleased]
+
+### Fixed: byte units differed between screens
+
+Some screens counted 1 KB as 1,024 bytes and others as 1,000, so the same traffic could read differently. The Bandwidth tab (rates, totals, and its chart axis), the Dashboard's Bandwidth card, Interface Stats, Network Info, SNMP, and a Dashboard card's size readout used 1,024; the menu bar, the Status Board, and Speed Test used 1,000. All now use **1,000** (1 KB = 1,000 bytes, 1 MB = 1,000,000), matching Speed Test's megabits and macOS's own byte counts. Each readout keeps its decimal places. Speed Test itself is unchanged: it reports megabits per second (Mbps).
+
+---
+
 ## [1.5.5] - 2026-10-06
 
 **First open-source release, two e-ink themes, and fixes.** SNAP is now published under the GNU GPL v3. Two new themes, E-ink and Color e-ink, join the picker. Plain-HTTP requests to public hosts are no longer blocked, the window title and toolbar follow the tab on screen, and the minimum macOS is pinned to 14.0.

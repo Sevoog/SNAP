@@ -632,17 +632,17 @@ struct InterfaceStatsView: View {
 
     private func formatBytes(_ b: UInt64) -> String {
         let d = Double(b)
-        if d < 1024 { return "\(b) B" }
-        if d < 1024*1024 { return String(format: "%.1f KB", d/1024) }
-        if d < 1024*1024*1024 { return String(format: "%.2f MB", d/1024/1024) }
-        return String(format: "%.2f GB", d/1024/1024/1024)
+        if d < 1_000 { return "\(b) B" }
+        if d < 1_000_000 { return String(format: "%.1f KB", d/1_000) }
+        if d < 1_000_000_000 { return String(format: "%.2f MB", d/1_000_000) }
+        return String(format: "%.2f GB", d/1_000_000_000)
     }
 
     private func formatBps(_ b: Double) -> String {
-        if b < 1024 { return String(format: "%.0f B/s", b) }
-        if b < 1024*1024 { return String(format: "%.1f KB/s", b/1024) }
-        if b < 1024*1024*1024 { return String(format: "%.1f MB/s", b/1024/1024) }
-        return String(format: "%.2f GB/s", b/1024/1024/1024)
+        if b < 1_000 { return String(format: "%.0f B/s", b) }
+        if b < 1_000_000 { return String(format: "%.1f KB/s", b/1_000) }
+        if b < 1_000_000_000 { return String(format: "%.1f MB/s", b/1_000_000) }
+        return String(format: "%.2f GB/s", b/1_000_000_000)
     }
 
     // MARK: Export
