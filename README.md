@@ -442,6 +442,18 @@ A maintenance release focused on robustness and consistency (no new features):
 ## Contributing
 Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build and test, and the [Contributor License Agreement](CLA.md) you'll be asked to sign on your first pull request. Please report security issues privately; see [SECURITY.md](SECURITY.md).
 
+## Credits
+
+Five of SNAP's themes use color palettes from open-source editor themes, all under the MIT License:
+
+- **Nord** by Sven Greb ([nordtheme/nord](https://github.com/nordtheme/nord))
+- **Solarized** by Ethan Schoonover ([altercation/solarized](https://github.com/altercation/solarized))
+- **Tokyo Night** by Enkia ([tokyo-night/tokyo-night-vscode-theme](https://github.com/tokyo-night/tokyo-night-vscode-theme))
+- **Dracula** by Dracula Theme ([dracula/dracula-theme](https://github.com/dracula/dracula-theme))
+- **Synthwave '84** by Robb Owen ([robb0wen/synthwave-vscode](https://github.com/robb0wen/synthwave-vscode))
+
+SNAP maps each palette onto its own layout. The theme names belong to their projects, and SNAP isn't affiliated with or endorsed by them.
+
 ## License
 SNAP is free software, licensed under the [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`). You can use, study, change, and share it. If you distribute a modified version, you must release its source code under the same license.
 

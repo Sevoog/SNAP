@@ -114,6 +114,9 @@ extension Theme {
 
     // ----- Developer -----
 
+    // Nord, Solarized Dark, Tokyo Night, Dracula (and Synthwave '84 below) use
+    // palettes from those MIT-licensed projects. See Credits in the README.
+
     static let nord = Theme(
         id: "nord", name: "Nord", group: "Developer",
         bg0: hex(0x2e3440), bg1: hex(0x272b35), bg2: hex(0x3b4252), bg3: hex(0x434c5e),
