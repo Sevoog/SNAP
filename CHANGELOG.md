@@ -9,6 +9,8 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 The app icon is now a brushed-steel Ethernet port with gold contacts and green and orange link lights. The old icon was a full-bleed square drawn without anti-aliasing, so macOS shrank it into its own rounded frame and its edges looked jagged in Finder. The new icon is drawn smooth at every size on Apple's standard rounded tile, and the 16 and 32 pixel sizes use a simpler version (steel frame, dark opening, four contacts) so they stay sharp.
 
+The logo inside the app (the sidebar, the About window, the menu bar popover, and the Quick Tour) now shows the same icon instead of a magnifying glass on an orange tile.
+
 ### Added: theme credits
 
 The README has a new Credits section naming the open-source projects behind five of the themes: Nord, Solarized, Tokyo Night, Dracula, and Synthwave '84, all under the MIT License. [Themes.swift](SNAP/Themes.swift) points to it.

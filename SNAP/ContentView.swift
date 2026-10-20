@@ -448,16 +448,8 @@ struct IconRail: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // App logo
-            ZStack {
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(NS.amber)
-                    .frame(width: 32, height: 32)
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(NS.onAmber)
-            }
-            .padding(.bottom, 14)
+            AppLogo(size: 32)
+                .padding(.bottom, 14)
 
             ForEach(Array(railGroups.enumerated()), id: \.offset) { gIdx, group in
                 if gIdx > 0 {
@@ -733,14 +725,7 @@ struct AboutSheet: View {
             .padding(.bottom, 4)
 
             VStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(NS.amber)
-                        .frame(width: 72, height: 72)
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundStyle(NS.onAmber)
-                }
+                AppLogo(size: 72)
 
                 VStack(spacing: 4) {
                     Text("SNAP")

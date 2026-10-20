@@ -466,14 +466,7 @@ struct MenuBarView: View {
 
     private var header: some View {
         HStack(spacing: 9) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 7)
-                    .fill(NS.amber)
-                    .frame(width: 26, height: 26)
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(NS.onAmber)
-            }
+            AppLogo(size: 26)
             VStack(alignment: .leading, spacing: 1) {
                 Text("SNAP").font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(NS.text1)

@@ -58,12 +58,7 @@ struct OnboardingView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6).fill(NS.amber).frame(width: 22, height: 22)
-                Image(systemName: "scope")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(NS.onAmber)
-            }
+            AppLogo(size: 22)
             Text("WELCOME TOUR")
                 .font(.system(size: 11, weight: .bold))
                 .tracking(0.3)

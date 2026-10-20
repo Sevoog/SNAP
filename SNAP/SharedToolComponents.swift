@@ -201,3 +201,23 @@ enum ChartAxis {
     static var text: Color { NS.text2 }
 }
 
+
+// MARK: - App logo
+
+/// The app icon, for the logo spots in the sidebar, About sheet, menu bar
+/// popover, and Quick Tour, so they match the Dock and Finder. `size` is the
+/// visible tile: the icon art keeps a transparent margin around its rounded
+/// tile (824 of 1024 points on Apple's grid), so the image is drawn larger
+/// than the frame and that margin overhangs it instead of shrinking the tile.
+struct AppLogo: View {
+    let size: CGFloat
+
+    var body: some View {
+        Image(nsImage: NSApp.applicationIconImage)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: size * 1024 / 824, height: size * 1024 / 824)
+            .frame(width: size, height: size)
+            .accessibilityLabel("SNAP")
+    }
+}

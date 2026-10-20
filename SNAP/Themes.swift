@@ -58,8 +58,8 @@ struct Theme: Identifiable, Hashable {
     /// instead of ink. Only meaningful with `inkCues`.
     var inkColors: Bool = false
 
-    /// Icons and labels drawn on an accent (`amber`) fill, like the app logo
-    /// tile. Near-black suits the bright accents; the e-ink accents are dark,
+    /// Icons and labels drawn on an accent (`amber`) fill, like the Quick
+    /// Tour's "+ Add Tools" chip. Near-black suits the bright accents; the e-ink accents are dark,
     /// so they use paper.
     var onAmber: Color = Color(red: 0.11, green: 0.11, blue: 0.11)
 
