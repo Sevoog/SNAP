@@ -3,6 +3,18 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ---
 
+## [1.5.7] - Unreleased
+
+### Changed: new app icon
+
+The app icon is now a brushed-steel Ethernet port with gold contacts and green and orange link lights. The old icon was a full-bleed square drawn without anti-aliasing, so macOS shrank it into its own rounded frame and its edges looked jagged in Finder. The new icon is drawn smooth at every size on Apple's standard rounded tile, and the 16 and 32 pixel sizes use a simpler version (steel frame, dark opening, four contacts) so they stay sharp.
+
+### Added: theme credits
+
+The README has a new Credits section naming the open-source projects behind five of the themes: Nord, Solarized, Tokyo Night, Dracula, and Synthwave '84, all under the MIT License. [Themes.swift](SNAP/Themes.swift) points to it.
+
+---
+
 ## [1.5.6] - 2026-10-15
 
 ### Fixed: switching themes left parts of some screens in the old theme
