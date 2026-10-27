@@ -111,7 +111,7 @@ final class GeoIPViewModel: ObservableObject {
 
     /// Rough classifier — good enough to route between "hit the IP endpoint"
     /// and "resolve first." Accepts IPv4 dotted-decimal and IPv6 colon form.
-    private static func looksLikeIP(_ s: String) -> Bool {
+    static func looksLikeIP(_ s: String) -> Bool {
         var hints = addrinfo(ai_flags: AI_NUMERICHOST, ai_family: AF_UNSPEC,
                              ai_socktype: SOCK_STREAM, ai_protocol: 0,
                              ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil)
@@ -121,7 +121,7 @@ final class GeoIPViewModel: ObservableObject {
     }
 
     /// Resolve hostname → first IPv4 string, or nil on failure.
-    private static func resolveIPv4(_ host: String) -> String? {
+    static func resolveIPv4(_ host: String) -> String? {
         var hints = addrinfo(ai_flags: 0, ai_family: AF_INET,
                              ai_socktype: SOCK_STREAM, ai_protocol: IPPROTO_TCP,
                              ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil)

@@ -99,3 +99,29 @@ final class PublicLookupPolicyTests: XCTestCase {
         XCTAssertEqual(attempts, 288)
     }
 }
+
+/// The Dashboard GeoIP card moved from ip-api.com over plain HTTP to ipwho.is
+/// over HTTPS; it still shows ASN and org as one "AS15169 Google LLC" line.
+final class GeoIPDashSummaryTests: XCTestCase {
+
+    private func summary(_ json: String) -> GeoIPDashSummary { GeoIPDashSummary(data: Data(json.utf8)) }
+
+    func test_success_readsLocationAndConnection() {
+        let s = summary(#"{"success":true,"country":"United States","city":"Mountain View","connection":{"asn":15169,"org":"Google LLC","isp":"Google LLC"}}"#)
+        XCTAssertEqual(s, .found(country: "United States", city: "Mountain View", isp: "Google LLC", asn: "AS15169 Google LLC"))
+    }
+
+    func test_stringASN_getsOnePrefix() {
+        let s = summary(#"{"success":true,"country":"X","city":"","connection":{"asn":"AS13335","org":"","isp":"Cloudflare"}}"#)
+        XCTAssertEqual(s, .found(country: "X", city: "", isp: "Cloudflare", asn: "AS13335"))
+    }
+
+    func test_failure_passesTheServiceMessageThrough() {
+        XCTAssertEqual(summary(#"{"success":false,"message":"Reserved range"}"#), .failed("Reserved range"))
+    }
+
+    func test_garbage_isAFailureWithNoMessage() {
+        XCTAssertEqual(GeoIPDashSummary(data: Data("<html>".utf8)), .failed(nil))
+        XCTAssertEqual(GeoIPDashSummary(data: nil), .failed(nil))
+    }
+}

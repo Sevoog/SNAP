@@ -1350,27 +1350,59 @@ private struct GeoIPDashCard: View {
         }
     }
 
+    /// Looks the address up over HTTPS with ipwho.is, like GeoIP Lookup. A
+    /// hostname is resolved on this Mac first, so only an IP is sent.
     private func lookup() {
         let target = ip.trimmingCharacters(in: .whitespaces)
-        guard !target.isEmpty, let url = URL(string: "http://ip-api.com/json/\(target)?fields=status,message,country,city,isp,as") else { return }
+        guard !target.isEmpty else { return }
         ToolHistory.shared.add(.geoIP, target)
         running = true; country = ""; city = ""; isp = ""; asn = ""; note = ""
-        URLSession.shared.dataTask(with: url) { data, _, err in
-            DispatchQueue.main.async {
-                running = false
-                guard let data,
-                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    note = err?.localizedDescription ?? "no response"; return
-                }
-                if (json["status"] as? String) != "success" {
-                    note = (json["message"] as? String) ?? "lookup failed"; return
-                }
-                country = (json["country"] as? String) ?? ""
-                city    = (json["city"]    as? String) ?? ""
-                isp     = (json["isp"]     as? String) ?? ""
-                asn     = (json["as"]      as? String) ?? ""
+        DispatchQueue.global(qos: .userInitiated).async {
+            let address = GeoIPViewModel.looksLikeIP(target) ? target : GeoIPViewModel.resolveIPv4(target)
+            guard let address,
+                  let encoded = address.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+                  let url = URL(string: "https://ipwho.is/\(encoded)") else {
+                DispatchQueue.main.async { running = false; note = "Could not resolve \(target)" }
+                return
             }
-        }.resume()
+            URLSession.shared.dataTask(with: url) { data, _, err in
+                let summary = GeoIPDashSummary(data: data)
+                DispatchQueue.main.async {
+                    running = false
+                    switch summary {
+                    case .found(let c, let ci, let i, let a):
+                        country = c; city = ci; isp = i; asn = a
+                    case .failed(let message):
+                        note = message ?? err?.localizedDescription ?? "no response"
+                    }
+                }
+            }.resume()
+        }
+    }
+}
+
+/// The parts of an ipwho.is reply the Dashboard GeoIP card shows.
+enum GeoIPDashSummary: Equatable {
+    case found(country: String, city: String, isp: String, asn: String)
+    case failed(String?)
+
+    init(data: Data?) {
+        guard let data, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            self = .failed(nil); return
+        }
+        guard json["success"] as? Bool == true else {
+            self = .failed((json["message"] as? String) ?? "lookup failed"); return
+        }
+        let conn = json["connection"] as? [String: Any] ?? [:]
+        var asn = ""
+        if let n = conn["asn"] as? Int { asn = "AS\(n)" }
+        else if let s = conn["asn"] as? String, !s.isEmpty { asn = s.hasPrefix("AS") ? s : "AS\(s)" }
+        // Same shape ip-api.com gave the card: "AS15169 Google LLC".
+        if let org = conn["org"] as? String, !org.isEmpty, !asn.isEmpty { asn += " \(org)" }
+        self = .found(country: json["country"] as? String ?? "",
+                      city: json["city"] as? String ?? "",
+                      isp: conn["isp"] as? String ?? "",
+                      asn: asn)
     }
 }
 
