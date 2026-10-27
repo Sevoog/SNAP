@@ -40,6 +40,20 @@ final class ThemeContrastTests: XCTestCase {
         }
     }
 
+    /// Captions (text3) are small text, so they need 4.5:1 on every surface in
+    /// every theme; they measured as low as 1.9 in Midnight. Secondary text
+    /// (text2) stays clearly brighter than captions so the two levels read apart.
+    func test_captionAndSecondaryText_readableOnEverySurface() {
+        for t in Theme.all {
+            for bg in [t.bg0, t.bg1, t.bg2, t.bg3] {
+                let caption = ThemeContrast.ratio(t.text3, on: bg)
+                let secondary = ThemeContrast.ratio(t.text2, on: bg)
+                XCTAssertGreaterThanOrEqual(caption, 4.5, "\(t.id) text3")
+                XCTAssertGreaterThanOrEqual(secondary, caption * 1.25, "\(t.id) text2 vs text3")
+            }
+        }
+    }
+
     /// Reading a theme color in a view body must register a dependency, so the
     /// view redraws on a theme switch even when its own inputs didn't change.
     /// (The iPerf3 results kept the previous theme's colors until a new test.)

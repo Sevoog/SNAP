@@ -15,16 +15,18 @@ struct EmptyStateView: View {
 
     var body: some View {
         VStack(spacing: 16) {
+            // Theme colors, not .secondary / .tertiary: the system grays
+            // don't follow the theme and read faint on its backgrounds.
             Image(systemName: systemImage)
                 .font(.system(size: 48))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(NS.text3)
             Text(title)
                 .font(.title3.bold())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(NS.text2)
             if !description.isEmpty {
                 Text(description)
                     .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(NS.text3)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 300)
             }
