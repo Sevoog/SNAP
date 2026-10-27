@@ -65,8 +65,41 @@ protocol SNMPSecretStore {
 /// UniFi controller's password storage.
 struct SNMPKeychainSecrets: SNMPSecretStore {
     let service: String
+    /// The service name builds before 1.5.7 used. An item found only there is
+    /// moved to `service` the first time it's read.
+    var legacyService: String? = nil
 
     func read(account: String) -> SNMPSecretLookup {
+        let current = Self.read(service: service, account: account)
+        guard current == .missing, let legacy = legacyService else { return current }
+        let old = Self.read(service: legacy, account: account)
+        if case .found(let secret) = old { write(account: account, secret: secret) }
+        return old
+    }
+
+    @discardableResult
+    func write(account: String, secret: String) -> Bool {
+        Self.delete(service: service, account: account)
+        let attrs: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            // What Keychain Access shows in its Name column.
+            kSecAttrLabel as String:   "SNAP SNMP community",
+            kSecValueData as String:   Data(secret.utf8),
+        ]
+        let stored = SecItemAdd(attrs as CFDictionary, nil) == errSecSuccess
+        // Only once the new copy exists, so a failed write never loses it.
+        if stored, let legacy = legacyService { Self.delete(service: legacy, account: account) }
+        return stored
+    }
+
+    func delete(account: String) {
+        Self.delete(service: service, account: account)
+        if let legacy = legacyService { Self.delete(service: legacy, account: account) }
+    }
+
+    private static func read(service: String, account: String) -> SNMPSecretLookup {
         let query: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -83,21 +116,7 @@ struct SNMPKeychainSecrets: SNMPSecretStore {
         return .found(s)
     }
 
-    @discardableResult
-    func write(account: String, secret: String) -> Bool {
-        delete(account: account)
-        let attrs: [String: Any] = [
-            kSecClass as String:       kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            // What Keychain Access shows in its Name column.
-            kSecAttrLabel as String:   "SNAP SNMP community",
-            kSecValueData as String:   Data(secret.utf8),
-        ]
-        return SecItemAdd(attrs as CFDictionary, nil) == errSecSuccess
-    }
-
-    func delete(account: String) {
+    private static func delete(service: String, account: String) {
         let q: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -117,12 +136,17 @@ enum SNMPCommunityStore {
         /// Where the "host:port" of the board's copy is kept (no secret).
         var boardKey: String = Backend.boardHostKey
 
-        static let keychainService = "com.bardaklabs.snap.snmp.community"
+        static let keychainService = "com.sevagbardakjian.snap.snmp.community"
+        /// Before 1.5.7; items are moved from it as they're read. The
+        /// UserDefaults keys below keep their old prefix: nobody sees them,
+        /// and renaming them would need its own migration.
+        static let legacyKeychainService = "com.bardaklabs.snap.snmp.community"
         static let rememberedHostsKey = "com.bardaklabs.snap.snmp.rememberedHosts.v1"
         static let boardHostKey = "com.bardaklabs.snap.snmp.boardCommunityHost.v1"
 
         static var live: Backend {
-            Backend(secrets: SNMPKeychainSecrets(service: keychainService),
+            Backend(secrets: SNMPKeychainSecrets(service: keychainService,
+                                                 legacyService: legacyKeychainService),
                     defaults: .standard,
                     indexKey: rememberedHostsKey,
                     boardKey: boardHostKey)

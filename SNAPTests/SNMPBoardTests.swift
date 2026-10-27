@@ -235,7 +235,10 @@ final class SNMPBoardTests: XCTestCase {
     }
 
     func test_store_liveNames() {
-        XCTAssertEqual(SNMPCommunityStore.Backend.keychainService, "com.bardaklabs.snap.snmp.community")
+        XCTAssertEqual(SNMPCommunityStore.Backend.keychainService, "com.sevagbardakjian.snap.snmp.community")
+        XCTAssertEqual(SNMPCommunityStore.Backend.legacyKeychainService, "com.bardaklabs.snap.snmp.community")
+        XCTAssertEqual((SNMPCommunityStore.Backend.live.secrets as? SNMPKeychainSecrets)?.legacyService,
+                       SNMPCommunityStore.Backend.legacyKeychainService)
         XCTAssertEqual(SNMPCommunityStore.Backend.rememberedHostsKey, "com.bardaklabs.snap.snmp.rememberedHosts.v1")
         XCTAssertEqual(SNMPCommunityStore.Backend.boardHostKey, "com.bardaklabs.snap.snmp.boardCommunityHost.v1")
         XCTAssertEqual(SNMPCommunityStore.Backend.live.boardKey, SNMPCommunityStore.Backend.boardHostKey)
@@ -375,7 +378,7 @@ final class SNMPBoardTests: XCTestCase {
 
     /// The real Keychain code, under a test-only service name.
     func test_keychainSecrets_roundTripUnderTestService() throws {
-        let keychain = SNMPKeychainSecrets(service: "com.bardaklabs.snap.tests.snmp.community")
+        let keychain = SNMPKeychainSecrets(service: "com.sevagbardakjian.snap.tests.snmp.community")
         let account = "test-\(UUID().uuidString.lowercased()):161"
         defer { keychain.delete(account: account) }
         guard keychain.write(account: account, secret: "one") else {
@@ -386,6 +389,27 @@ final class SNMPBoardTests: XCTestCase {
         XCTAssertEqual(keychain.read(account: account), .found("two"))
         keychain.delete(account: account)
         XCTAssertEqual(keychain.read(account: account), .missing)
+    }
+
+    /// Items saved under the old "com.bardaklabs" service move to the new
+    /// name the first time they're read, and the old copy is removed.
+    func test_keychainSecrets_movesLegacyItemsOnRead() throws {
+        let legacyOnly = SNMPKeychainSecrets(service: "com.sevagbardakjian.snap.tests.snmp.legacy")
+        let newOnly = SNMPKeychainSecrets(service: "com.sevagbardakjian.snap.tests.snmp.community")
+        let store = SNMPKeychainSecrets(service: newOnly.service, legacyService: legacyOnly.service)
+        let account = "test-\(UUID().uuidString.lowercased()):161"
+        defer { store.delete(account: account) }
+        guard legacyOnly.write(account: account, secret: "old") else {
+            throw XCTSkip("The Keychain isn't available to this test run.")
+        }
+        XCTAssertEqual(newOnly.read(account: account), .missing)
+        XCTAssertEqual(store.read(account: account), .found("old"))
+        XCTAssertEqual(newOnly.read(account: account), .found("old"), "moved")
+        XCTAssertEqual(legacyOnly.read(account: account), .missing, "old copy removed")
+        XCTAssertTrue(legacyOnly.write(account: account, secret: "stale"))
+        store.delete(account: account)
+        XCTAssertEqual(newOnly.read(account: account), .missing)
+        XCTAssertEqual(legacyOnly.read(account: account), .missing, "delete clears both")
     }
 
     // MARK: - Target

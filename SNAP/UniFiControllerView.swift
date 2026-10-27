@@ -57,7 +57,10 @@ struct UniFiDevice: Identifiable, Hashable {
 // MARK: - Keychain helpers
 
 private enum UniFiKeychain {
-    private static let service = "com.bardaklabs.snap.unifi"
+    private static let service = "com.sevagbardakjian.snap.unifi"
+    /// Where builds before 1.5.7 kept the password. It's moved to `service`
+    /// the first time it's read.
+    private static let legacyService = "com.bardaklabs.snap.unifi"
 
     static func save(host: String, username: String, password: String) {
         // Stored under key "<host>|<username>" so multiple controllers can
@@ -65,18 +68,35 @@ private enum UniFiKeychain {
         // in the UI today; this keeps the door open.
         let key = "\(host)|\(username)"
         let data = password.data(using: .utf8) ?? Data()
-        delete(key: key)
+        delete(service: service, key: key)
         let attrs: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
+            // What Keychain Access shows in its Name column.
+            kSecAttrLabel as String:   "SNAP UniFi controller",
             kSecValueData as String:   data,
         ]
-        SecItemAdd(attrs as CFDictionary, nil)
+        // Drop the old copy only once the new one exists.
+        if SecItemAdd(attrs as CFDictionary, nil) == errSecSuccess {
+            delete(service: legacyService, key: key)
+        }
     }
 
     static func load(host: String, username: String) -> String? {
         let key = "\(host)|\(username)"
+        if let password = read(service: service, key: key) { return password }
+        guard let password = read(service: legacyService, key: key) else { return nil }
+        save(host: host, username: username, password: password)
+        return password
+    }
+
+    static func delete(key: String) {
+        delete(service: service, key: key)
+        delete(service: legacyService, key: key)
+    }
+
+    private static func read(service: String, key: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -93,7 +113,7 @@ private enum UniFiKeychain {
         return s
     }
 
-    static func delete(key: String) {
+    private static func delete(service: String, key: String) {
         let q: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: service,
