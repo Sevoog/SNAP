@@ -11,6 +11,26 @@ The app icon is now a brushed-steel Ethernet port with gold contacts and green a
 
 The logo inside the app (the sidebar, the About window, the menu bar popover, and the Quick Tour) now shows the same icon instead of a magnifying glass on an orange tile.
 
+### Fixed: faint captions in every theme
+
+Captions, labels, and hints use each theme's tertiary text color, which measured as low as 1.9:1 contrast in Midnight and under 4.5:1 on at least one surface in every theme. It's now at least 4.5:1 on every background in all 12 themes. Where captions would have matched the secondary text color (Midnight, Solarized Dark, Tokyo Night, Dracula, Synthwave '84), the secondary color is a little brighter too, so the two still read apart. The empty screens tools show before you run them now use the theme's colors instead of the system's faint grays. A new test checks every theme.
+
+### Fixed: DNS Benchmark's "Include system resolver" did nothing
+
+The checkbox was shown but never read, so the benchmark only ever raced the public resolvers. With it ticked, your Mac's own DNS servers now join the race as "System resolver" rows. DNS Benchmark queries over IPv4, so IPv6 system resolvers are left out, and if there's no IPv4 one, a note says so.
+
+### Changed: the Dashboard GeoIP card uses HTTPS
+
+The card looked addresses up with ip-api.com over plain HTTP and sent hostnames as typed. It now uses ipwho.is over HTTPS, like GeoIP Lookup, and resolves a hostname on your Mac first, so only an IP is sent. ASN and organization still show on one line. The README's Privacy & Security section is updated.
+
+### Changed: Keychain items carry SNAP's own name
+
+Saved UniFi passwords and SNMP community strings were stored under `com.bardaklabs.snap...` service names, which show in Keychain Access. They're now `com.sevagbardakjian.snap.unifi` and `com.sevagbardakjian.snap.snmp.community`, named "SNAP UniFi controller" and "SNAP SNMP community". Existing items move over the first time SNAP reads them: the old copy is deleted only after the new one is saved, so nothing is lost. If macOS asks whether SNAP may use the saved item, allow it, as after any update.
+
+### Fixed: outdated README lines
+
+The intro said ten themes (there are 12), the themes image's caption is now accurate, and the Building section's test count was out of date (124; now 335).
+
 ### Added: theme credits
 
 The README has a new Credits section naming the open-source projects behind five of the themes: Nord, Solarized, Tokyo Night, Dracula, and Synthwave '84, all under the MIT License. [Themes.swift](SNAP/Themes.swift) points to it.

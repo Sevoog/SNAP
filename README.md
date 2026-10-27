@@ -1,7 +1,7 @@
 # SNAP — Sev's Network Analysis Platform
 **by Sevag Bardakjian**
 
-A professional macOS network utility — sandboxless, built for speed, with ten themes.
+A professional macOS network utility: sandboxless, built for speed, with 12 themes.
 
 Free and open source under the [GNU GPL v3](LICENSE). No accounts, analytics, telemetry, or crash reporting. See [Privacy & Security](#privacy--security) for every service SNAP contacts, what it stores, and what it can do on your network.
 
@@ -20,7 +20,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 ![Wi-Fi channel overlap](marketing/linkedin/framed/04-spectrum.png)
 ![Bandwidth Monitor: live traffic plus history](marketing/linkedin/framed/06-bandwidth.png)
 ![Command bar: press ⌘K to jump to any tool](marketing/linkedin/framed/07-command-bar.png)
-![Ten themes](marketing/linkedin/framed/08-themes.png)
+![Six of SNAP's themes](marketing/linkedin/framed/08-themes.png)
 
 </details>
 
@@ -111,7 +111,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 - **Connection Quality Score** — 0–100 rating (Excellent → Critical) derived from latency, loss, jitter, retransmits, and DNS responsiveness
 - **Sandboxless Networking** — Direct `getifaddrs` / `sysctl` / raw UDP syscalls — no `netstat` spawning for hot-path sampling
 - **Dark-Only UI** — Custom 3-column layout (icon rail + sidebar + main) with NS design tokens throughout
-- **XCTest target:** 326 unit tests across SubnetCalculator, DNSWire, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip, sysObjectID, walks and fallbacks against a fake agent, Health, Inventory, Interfaces and Watch, Neighbors, Where Is It?, remembered communities, the Status Board watch), iPerf3 output parsing and verdicts, theme contrast, Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, WiFi band/channel helpers, connection-health scoring (incl. menu bar dot outage timelines), public-lookup caching, Status Board Wi-Fi readings, and scan-range parsing (CIDR, ranges, limits) (added in v1.2.3, expanded through v1.5.6)
+- **XCTest target:** 335 unit tests across SubnetCalculator, DNSWire, DNS Benchmark's resolver list, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip, sysObjectID, walks and fallbacks against a fake agent, Health, Inventory, Interfaces and Watch, Neighbors, Where Is It?, remembered communities, the Status Board watch), iPerf3 output parsing and verdicts, theme contrast, Dashboard GeoIP parsing, Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, WiFi band/channel helpers, connection-health scoring (incl. menu bar dot outage timelines), public-lookup caching, Status Board Wi-Fi readings, and scan-range parsing (CIDR, ranges, limits) (added in v1.2.3, expanded through v1.5.7)
 
 ## Requirements
 - macOS 14.0 (Sonoma) or later
@@ -166,7 +166,7 @@ A few tools start as soon as you open their tab, without a click: Network Health
 - **Dashboard cards** run only when you press their button, but some start with targets filled in for you: Ping `1.1.1.1`, DNS `cloudflare.com` (looked up through your system resolver), Traceroute `github.com`, GeoIP `8.8.8.8`, Whois `apple.com`, HTTP Probe `https://api.github.com`, and Port Scan `192.168.1.1`. The Port Scan card always tries the same ports: 22, 53, 80, 161, 443, 8080, and 8443.
 - **GeoIP Lookup and Visual Trace** → `ipwho.is`. GeoIP sends the IP you look up. If you type a hostname, it's resolved through your system resolver first and only the IP is sent. *My IP* sends a request with no address, so ipwho.is sees yours. Visual Trace sends each hop's IP except 10.x, 172.16.x to 172.31.x, 192.168.x, and 127.x addresses. Other non-public hops, such as an ISP's 100.64.x.x addresses, are sent too.
 - **Apple Maps** → Visual Trace shows an Apple Maps (MapKit) map as soon as its tab opens, and GeoIP Lookup shows one with each result. Loading the map tiles lets Apple see your IP and the area shown: the world view at first, then the area around the located hops or the address you looked up.
-- **Dashboard GeoIP card** → `ip-api.com` over **plain HTTP**. Whatever you type, an IP or a hostname, is sent as is (unlike GeoIP Lookup, it isn't resolved first), so it's visible to anyone on the network path.
+- **Dashboard GeoIP card** → `ipwho.is`, the same as GeoIP Lookup. If you type a hostname, it's resolved through your system resolver first and only the IP is sent.
 - **Whois** → WHOIS registry servers, via macOS's `whois` command.
 - **BGP/ASN** (the tool and its Dashboard card) → TXT lookups over plain UDP/53 to Google Public DNS (`8.8.8.8`), which forwards them to Team Cymru (`asn.cymru.com`). An IP lookup sends `<reversed IP>.origin.asn.cymru.com` (`origin6` for IPv6), then `AS<n>.asn.cymru.com` for the AS name. An ASN lookup sends only the second. Google and Team Cymru both see what you looked up.
 - **DNS Lookup** (the **Lookup** tab) → DNS-over-HTTPS to the provider you pick: `1.1.1.1` (the default), `8.8.8.8`, or `9.9.9.9`. It never uses your system resolver, so internal names you look up go to that provider.
@@ -264,8 +264,8 @@ SNAP never asks for your admin password, and it installs no helpers, daemons, or
   - quality score
 
   Rows older than 30 days are deleted when the file is opened, and *Clear all history…* in the Bandwidth tab deletes them all. The folder and an empty file are created the first time you open the Bandwidth tab, even if you never press Start. Never packet contents.
-- **Keychain**: the UniFi password, only if you chose *Remember*. There's one item for each controller URL and username. Unticking Remember or pressing Disconnect doesn't delete it.
-- **Keychain**: SNMP community strings, service `com.bardaklabs.snap.snmp.community`. There's one item for each host and port you ticked *Remember* for, and one for the Status Board's SNMP Watch tile if you pinned a device. Unticking Remember deletes that host's item; unpinning deletes the tile's; *Forget All* in the SNMP tab's Options deletes them all.
+- **Keychain**: the UniFi password, only if you chose *Remember*, service `com.sevagbardakjian.snap.unifi` (shown as "SNAP UniFi controller"). There's one item for each controller URL and username. Unticking Remember or pressing Disconnect doesn't delete it.
+- **Keychain**: SNMP community strings, service `com.sevagbardakjian.snap.snmp.community` (shown as "SNAP SNMP community"). There's one item for each host and port you ticked *Remember* for, and one for the Status Board's SNMP Watch tile if you pinned a device. Unticking Remember deletes that host's item; unpinning deletes the tile's; *Forget All* in the SNMP tab's Options deletes them all.
 - **Web cache and cookies**, kept by macOS's networking framework for SNAP:
   - **Where:** cached responses go in `~/Library/Caches/com.sevagbardakjian.snap`. Their URLs can include IPs and names you looked up. Cookies and HSTS data go in `~/Library/HTTPStorages/com.sevagbardakjian.snap` and `com.sevagbardakjian.snap.binarycookies`.
   - **What uses it:** most of SNAP's web requests. That includes the automatic ones (ipify, ipinfo.io, ipwho.is, and the online check), DNS-over-HTTPS lookups, Fingerprint, Multi-Host, HTTP Probe, the Dashboard HTTP Probe and GeoIP cards, and Speed Test. A cookie that any of these services sets is stored and sent back on later requests to it.
@@ -288,7 +288,7 @@ To remove everything SNAP has stored:
    - `~/Library/HTTPStorages/com.sevagbardakjian.snap`
    - `~/Library/HTTPStorages/com.sevagbardakjian.snap.binarycookies`
    - `~/Library/Saved Application State/com.sevagbardakjian.snap.savedState`, if present
-5. If you saved a UniFi password, remove every `com.bardaklabs.snap.unifi` item in Keychain Access. Or run `security delete-generic-password -s com.bardaklabs.snap.unifi` repeatedly until it reports that no item was found. Do the same for saved SNMP community strings, service `com.bardaklabs.snap.snmp.community` (or press *Forget All* in the SNMP tab's Options before you delete SNAP).
+5. If you saved a UniFi password, remove every `com.sevagbardakjian.snap.unifi` item in Keychain Access. Or run `security delete-generic-password -s com.sevagbardakjian.snap.unifi` repeatedly until it reports that no item was found. Do the same for saved SNMP community strings, service `com.sevagbardakjian.snap.snmp.community` (or press *Forget All* in the SNMP tab's Options before you delete SNAP). Versions before 1.5.7 used `com.bardaklabs.snap.unifi` and `com.bardaklabs.snap.snmp.community`; SNAP moves an item to the new name the first time it reads it, so check for those too.
 6. If SNAP ever crashed, delete its crash reports (`SNAP-*.ips`) in `~/Library/Logs/DiagnosticReports`.
 7. Optionally, turn off SNAP's Location Services, Local Network, and Notifications permissions in System Settings.
 8. If you ever ran SNAP with `sudo`, repeat this for root's account.
@@ -308,7 +308,6 @@ To remove everything SNAP has stored:
 
   None of it leaves your Mac except as this section describes.
 - **Plain HTTP allowed.** App Transport Security is turned off for every host (`NSAllowsArbitraryLoads`), so SNAP can reach LAN devices with HTTP-only admin pages. SNAP itself sends plain HTTP to:
-  - `ip-api.com` (Dashboard GeoIP card)
   - the Network Health portal checks (`captive.apple.com`, `www.msftconnecttest.com`, `cp.cloudflare.com`, `detectportal.firefox.com`, `www.gstatic.com`)
   - `http://<target>` in Fingerprint
   - the Network Map web requests to ports 80 and 8080
@@ -333,9 +332,9 @@ To remove everything SNAP has stored:
 ## Building
 ```bash
 open SNAP.xcodeproj
-# ⌘⇧K — Clean Build Folder
-# ⌘R   — Build & Run
-# ⌘U   — Run tests (124 tests in SNAPTests)
+# ⌘⇧K: Clean Build Folder
+# ⌘R:  Build & Run
+# ⌘U:  Run tests (335 tests in SNAPTests)
 ```
 
 ## Version
