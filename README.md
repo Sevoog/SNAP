@@ -28,7 +28,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 
 ## Install
 
-1. Download `SNAP-1.5.6.zip` from the [latest release](https://github.com/Sevoog/SNAP/releases/latest).
+1. Download `SNAP-1.5.7.zip` from the [latest release](https://github.com/Sevoog/SNAP/releases/latest).
 2. Unzip it and drag **SNAP** into your Applications folder. It runs natively on Apple silicon and Intel Macs with macOS 14 or later.
 3. Open SNAP. The first time, macOS blocks it, because SNAP isn't notarized by Apple yet. To open it anyway:
    - In the warning ("Apple could not verify…"), click **Done**.
@@ -38,7 +38,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
    After that, SNAP opens normally. If you'd rather use Terminal, `xattr -dr com.apple.quarantine /Applications/SNAP.app` does the same thing.
 4. On first launch, SNAP asks for **Location** (macOS only shows Wi-Fi network names to apps that have it) and **Local Network** access. See [Privacy & Security](#privacy--security) for what each is used for. A short Quick Tour opens the first time; reopen it anytime from **Help → Quick Tour…**.
 
-**Check the download (optional):** the release page lists the zip's SHA-256. Compare it with the output of `shasum -a 256 SNAP-1.5.6.zip`.
+**Check the download (optional):** the release page lists the zip's SHA-256. Compare it with the output of `shasum -a 256 SNAP-1.5.7.zip`.
 
 **Build it yourself:** see [Building](#building). There are no dependencies, and Xcode signs it to run on your Mac automatically.
 
@@ -338,7 +338,15 @@ open SNAP.xcodeproj
 ```
 
 ## Version
-Current: **v1.5.6**. See [CHANGELOG.md](CHANGELOG.md).
+Current: **v1.5.7**. See [CHANGELOG.md](CHANGELOG.md).
+
+### What's new in v1.5.7: new icon, readable captions, privacy fixes
+- **New app icon.** A brushed-steel Ethernet port, smooth at every size, with a simpler version for the smallest sizes. The logo inside the app (sidebar, About window, menu bar popover, Quick Tour) matches it.
+- **Readable captions in every theme.** Captions, labels, and hints reach at least 4.5:1 contrast on every background in all 12 themes (as low as 1.9:1 before), and the empty screens tools show before you run them use the theme's colors.
+- **Dashboard GeoIP card over HTTPS.** It uses ipwho.is instead of ip-api.com over plain HTTP, and resolves hostnames on your Mac first, so only an IP is sent.
+- **Fixed:** DNS Benchmark's "Include system resolver" did nothing; now your Mac's own DNS servers join the race.
+- **Keychain items named for SNAP.** Saved UniFi passwords and SNMP community strings show as "SNAP UniFi controller" and "SNAP SNMP community". Existing items move over automatically.
+- **Credits** for the open-source projects behind five of the themes.
 
 ### What's new in v1.5.6: SNMP rebuilt, iPerf3 explained, readable in every theme
 - **SNMP, rebuilt.** Seven views in one menu: System Info; Health (printer toner and ink, UPS battery and minutes left, NAS and server storage and CPU, each with a one-line verdict); Inventory (models and serial numbers, with Copy buttons); Interfaces (port names and labels, correct speeds, errors, last change, a physical-ports filter, and **Watch live** for traffic per port); Neighbors (LLDP and CDP, with a button to query the next switch); Where Is It? (the switch port an IP or MAC address is on); and Custom OID Walk.

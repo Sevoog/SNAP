@@ -3,7 +3,7 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ---
 
-## [1.5.7] - Unreleased
+## [1.5.7] - 2026-10-27
 
 ### Changed: new app icon
 
