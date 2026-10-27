@@ -81,7 +81,7 @@ struct DNSBenchmarkView: View {
             if rows.isEmpty && !isRunning {
                 EmptyStateView(title: "DNS Benchmark",
                                systemImage: "stopwatch",
-                               description: "Race \(PublicResolvers.all.count) public resolvers against a basket of domains. Adjust the sample count and domain list on the right, then press Run Benchmark.")
+                               description: "Race \(PublicResolvers.all.count) public resolvers, plus your Mac's own if included, against a basket of domains. Adjust the sample count and domain list on the right, then press Run Benchmark.")
             } else {
                 Table(rows.sorted { sortRows($0, $1) }) {
                     TableColumn("Rank") { r in
@@ -178,7 +178,10 @@ struct DNSBenchmarkView: View {
         guard !basket.isEmpty else { error = "Domain basket is empty"; return }
         error = ""
 
-        let resolvers = PublicResolvers.all
+        let resolvers = Self.resolvers(includeSystem: includeSystem, system: DNSInfo.systemResolvers())
+        if includeSystem && resolvers.count == PublicResolvers.all.count {
+            error = "Your Mac has no IPv4 DNS server to test, so only the public resolvers are included."
+        }
         rows = resolvers.map {
             BenchmarkRow(id: $0.id, name: $0.name, ip: $0.ip, samples: [], failures: 0, totalAttempts: 0)
         }
@@ -222,6 +225,22 @@ struct DNSBenchmarkView: View {
                 progress = 1.0
             }
         }
+    }
+
+    /// The resolvers to race: the public list, with this Mac's own resolvers
+    /// first when "Include system resolver" is on. DNSWire only speaks IPv4,
+    /// so IPv6 system resolvers are left out.
+    static func resolvers(includeSystem: Bool, system: [String]) -> [DNSResolver] {
+        guard includeSystem else { return PublicResolvers.all }
+        let mine = system.filter(isIPv4).map {
+            DNSResolver(id: "system-\($0)", ip: $0, name: "System resolver", region: "This Mac")
+        }
+        return mine + PublicResolvers.all
+    }
+
+    private static func isIPv4(_ s: String) -> Bool {
+        var addr = in_addr()
+        return inet_pton(AF_INET, s, &addr) == 1
     }
 
     private static func timedQuery(server: String, name: String) async -> Double? {

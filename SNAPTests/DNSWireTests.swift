@@ -95,3 +95,27 @@ final class DNSWireTests: XCTestCase {
         XCTAssertEqual(DNSWireError.timeout.errorDescription, "Timed out")
     }
 }
+
+/// DNS Benchmark's "Include system resolver" switch used to do nothing.
+final class DNSBenchmarkResolverListTests: XCTestCase {
+
+    func test_switchOff_racesPublicResolversOnly() {
+        let list = DNSBenchmarkView.resolvers(includeSystem: false, system: ["192.0.2.53"])
+        XCTAssertEqual(list.map(\.id), PublicResolvers.all.map(\.id))
+    }
+
+    func test_switchOn_addsTheMacsIPv4ResolversFirst() {
+        let list = DNSBenchmarkView.resolvers(includeSystem: true,
+                                              system: ["192.0.2.53", "2001:db8::53", "fe80::1%en0", "198.51.100.1"])
+        XCTAssertEqual(list.count, PublicResolvers.all.count + 2)
+        XCTAssertEqual(Array(list.prefix(2)).map(\.ip), ["192.0.2.53", "198.51.100.1"])
+        XCTAssertEqual(list.first?.name, "System resolver")
+        XCTAssertEqual(Set(list.map(\.id)).count, list.count, "ids stay unique")
+    }
+
+    func test_switchOn_keepsSystemRowEvenIfItIsAPublicResolver() {
+        let list = DNSBenchmarkView.resolvers(includeSystem: true, system: ["1.1.1.1"])
+        XCTAssertEqual(list.first?.id, "system-1.1.1.1")
+        XCTAssertEqual(Set(list.map(\.id)).count, list.count)
+    }
+}
