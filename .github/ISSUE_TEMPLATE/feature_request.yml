@@ -1,0 +1,28 @@
+name: Feature request
+description: An idea for a new tool or a change to an existing one.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The task or problem, in your own words. What makes it hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: How you picture it working in SNAP.
+    validations:
+      required: true
+  - type: input
+    id: snap-version
+    attributes:
+      label: SNAP version
+      placeholder: "1.5.8"
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: "27.2"

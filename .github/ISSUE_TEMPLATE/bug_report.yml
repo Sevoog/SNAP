@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in SNAP doesn't work the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. **Before you attach screenshots or output,** remove anything private: IP and MAC addresses, Wi-Fi network names, hostnames, SNMP community strings, and passwords.
+
+        Security problems shouldn't go here. Report them privately instead (see SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Which tool, what you typed or clicked, in order.
+      placeholder: |
+        1. Open Port Scan
+        2. Enter a host and press Scan
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: snap-version
+    attributes:
+      label: SNAP version
+      description: Help → Report a Bug… fills this in. Otherwise, see SNAP → About SNAP.
+      placeholder: "1.5.8"
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: "27.2"
+    validations:
+      required: true
+  - type: dropdown
+    id: mac-type
+    attributes:
+      label: Mac
+      options:
+        - Apple silicon
+        - Intel
+        - Not sure
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, exported results, or how often it happens. Remove private details first.
