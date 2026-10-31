@@ -3,6 +3,52 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ---
 
+## [1.5.8] - 2026-10-31
+
+### Added: update checks
+
+**SNAP > Check for Updates…** asks GitHub for the latest release. If it's newer, a sheet shows its release notes with **View Release** (opens the GitHub page), **Later**, and **Skip This Version**; otherwise SNAP says you're up to date. Nothing is downloaded or installed.
+
+**SNAP > Check for Updates Automatically** checks once a day at most. It's off until you turn it on: SNAP asks once, after the Quick Tour on a new install or after the *What's new* sheet when you update. A check is one HTTPS request to `api.github.com` with the User-Agent `SNAP/<version>`, using a session that keeps no cookies or cache, so GitHub sees your IP address and SNAP's version. The README's Privacy & Security section lists it. Versions you skip aren't offered again automatically, but Check for Updates… still shows them.
+
+### Added: Ping's TCP mode
+
+Ping has an **ICMP / TCP** switch. TCP mode times a connection to the port you choose (443 to start), for hosts and firewalls that drop ICMP. The name is looked up once before the first try, so lookup time isn't counted. A refused connection still means the host answered, so it counts as a reply, marked "Port closed (reset)". Each try waits up to 2 s, and a count of 0 runs until you press Stop.
+
+### Added: saved iPerf3 servers
+
+Saved iPerf3 servers appear as one-click chips in a row under the iPerf3 toolbar, and the chip for the server in the fields is highlighted. **Save** names the server in the fields, right-clicking a chip renames or removes it, and **Manage…** lists them all. Before a test runs, the empty pane shows saved servers and the last five you tested as cards. The last server you tested is filled in when the iPerf3 pane opens, and clicking a row under Recent LAN tests reuses its server. Saved servers are kept in SNAP's preferences.
+
+### Added: network change log
+
+SNAP now keeps a timestamped list of network changes: connecting and disconnecting, switching Wi-Fi networks or interfaces, and new IP addresses, routers, DNS servers, and VPN tunnels. A VPN that takes over your connection is logged as one VPN entry plus its DNS change, not as a new interface, address, and router. The menu bar popover shows the latest three under **Recent Changes**, and **Window > Network Change Log** shows the newest 500, with export to text, CSV, or JSON and a **Clear…** button. SNAP reads your Mac's own settings every 10 s, and 3 s after macOS reports a change, so it sends nothing. The log is saved in `~/Library/Application Support/SNAP/network-changes.json`.
+
+### Added: Open at Login
+
+**SNAP > Open at Login** adds SNAP to your login items through macOS, so the menu bar monitor and change log start when you log in. macOS keeps the setting, and turning SNAP off in System Settings > General > Login Items & Extensions is reflected in the menu.
+
+### Added: What's new
+
+The first time a new version opens, a short sheet lists what changed, with a link to the full release notes. It's built into the app, so it needs no network, and it doesn't appear on a first install (the Quick Tour does).
+
+### Added: Report a Bug and Suggest a Feature
+
+**Help > Report a Bug…** and **Help > Suggest a Feature…** open a new GitHub issue in your browser, with your SNAP and macOS versions filled in. SNAP sends nothing itself. The repository now has bug and feature forms that ask for steps and versions, remind you to remove IP addresses, MAC addresses, and other private details first, and point security problems to private reporting.
+
+### Changed: releases are signed, and builds are numbered
+
+Each release zip now comes with an Ed25519 signature (`SNAP-<version>.zip.sig`). The public key is in [scripts/release-signing-key.pub](scripts/release-signing-key.pub), and `swift scripts/sign-release.swift verify` checks a download against it. The app's build number now follows its version (1.5.8 is build 10508) instead of always being 1. [scripts/release.sh](scripts/release.sh) builds, checks, zips, signs, and publishes a release in one run, and [scripts/make_icon.swift](scripts/make_icon.swift) redraws the app icon at every size.
+
+### Added: build and test checks on GitHub
+
+Every push to `main` and every pull request is built and tested on GitHub's macOS machines ([.github/workflows/build.yml](.github/workflows/build.yml)).
+
+### Fixed: README title
+
+The README's title no longer uses an em dash.
+
+---
+
 ## [1.5.7] - 2026-10-27
 
 ### Changed: new app icon

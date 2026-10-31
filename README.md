@@ -1,4 +1,4 @@
-# SNAP — Sev's Network Analysis Platform
+# SNAP: Sev's Network Analysis Platform
 **by Sevag Bardakjian**
 
 A professional macOS network utility: sandboxless, built for speed, with 12 themes.
@@ -28,7 +28,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 
 ## Install
 
-1. Download `SNAP-1.5.7.zip` from the [latest release](https://github.com/Sevoog/SNAP/releases/latest).
+1. Download `SNAP-1.5.8.zip` from the [latest release](https://github.com/Sevoog/SNAP/releases/latest).
 2. Unzip it and drag **SNAP** into your Applications folder. It runs natively on Apple silicon and Intel Macs with macOS 14 or later.
 3. Open SNAP. The first time, macOS blocks it, because SNAP isn't notarized by Apple yet. To open it anyway:
    - In the warning ("Apple could not verify…"), click **Done**.
@@ -38,7 +38,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
    After that, SNAP opens normally. If you'd rather use Terminal, `xattr -dr com.apple.quarantine /Applications/SNAP.app` does the same thing.
 4. On first launch, SNAP asks for **Location** (macOS only shows Wi-Fi network names to apps that have it) and **Local Network** access. See [Privacy & Security](#privacy--security) for what each is used for. A short Quick Tour opens the first time; reopen it anytime from **Help → Quick Tour…**.
 
-**Check the download (optional):** the release page lists the zip's SHA-256. Compare it with the output of `shasum -a 256 SNAP-1.5.7.zip`.
+**Check the download (optional):** the release page lists the zip's SHA-256. Compare it with the output of `shasum -a 256 SNAP-1.5.8.zip`. From 1.5.8 on, each release also has a signature file (`SNAP-<version>.zip.sig`); in a clone of this repository, `swift scripts/sign-release.swift verify SNAP-1.5.8.zip SNAP-1.5.8.zip.sig scripts/release-signing-key.pub` confirms the zip came from SNAP's maintainer.
 
 **Build it yourself:** see [Building](#building). There are no dependencies, and Xcode signs it to run on your Mac automatically.
 
@@ -51,7 +51,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 
 ### Diagnostics — *troubleshoot a target*
 - **Network Info** — Per-interface dark cards: Hardware (MAC, link speed/duplex, MTU, carrier), IPv4 with CIDR, IPv6 by scope, Wi-Fi specifics, traffic counters, DHCP lease, "Active route" badge — *redesigned in v1.2.4*
-- **Ping** — Configurable count or unlimited mode
+- **Ping** — Configurable count or unlimited mode. *TCP mode (v1.5.8)* times a connection to a port you choose, for hosts and firewalls that block ICMP; a refused connection still counts as a reply, marked "Port closed".
 - **Lookup** — DNS lookups via DNS-over-HTTPS (A, AAAA, MX, NS, TXT, and more)
 - **Traceroute** / **Visual Trace** — One-shot path discovery, optionally geo-mapped
 - **GeoIP Lookup** — Map-based IP geolocation with location, network, timezone, and security signals *(grouped under Visual Trace in v1.4.2 — they offer related services)*
@@ -77,6 +77,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 - **Connections** — Active socket / connection table
 - **Speed Test** — Cloudflare provider + iPerf3 LAN, delegate-based download accurate at 400+ Mbps, persistent history
   - **iPerf3 LAN:** upload, download, or both, with 1 to 8 streams for 5 to 60 seconds. Results come with summary cards, a verdict against your Mac's link speed, and a per-second chart next to iperf3's own output.
+  - **Saved servers** *(v1.5.8)*: save iPerf3 servers by name, and they appear as one-click chips under the toolbar (right-click one to rename or remove it). Before a test, the empty pane also lists them with the last five servers you tested. The last server you tested is filled in when the pane opens.
 - **WiFi Analyzer** — *fully revamped in v1.4.2* Sortable native-`Table` networks list (vendor via OUI, mode, generation, width, security, warning flags) over a **resizable** tabbed graph panel:
   - **Network Details** — full per-network breakdown (radio / signal / security)
   - **Signal Strength** — RSSI-over-time with **auto-scaling Y axis**, signal-quality zone bands, and a glow + area-fill highlight on the selected network, plus a stats strip (current / avg / min-max / jitter σ / SNR / quality / trend)
@@ -102,7 +103,9 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 
 ### Additional Features
 
-- **Menu Bar Widget** — Live RX/TX sparklines, Wi-Fi / Network / VPN sections, inline Quick Ping & DNS Lookup
+- **Menu Bar Widget** — Live RX/TX sparklines, Wi-Fi / Network / VPN sections, Recent Changes, inline Quick Ping & DNS Lookup
+- **Network Change Log** *(v1.5.8)*: a timestamped list of when your Mac connected or disconnected, switched Wi-Fi networks or interfaces, or got a new IP address, router, DNS servers, or VPN tunnel. The menu bar popover shows the latest three; Window > Network Change Log shows the rest, with export. It reads your Mac's own settings every 10 s and sends nothing.
+- **Open at Login** *(v1.5.8)*: SNAP > Open at Login adds SNAP to macOS's login items, so the menu bar monitor and the change log are running from the moment you log in.
 - **Threshold Alerts** — Configure latency / loss / jitter / retransmit / DNS thresholds with consecutive-sample debouncing, native macOS notifications
 - **Session Report (HTML)** — `⌘⇧R` saves a single self-contained HTML snapshot of network state + recent alerts
 - **Export Results** — Every tool exports to TXT, CSV, or JSON via a consistent action bar
@@ -111,7 +114,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 - **Connection Quality Score** — 0–100 rating (Excellent → Critical) derived from latency, loss, jitter, retransmits, and DNS responsiveness
 - **Sandboxless Networking** — Direct `getifaddrs` / `sysctl` / raw UDP syscalls — no `netstat` spawning for hot-path sampling
 - **Dark-Only UI** — Custom 3-column layout (icon rail + sidebar + main) with NS design tokens throughout
-- **XCTest target:** 335 unit tests across SubnetCalculator, DNSWire, DNS Benchmark's resolver list, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip, sysObjectID, walks and fallbacks against a fake agent, Health, Inventory, Interfaces and Watch, Neighbors, Where Is It?, remembered communities, the Status Board watch), iPerf3 output parsing and verdicts, theme contrast, Dashboard GeoIP parsing, Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, WiFi band/channel helpers, connection-health scoring (incl. menu bar dot outage timelines), public-lookup caching, Status Board Wi-Fi readings, and scan-range parsing (CIDR, ranges, limits) (added in v1.2.3, expanded through v1.5.7)
+- **XCTest target:** 364 unit tests across update checks and version comparison, bug-report links, Ping's TCP mode, the network change log, saved iPerf3 servers, SubnetCalculator, DNSWire, DNS Benchmark's resolver list, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip, sysObjectID, walks and fallbacks against a fake agent, Health, Inventory, Interfaces and Watch, Neighbors, Where Is It?, remembered communities, the Status Board watch), iPerf3 output parsing and verdicts, theme contrast, Dashboard GeoIP parsing, Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, WiFi band/channel helpers, connection-health scoring (incl. menu bar dot outage timelines), public-lookup caching, Status Board Wi-Fi readings, and scan-range parsing (CIDR, ranges, limits) (added in v1.2.3, expanded through v1.5.8)
 
 ## Requirements
 - macOS 14.0 (Sonoma) or later
@@ -141,6 +144,7 @@ These happen without you starting a tool: at launch, on a timer, or when you ope
 | From the first time you open the Status Board until you quit: 4 s after that first open, then every 10 min. This continues after the board closes and after the main window closes. Opening the board again doesn't add a lookup. | `ipwho.is` | Your public IP, ISP, ASN, city, and country for the header chip. **ipwho.is sees your public IP.** |
 | After you pin a device or port to the Status Board's SNMP Watch tile, until you unpin it: when the board shows the tile, then every 10 s while it stays showing (the board open in a main window, or detached) | The device you pinned | One SNMP GET with the community string saved for the tile: the device's uptime and name, plus the port's status and traffic counters if you pinned a port. Like all v1 and v2c SNMP, the community string travels unencrypted. |
 | From the first time the Status Board shows its DNS Latency tile (it's in the default layout) until you quit: 2 s later, then every 10 s. This continues after the board or the main window closes, and after you remove the tile. | The first DNS resolver your Mac uses, `1.1.1.1`, `8.8.8.8`, `9.9.9.9` | A plain UDP/53 lookup of `cloudflare.com` to each resolver in turn, to time them. That is up to 4 queries every 10 s, about 34,560 a day. |
+| Only if you turn on automatic update checks (off until you do; SNAP asks once): shortly after launch, then at most once a day while SNAP runs | `api.github.com` | One HTTPS request for SNAP's latest release, to compare its version with yours. It sends the User-Agent `SNAP/<version>` and no cookies, and downloads nothing else. **GitHub sees your public IP.** Turn it off or on with SNAP > Check for Updates Automatically. |
 
 SNAP keeps the public IP in memory only. It looks it up at the first refresh after launch, then at the next 30 s refresh once 10 min have passed or your network changes (interface, local IP, router, Wi-Fi name, or VPN), on every 30 s refresh while both lookups are failing, and when you press Refresh.
 
@@ -152,7 +156,7 @@ Tools keep running after you switch to another tab (a ping, a traceroute, a scan
 
 A few tools start as soon as you open their tab, without a click: Network Health, ARP Table, Bonjour, and WiFi Analyzer. Connections, DHCP Leases, and Interface Stats also start on their own but stay on your Mac. Visual Trace shows its map as soon as it opens.
 
-- **Anything you type into a tool goes to the target you chose.** That covers Ping, Traceroute, MTR, Port Scan, HTTP Probe, SSL/TLS, MTU Discovery, SNMP, iperf3, and the menu bar's quick Ping. Names you type are resolved through your system DNS resolver unless a bullet below says otherwise. SNMP uses v2c, or v1 when Auto falls back to it; both send the community string unencrypted. SNMP's Interfaces view asks the device again every 2 to 30 s (your choice) while Watch live is on, for the ports shown. Neighbors' Query button and Where Is It?'s hop button query the next device's management address with the same community. Where Is It? also reads your Mac's own ARP cache (`arp -n <address>`) when the device doesn't know the MAC address.
+- **Anything you type into a tool goes to the target you chose.** That covers Ping (in TCP mode, a connection to the port you choose, closed as soon as it opens), Traceroute, MTR, Port Scan, HTTP Probe, SSL/TLS, MTU Discovery, SNMP, iperf3, and the menu bar's quick Ping. Names you type are resolved through your system DNS resolver unless a bullet below says otherwise. SNMP uses v2c, or v1 when Auto falls back to it; both send the community string unencrypted. SNMP's Interfaces view asks the device again every 2 to 30 s (your choice) while Watch live is on, for the ports shown. Neighbors' Query button and Where Is It?'s hop button query the next device's management address with the same community. Where Is It? also reads your Mac's own ARP cache (`arp -n <address>`) when the device doesn't know the MAC address.
 - **Bandwidth** (when you press **Start**; opening the tab doesn't start it): a request to `ipinfo.io/json` for your public IP, ISP, ASN, city, and region (**ipinfo sees your public IP**). While it runs, which continues after you switch tabs until you press **Stop** or close the window: every 3 s, four TCP connections to `1.1.1.1` port 80 to time latency, jitter, and loss, and every 10 s a lookup of `one.one.one.one` through your DNS resolver to time DNS.
 - **Traceroute, Visual Trace, and MTR reach every router on the path**, not just the target. Traceroute and Visual Trace look up a name (PTR record) for every hop through your system DNS resolver. MTR pings every hop that responds once a second (`ping -i 1`) until you press Stop or close the window, and also looks up each hop's name.
 - **HTTP Probe** sends the method, headers, and body you type. macOS adds its standard headers unless you set your own: the default User-Agent, Accept, Accept-Language, Accept-Encoding, and any cookies stored for that site. It follows redirects unless you turn that off, so a redirect can carry the request to a different host. It keeps any cookies the site sets (see *Stored on your Mac*). The Dashboard's **HTTP Probe card** sends a GET to the URL you enter and also follows redirects.
@@ -163,6 +167,8 @@ A few tools start as soon as you open their tab, without a click: Network Health
   - It pings the target once.
   - With the SNMP option on (the default), it sends an SNMP v2c GET for sysDescr, sysObjectID, and sysName with the community string shown (`public` unless you change it, sent unencrypted), retried once if there's no answer.
 - **Multi-Host** (when you click **Compare**; the list starts with `google.com` and `cloudflare.com`): for each host, 5 pings (the count is editable), a lookup through your system resolver, and a GET to `https://<host>` that follows redirects.
+- **Check for Updates…** (SNAP menu) sends the same request to `api.github.com` as the automatic check. A newer release opens a sheet with its notes; **View Release** opens its GitHub page in your browser. SNAP never downloads or installs an update itself.
+- **Report a Bug…** and **Suggest a Feature…** (Help menu) open a new GitHub issue in your browser, with your SNAP and macOS versions filled in. SNAP sends nothing itself, and nothing is posted until you submit the issue on GitHub. The *What's new* sheet's **Full Release Notes** button opens the release page the same way.
 - **Dashboard cards** run only when you press their button, but some start with targets filled in for you: Ping `1.1.1.1`, DNS `cloudflare.com` (looked up through your system resolver), Traceroute `github.com`, GeoIP `8.8.8.8`, Whois `apple.com`, HTTP Probe `https://api.github.com`, and Port Scan `192.168.1.1`. The Port Scan card always tries the same ports: 22, 53, 80, 161, 443, 8080, and 8443.
 - **GeoIP Lookup and Visual Trace** → `ipwho.is`. GeoIP sends the IP you look up. If you type a hostname, it's resolved through your system resolver first and only the IP is sent. *My IP* sends a request with no address, so ipwho.is sees yours. Visual Trace sends each hop's IP except 10.x, 172.16.x to 172.31.x, 192.168.x, and 127.x addresses. Other non-public hops, such as an ISP's 100.64.x.x addresses, are sent too.
 - **Apple Maps** → Visual Trace shows an Apple Maps (MapKit) map as soon as its tab opens, and GeoIP Lookup shows one with each result. Loading the map tiles lets Apple see your IP and the area shown: the world view at first, then the area around the located hops or the address you looked up.
@@ -228,7 +234,7 @@ SNAP launches these directly, never through a shell:
 - `/usr/bin/which` (to find `iperf3` if it isn't in one of the folders below)
 - `iperf3`, if it's installed (`iperf3 -c <host> -p <port> -t <seconds> --forceflush`, plus `-P <streams>` for more than one stream and `-R` for a download test). SNAP looks in `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`, and `/usr/bin` (Homebrew on Apple silicon and Intel, MacPorts, the system), then asks `which`.
 
-SNAP never asks for your admin password, and it installs no helpers, daemons, or login items.
+SNAP never asks for your admin password, and it installs no helpers or daemons. It's a login item only if you turn on SNAP > Open at Login, and macOS keeps that setting (System Settings > General > Login Items & Extensions).
 
 ### Permissions
 
@@ -245,13 +251,15 @@ SNAP never asks for your admin password, and it installs no helpers, daemons, or
   - the last 10 inputs for Ping, Lookup, Whois, HTTP Probe, GeoIP, BGP/ASN, Traceroute, and Port Scan, shared with their Dashboard cards, and the last 10 SNMP hosts (never the community string). *Clear history* in the clock menu next to each input removes them.
   - alert thresholds, and whether alert notifications are on
   - the last 100 internet speed test results
-  - the last 100 iPerf3 results: server and port, direction, streams, test length, speed, retransmits, and your Mac's link speed. *Clear* under Recent LAN tests removes them.
+  - the last 100 iPerf3 results: server and port, direction, streams, test length, speed, retransmits, and your Mac's link speed. *Clear* under Recent LAN tests removes them, and the recent servers in the empty iPerf3 pane with them.
+  - iPerf3 servers you saved (name, address, and port; *Manage…* next to them, or right-clicking one, removes it), and the last server you tested, which is filled in when the iPerf3 pane opens
   - the SNMP hosts and ports whose community string you chose to remember (not the community strings themselves, which are in the Keychain)
   - the SNMP Watch tile's device: host, port, SNMP version, device name, and, for a port, its interface index, name, and speed. Unpinning removes it.
   - the last Network Map scan, described below
   - the UniFi controller URL, username, and *Remember* setting. These are saved after every successful connection, even with Remember off.
   - approved UniFi certificate fingerprints
-  - whether you've seen the Quick Tour
+  - whether you've seen the Quick Tour, and the last version whose *What's new* sheet you saw
+  - your automatic update check choice, whether SNAP has asked about it, the time of the last check, and a version you chose to skip
 
   The saved Network Map scan holds each device's IP, MAC, vendor, name, model, manufacturer, role, ping time, and last-seen time, plus your router's IP, your Mac's IP, and the scan time. Each new scan replaces it, and SNAP has no button to delete it. macOS may also keep the window's size and position, the menu bar item's position, and the last folder you used in a Save dialog in this file.
 - **Bandwidth history** (`~/Library/Application Support/SNAP/bandwidth.sqlite`, with `-wal` and `-shm` files next to it). While the Bandwidth monitor runs, SNAP adds one row per second with:
@@ -264,6 +272,7 @@ SNAP never asks for your admin password, and it installs no helpers, daemons, or
   - quality score
 
   Rows older than 30 days are deleted when the file is opened, and *Clear all history…* in the Bandwidth tab deletes them all. The folder and an empty file are created the first time you open the Bandwidth tab, even if you never press Start. Never packet contents.
+- **Network change log** (`~/Library/Application Support/SNAP/network-changes.json`): the newest 500 changes, each with its time and what changed: Wi-Fi network names, interface names, your Mac's local IPv4 addresses, router and DNS server addresses, and VPN tunnel names and addresses. It never holds your public IP. SNAP records from launch until you quit, whether or not a window is open. *Clear…* in the Network Change Log window deletes it.
 - **Keychain**: the UniFi password, only if you chose *Remember*, service `com.sevagbardakjian.snap.unifi` (shown as "SNAP UniFi controller"). There's one item for each controller URL and username. Unticking Remember or pressing Disconnect doesn't delete it.
 - **Keychain**: SNMP community strings, service `com.sevagbardakjian.snap.snmp.community` (shown as "SNAP SNMP community"). There's one item for each host and port you ticked *Remember* for, and one for the Status Board's SNMP Watch tile if you pinned a device. Unticking Remember deletes that host's item; unpinning deletes the tile's; *Forget All* in the SNMP tab's Options deletes them all.
 - **Web cache and cookies**, kept by macOS's networking framework for SNAP:
@@ -279,19 +288,20 @@ SNAP never asks for your admin password, and it installs no helpers, daemons, or
 
 To remove everything SNAP has stored:
 
-1. Quit SNAP (⌘Q). Closing the window leaves it running in the menu bar.
-2. Delete the app.
-3. Run `defaults delete com.sevagbardakjian.snap`.
-4. Delete these folders and files:
+1. If you turned on SNAP > Open at Login, turn it off.
+2. Quit SNAP (⌘Q). Closing the window leaves it running in the menu bar.
+3. Delete the app.
+4. Run `defaults delete com.sevagbardakjian.snap`.
+5. Delete these folders and files:
    - `~/Library/Application Support/SNAP`
    - `~/Library/Caches/com.sevagbardakjian.snap`
    - `~/Library/HTTPStorages/com.sevagbardakjian.snap`
    - `~/Library/HTTPStorages/com.sevagbardakjian.snap.binarycookies`
    - `~/Library/Saved Application State/com.sevagbardakjian.snap.savedState`, if present
-5. If you saved a UniFi password, remove every `com.sevagbardakjian.snap.unifi` item in Keychain Access. Or run `security delete-generic-password -s com.sevagbardakjian.snap.unifi` repeatedly until it reports that no item was found. Do the same for saved SNMP community strings, service `com.sevagbardakjian.snap.snmp.community` (or press *Forget All* in the SNMP tab's Options before you delete SNAP). Versions before 1.5.7 used `com.bardaklabs.snap.unifi` and `com.bardaklabs.snap.snmp.community`; SNAP moves an item to the new name the first time it reads it, so check for those too.
-6. If SNAP ever crashed, delete its crash reports (`SNAP-*.ips`) in `~/Library/Logs/DiagnosticReports`.
-7. Optionally, turn off SNAP's Location Services, Local Network, and Notifications permissions in System Settings.
-8. If you ever ran SNAP with `sudo`, repeat this for root's account.
+6. If you saved a UniFi password, remove every `com.sevagbardakjian.snap.unifi` item in Keychain Access. Or run `security delete-generic-password -s com.sevagbardakjian.snap.unifi` repeatedly until it reports that no item was found. Do the same for saved SNMP community strings, service `com.sevagbardakjian.snap.snmp.community` (or press *Forget All* in the SNMP tab's Options before you delete SNAP). Versions before 1.5.7 used `com.bardaklabs.snap.unifi` and `com.bardaklabs.snap.snmp.community`; SNAP moves an item to the new name the first time it reads it, so check for those too.
+7. If SNAP ever crashed, delete its crash reports (`SNAP-*.ips`) in `~/Library/Logs/DiagnosticReports`.
+8. Optionally, turn off SNAP's Location Services, Local Network, and Notifications permissions in System Settings.
+9. If you ever ran SNAP with `sudo`, repeat this for root's account.
 
 ### Security notes
 
@@ -334,11 +344,23 @@ To remove everything SNAP has stored:
 open SNAP.xcodeproj
 # ⌘⇧K: Clean Build Folder
 # ⌘R:  Build & Run
-# ⌘U:  Run tests (335 tests in SNAPTests)
+# ⌘U:  Run tests (364 tests in SNAPTests)
 ```
 
+`scripts/make_icon.swift` redraws the app icon at every size. `scripts/release.sh` builds, checks, signs, and publishes a release (maintainer only); each release zip has an Ed25519 signature (`.sig`) you can check against `scripts/release-signing-key.pub` with `swift scripts/sign-release.swift verify`.
+
 ## Version
-Current: **v1.5.7**. See [CHANGELOG.md](CHANGELOG.md).
+Current: **v1.5.8**. See [CHANGELOG.md](CHANGELOG.md).
+
+### What's new in v1.5.8: update checks, TCP ping, network change log, saved iPerf3 servers
+- **Update checks.** SNAP > Check for Updates… tells you when a new version is out, with its release notes. Daily automatic checks are optional (SNAP asks once), and SNAP never downloads or installs anything itself.
+- **What's new.** A short sheet lists what changed the first time a new version opens.
+- **TCP ping.** Ping can time a connection to a port instead of sending ICMP, for hosts and firewalls that block it.
+- **Network change log.** A timestamped list of when your network, Wi-Fi, IP address, router, DNS, or VPN changed: the latest three in the menu bar popover, the rest in Window > Network Change Log.
+- **Saved iPerf3 servers.** Save servers by name and pick them with one click; the last server you tested is filled in for you.
+- **Open at Login** in the SNAP menu.
+- **Report a Bug… and Suggest a Feature…** in the Help menu open a GitHub issue with your versions filled in.
+- **Signed releases.** Each zip comes with an Ed25519 signature you can check against the public key in this repository.
 
 ### What's new in v1.5.7: new icon, readable captions, privacy fixes
 - **New app icon.** A brushed-steel Ethernet port, smooth at every size, with a simpler version for the smallest sizes. The logo inside the app (sidebar, About window, menu bar popover, Quick Tour) matches it.
