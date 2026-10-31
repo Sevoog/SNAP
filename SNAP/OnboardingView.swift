@@ -30,6 +30,9 @@ final class OnboardingManager: ObservableObject {
 
     func show() { isPresented = true }
 
+    /// True once the Quick Tour has been seen (or skipped).
+    var hasOnboarded: Bool { UserDefaults.standard.bool(forKey: key) }
+
     func markSeen() {
         UserDefaults.standard.set(true, forKey: key)
         isPresented = false

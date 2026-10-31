@@ -15,11 +15,18 @@ import CoreLocation
 // once shipped a stale hardcoded "v1.2.4").
 enum AppInfo {
     static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+
+    /// True when SNAP is the host app for its unit tests. Launch prompts
+    /// (What's new, the update question) must not run then: they'd block the
+    /// test run and write to the real app's preferences.
+    static let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 }
 
 @main
 struct SNAPApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @ObservedObject private var updates = UpdateChecker.shared
+    @ObservedObject private var loginItem = LoginItem.shared
 
     var body: some Scene {
         WindowGroup {
@@ -33,12 +40,26 @@ struct SNAPApp: App {
                 Button("About SNAP") {
                     appDelegate.showAbout()
                 }
+                Button("Check for Updates…") {
+                    updates.checkNow()
+                }
+                .disabled(updates.isChecking)
+                Toggle("Check for Updates Automatically", isOn: $updates.autoCheck)
+                Divider()
+                Toggle("Open at Login", isOn: Binding(get: { loginItem.isEnabled },
+                                                      set: { loginItem.set($0) }))
             }
             CommandGroup(after: .newItem) {
                 Button("Save Session Report…") {
                     NotificationCenter.default.post(name: .exportSessionReport, object: nil)
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
+            }
+            CommandGroup(before: .windowList) {
+                Button("Network Change Log") {
+                    NetworkChangeLogWindow.shared.open()
+                }
+                Divider()
             }
             CommandGroup(replacing: .help) {
                 Button("SNAP Help") {
@@ -51,6 +72,13 @@ struct SNAPApp: App {
             CommandGroup(after: .help) {
                 Button("Quick Tour…") {
                     OnboardingManager.shared.show()
+                }
+                Divider()
+                Button("Report a Bug…") {
+                    if let url = IssueReport.url(template: "bug_report.yml") { NSWorkspace.shared.open(url) }
+                }
+                Button("Suggest a Feature…") {
+                    if let url = IssueReport.url(template: "feature_request.yml") { NSWorkspace.shared.open(url) }
                 }
             }
             CommandMenu("Appearance") {
@@ -89,6 +117,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, CLLocationManagerDelegate {
         requestLocationPermission()
         _ = MenuBarMonitor.shared  // start background bandwidth sampling immediately
         OUIDatabase.preload()      // warm the 39k-entry IEEE registry off-thread
+        if !AppInfo.isRunningTests { NetworkChangeLog.shared.start() }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

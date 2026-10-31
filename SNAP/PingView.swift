@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Charts
+import Darwin
 
 struct PingResult: Identifiable, Hashable {
     let id = UUID()
@@ -18,11 +19,21 @@ struct PingResult: Identifiable, Hashable {
     var timestamp: Date = Date()
 }
 
+/// ICMP echo (the system `ping`), or a timed TCP handshake for hosts and
+/// firewalls that drop ICMP.
+enum PingMode: String, CaseIterable, Identifiable {
+    case icmp = "ICMP", tcp = "TCP"
+    var id: String { rawValue }
+}
+
 struct PingView: View {
     @State private var host = ""
+    @State private var mode: PingMode = .icmp
     @State private var count = "10"
     @State private var interval = "1"
     @State private var packetSize = "56"
+    @State private var port = "443"
+    @State private var tcpTask: Task<Void, Never>?
     @State private var results: [PingResult] = []
     @State private var isRunning = false
     @State private var process: Process?
@@ -177,6 +188,15 @@ struct PingView: View {
 
     @ViewBuilder
     private var pingOptions: some View {
+        Picker("Mode", selection: $mode) {
+            ForEach(PingMode.allCases) { Text($0.rawValue).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: 100)
+        .disabled(isRunning)
+        .help("ICMP sends echo requests. TCP times a connection to a port, for hosts that block ICMP.")
+
         Label("Count:", systemImage: "number")
             .foregroundStyle(.secondary).font(.caption)
             .fixedSize()
@@ -191,12 +211,21 @@ struct PingView: View {
             .textFieldStyle(.roundedBorder)
             .frame(width: 50)
 
-        Label("Size:", systemImage: "doc")
-            .foregroundStyle(.secondary).font(.caption)
-            .fixedSize()
-        TextField("", text: $packetSize)
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 50)
+        if mode == .tcp {
+            Label("Port:", systemImage: "door.left.hand.open")
+                .foregroundStyle(.secondary).font(.caption)
+                .fixedSize()
+            TextField("", text: $port)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 60)
+        } else {
+            Label("Size:", systemImage: "doc")
+                .foregroundStyle(.secondary).font(.caption)
+                .fixedSize()
+            TextField("", text: $packetSize)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 50)
+        }
     }
 
     @ViewBuilder
@@ -214,7 +243,7 @@ struct PingView: View {
         } else {
             Button("Ping") { startPing() }
                 .buttonStyle(.borderedProminent)
-                .disabled(host.isEmpty)
+                .disabled(host.isEmpty || (mode == .tcp && TCPPing.port(port) == nil))
                 .keyboardShortcut(.return)
                 .fixedSize()
         }
@@ -232,6 +261,7 @@ struct PingView: View {
         var seq = 0
         let id = UUID()
         runID = id
+        if mode == .tcp { startTCPPing(id: id); return }
 
         process = Shell.stream("/sbin/ping", args: ["-c", "\(c)", "-i", i, "-s", s, host],
             onLine: { line in
@@ -263,14 +293,48 @@ struct PingView: View {
         )
     }
 
+    /// Count 0 or less runs until Stop. Each handshake gets 2 s; the next
+    /// starts one interval after the last one began.
+    private func startTCPPing(id: UUID) {
+        guard let p = TCPPing.port(port) else { isRunning = false; return }
+        let target = host.trimmingCharacters(in: .whitespaces)
+        let total = Int(count) ?? 10
+        let gap = max(0.2, Double(interval) ?? 1)
+        tcpTask = Task {
+            let resolved = await Task.detached { TCPPing.resolve(target, port: p) }.value
+            guard runID == id else { return }
+            guard let resolved else {
+                results.append(PingResult(seq: 1, ms: nil, status: "Couldn't resolve \(target)"))
+                isRunning = false
+                return
+            }
+            rawOutput = "TCP ping \(target) (\(resolved.display)) port \(p)\n"
+            var seq = 0
+            while !Task.isCancelled && runID == id && (total <= 0 || seq < total) {
+                let began = Date()
+                let outcome = await Task.detached { TCPPing.probe(resolved.address, timeout: 2) }.value
+                guard runID == id else { return }
+                seq += 1
+                results.append(PingResult(seq: seq, ms: outcome.ms,
+                                          status: seq == 1 ? "\(outcome.status) · \(resolved.display)" : outcome.status))
+                if total > 0 && seq >= total { break }
+                let wait = gap - Date().timeIntervalSince(began)
+                if wait > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000)) }
+            }
+            if runID == id { isRunning = false }
+        }
+    }
+
     private func stopPing() {
         runID = UUID()  // invalidate in-flight callbacks from this run
         if process?.isRunning == true { process?.terminate() }
+        tcpTask?.cancel()
+        tcpTask = nil
         isRunning = false
     }
 
     private func exportText() -> String {
-        var s = "Ping \(host)\n"
+        var s = mode == .tcp ? "TCP ping \(host) port \(port)\n" : "Ping \(host)\n"
         s += "sent \(results.count) · recv \(successResults.count) · loss \(String(format: "%.1f%%", lossPercent))\n"
         s += "min \(String(format: "%.2f", minMs)) / avg \(String(format: "%.2f", avgMs)) / max \(String(format: "%.2f", maxMs)) ms\n\n"
         s += "seq\ttime(ms)\tstatus\n"
@@ -303,5 +367,94 @@ struct PingView: View {
             Text(label).font(.caption2).foregroundStyle(.secondary)
         }
         .fixedSize()
+    }
+}
+
+// MARK: - TCP ping
+
+/// Times a TCP handshake to one port. The name is resolved once, before the
+/// first probe, so DNS time isn't counted. A reset (connection refused) still
+/// means the host answered, so it counts as a reply with the port closed.
+enum TCPPing {
+    enum Outcome: Equatable {
+        case open(ms: Double)
+        case refused(ms: Double)
+        case timeout
+        case failed(String)
+
+        var ms: Double? {
+            switch self {
+            case .open(let ms), .refused(let ms): return ms
+            case .timeout, .failed: return nil
+            }
+        }
+
+        var status: String {
+            switch self {
+            case .open:             return "Open"
+            case .refused:          return "Port closed (reset)"
+            case .timeout:          return "Timeout"
+            case .failed(let why):  return why
+            }
+        }
+    }
+
+    /// The port typed into the field, 1 to 65535.
+    static func port(_ text: String) -> UInt16? {
+        guard let n = Int(text.trimmingCharacters(in: .whitespaces)), (1...65535).contains(n) else { return nil }
+        return UInt16(n)
+    }
+
+    /// The first address the system resolver gives for `host` (IPv4 or IPv6),
+    /// as a sockaddr with `port` filled in, plus the address as text.
+    static func resolve(_ host: String, port: UInt16) -> (address: Data, display: String)? {
+        var hints = addrinfo()
+        hints.ai_family = AF_UNSPEC
+        hints.ai_socktype = SOCK_STREAM
+        var res: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(host, String(port), &hints, &res) == 0, let r = res, let sa = r.pointee.ai_addr else { return nil }
+        defer { freeaddrinfo(r) }
+        var name = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+        getnameinfo(sa, r.pointee.ai_addrlen, &name, socklen_t(name.count), nil, 0, NI_NUMERICHOST)
+        return (Data(bytes: sa, count: Int(r.pointee.ai_addrlen)), String(cString: name))
+    }
+
+    /// One handshake to an address from `resolve`. Blocks for up to
+    /// `timeout`, so run it off the main thread.
+    static func probe(_ address: Data, timeout: TimeInterval) -> Outcome {
+        address.withUnsafeBytes { raw -> Outcome in
+            guard let sa = raw.baseAddress?.assumingMemoryBound(to: sockaddr.self) else { return .failed("No address") }
+            let sock = Darwin.socket(Int32(sa.pointee.sa_family), SOCK_STREAM, IPPROTO_TCP)
+            guard sock >= 0 else { return .failed("Couldn't open a socket") }
+            defer { Darwin.close(sock) }
+            var on: Int32 = 1
+            setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+            _ = fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) | O_NONBLOCK)
+
+            let start = DispatchTime.now().uptimeNanoseconds
+            func elapsed() -> Double { Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000 }
+            if Darwin.connect(sock, sa, socklen_t(raw.count)) == 0 { return .open(ms: elapsed()) }
+            guard errno == EINPROGRESS else { return outcome(errno, ms: elapsed()) }
+
+            var pfd = pollfd(fd: sock, events: Int16(POLLOUT), revents: 0)
+            let ready = poll(&pfd, 1, Int32(timeout * 1000))
+            let ms = elapsed()
+            if ready == 0 { return .timeout }
+            if ready < 0 { return outcome(errno, ms: ms) }
+            var err: Int32 = 0
+            var len = socklen_t(MemoryLayout<Int32>.size)
+            getsockopt(sock, SOL_SOCKET, SO_ERROR, &err, &len)
+            return err == 0 ? .open(ms: ms) : outcome(err, ms: ms)
+        }
+    }
+
+    static func outcome(_ err: Int32, ms: Double) -> Outcome {
+        switch err {
+        case ECONNREFUSED:            return .refused(ms: ms)
+        case ETIMEDOUT:               return .timeout
+        case EHOSTUNREACH, EHOSTDOWN: return .failed("Host unreachable")
+        case ENETUNREACH, ENETDOWN:   return .failed("Network unreachable")
+        default:                      return .failed(String(cString: strerror(err)))
+        }
     }
 }

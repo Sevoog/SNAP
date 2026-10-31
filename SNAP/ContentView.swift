@@ -289,7 +289,10 @@ struct ContentView: View {
     @ObservedObject private var palette = CommandPaletteManager.shared
     @ObservedObject private var statusBoard = StatusBoardManager.shared
     @ObservedObject private var handoff = ToolHandoff.shared
+    @ObservedObject private var updates = UpdateChecker.shared
     @StateObject private var statusBoardBW = BandwidthDashMonitor()
+    @State private var showWhatsNew = false
+    @State private var ranLaunchPrompts = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -326,6 +329,22 @@ struct ContentView: View {
         .sheet(isPresented: $onboarding.isPresented) {
             OnboardingView()
         }
+        .sheet(isPresented: $showWhatsNew) {
+            WhatsNewSheet {
+                showWhatsNew = false
+                askAboutUpdatesSoon()
+            }
+        }
+        .sheet(item: $updates.available) { release in
+            UpdateAvailableSheet(release: release)
+        }
+        .onAppear {
+            // After the window is up, so prompts don't open over nothing.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { runLaunchPrompts() }
+        }
+        .onChange(of: onboarding.isPresented) { _, presented in
+            if !presented { runLaunchPrompts() }
+        }
         .overlay {
             // ⌘K command bar (#10) — modal overlay with blurred backdrop.
             if palette.isPresented {
@@ -361,6 +380,34 @@ struct ContentView: View {
             }
             .opacity(0)
         )
+    }
+
+    // MARK: Launch prompts
+
+    /// Once per launch, in order: the Quick Tour (first install only), the
+    /// "What's new" sheet (after an update), then the one-time question about
+    /// automatic update checks. Each waits for the one before it to close.
+    private func runLaunchPrompts() {
+        guard !AppInfo.isRunningTests, !ranLaunchPrompts, !onboarding.isPresented, onboarding.hasOnboarded else { return }
+        ranLaunchPrompts = true
+        let defaults = UserDefaults.standard
+        let lastSeen = defaults.string(forKey: WhatsNew.lastSeenKey)
+        defaults.set(AppInfo.version, forKey: WhatsNew.lastSeenKey)
+        if WhatsNew.shouldShow(lastSeen: lastSeen, hasOnboarded: true, current: AppInfo.version) {
+            showWhatsNew = true
+        } else {
+            askAboutUpdatesSoon()
+        }
+    }
+
+    private func askAboutUpdatesSoon() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            if updates.hasAskedAboutAutoCheck {
+                updates.startSchedule()
+            } else {
+                updates.askAboutAutoCheckIfNeeded()
+            }
+        }
     }
 
     /// Every tab opened this session stays mounted, hidden when it isn't

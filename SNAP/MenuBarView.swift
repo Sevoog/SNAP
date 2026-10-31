@@ -407,6 +407,8 @@ struct MenuBarView: View {
     @State private var wifiExpanded = true
     @State private var netExpanded = true
     @State private var vpnExpanded = true
+    @State private var changesExpanded = true
+    @ObservedObject private var changeLog = NetworkChangeLog.shared
     @State private var toolsExpanded = true
 
     // Computed so theme changes propagate (stored `let`s would freeze at init).
@@ -453,6 +455,7 @@ struct MenuBarView: View {
             if wifiInfo.ssid != "—" { wifiSection }
             networkSection
             if !netDetail.vpnInterfaces.isEmpty { vpnSection }
+            if !changeLog.entries.isEmpty { changesSection }
             quickToolsSection
             footer
         }
@@ -678,6 +681,60 @@ struct MenuBarView: View {
                     }
                 }
                 .padding(.horizontal, 13).padding(.vertical, 8)
+                .background(bg0)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(ink(0.06)).frame(height: 0.5)
+                }
+            }
+        }
+    }
+
+    // MARK: - Recent changes section
+
+    private static let changeTime: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+    private static let changeDay: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f
+    }()
+
+    private var changesSection: some View {
+        VStack(spacing: 0) {
+            sectionHeader(label: "Recent Changes", badge: nil, badgeColor: .clear,
+                          trailing: nil, expanded: $changesExpanded)
+            if changesExpanded {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(changeLog.entries.prefix(3)) { e in
+                        HStack(alignment: .firstTextBaseline, spacing: 7) {
+                            Image(systemName: e.kind.icon)
+                                .font(.system(size: 9))
+                                .foregroundStyle(glyph(e.kind.isWarning ? NS.amber : NS.blue, on: bg0))
+                                .frame(width: 12)
+                            Text(Calendar.current.isDateInToday(e.date)
+                                 ? Self.changeTime.string(from: e.date) : Self.changeDay.string(from: e.date))
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(secondary(on: bg0))
+                                .frame(width: 40, alignment: .leading)
+                            Text("\(e.kind.title): \(e.text)")
+                                .font(.system(size: 10))
+                                .foregroundStyle(NS.text1)
+                                .lineLimit(2)
+                                .help(e.text)
+                        }
+                    }
+                    Button { NetworkChangeLogWindow.shared.open() } label: {
+                        Text("Show all \(changeLog.entries.count)…")
+                            .font(.system(size: 10))
+                            .foregroundStyle(accent(NS.blue, on: bg0))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 13).padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(bg0)
                 .overlay(alignment: .bottom) {
                     Rectangle().fill(ink(0.06)).frame(height: 0.5)

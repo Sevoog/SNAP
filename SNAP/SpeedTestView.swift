@@ -130,6 +130,11 @@ struct SpeedTestView: View {
     @State private var iperfRunSeconds = 10
     @State private var iperfLink: IperfLink?
     @StateObject private var iperfHistory = IperfHistoryStore.shared
+    @ObservedObject private var iperfServers = IperfServerStore.shared
+    @State private var namingServer = false
+    @State private var renaming: IperfServer?    // nil: saving the server in the fields
+    @State private var serverName = ""
+    @State private var managingServers = false
 
     struct LivePoint: Identifiable {
         let id = UUID(); let index: Int; let mbps: Double
@@ -288,6 +293,16 @@ struct SpeedTestView: View {
 
             Divider()
 
+            IperfServerChips(store: iperfServers, current: (iperfHost, iperfPort), disabled: isRunning,
+                             onPick: useServer,
+                             onSave: { renaming = nil; serverName = ""; namingServer = true },
+                             onRename: { renaming = $0; serverName = $0.name; namingServer = true },
+                             onManage: { managingServers = true })
+                .padding(.horizontal, 16).padding(.vertical, 6)
+                .background(NS.bg0)
+
+            Divider()
+
             // Info banner
             HStack(spacing: 8) {
                 Image(systemName: "info.circle").foregroundStyle(.blue)
@@ -311,6 +326,8 @@ struct SpeedTestView: View {
                                 .font(.subheadline).foregroundStyle(.secondary)
                             Text("Tests local network speed between two machines on the same subnet")
                                 .font(.caption2).foregroundStyle(.tertiary)
+                            IperfServerCards(store: iperfServers, history: iperfHistory, onPick: useServer)
+                                .padding(.top, 12)
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, 40)
                     } else {
@@ -325,12 +342,31 @@ struct SpeedTestView: View {
                         IperfRawOutputSection(text: iperfAllOutput, showLegend: !iperfRuns.isEmpty)
                     }
                     if !iperfHistory.entries.isEmpty {
-                        IperfHistoryList(store: iperfHistory)
+                        IperfHistoryList(store: iperfHistory, onPick: isRunning ? nil : useServer)
                     }
                 }
                 .padding(16)
             }
         }
+        // The last server tested, so it doesn't need retyping.
+        .onAppear {
+            if iperfHost.isEmpty, let last = iperfServers.lastUsed { useServer(last.host, last.port) }
+        }
+        .alert(renaming == nil ? "Save Server" : "Rename Server", isPresented: $namingServer) {
+            TextField("Name", text: $serverName)
+            Button("Save") {
+                if let r = renaming {
+                    iperfServers.rename(r.id, to: serverName.trimmingCharacters(in: .whitespaces).isEmpty ? r.host : serverName)
+                } else {
+                    iperfServers.save(name: serverName, host: iperfHost, port: iperfPort)
+                }
+            }
+            .keyboardShortcut(.defaultAction)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("A name for \(renaming?.address ?? "\(iperfHost.trimmingCharacters(in: .whitespaces)):\(IperfServerStore.port(iperfPort))"), such as Office NAS. Leave it blank to use the address.")
+        }
+        .sheet(isPresented: $managingServers) { IperfServerManager(store: iperfServers) }
     }
 
     @ViewBuilder private var iperfServerFields: some View {
@@ -716,10 +752,16 @@ struct SpeedTestView: View {
 
     // MARK: - iPerf3 LAN Test
 
+    private func useServer(_ host: String, _ port: String) {
+        iperfHost = host
+        iperfPort = port
+    }
+
     private func runIperf() {
         let host = iperfHost.trimmingCharacters(in: .whitespaces)
         let port = iperfPort.trimmingCharacters(in: .whitespaces)
         guard !host.isEmpty else { return }
+        iperfServers.recordUse(host: host, port: port)
         let directions: [IperfDirection] = iperfDirection == .both ? [.upload, .download] : [iperfDirection]
         let streams = iperfStreams, seconds = iperfSeconds
         iperfRuns = []
@@ -1441,6 +1483,8 @@ private struct IperfLegend: View {
 /// Past LAN tests, newest first. Kept apart from internet tests.
 struct IperfHistoryList: View {
     @ObservedObject var store: IperfHistoryStore
+    /// Fills the server fields from a row; nil while a test runs.
+    var onPick: ((String, String) -> Void)? = nil
 
     var body: some View {
         GroupBox {
@@ -1469,6 +1513,9 @@ struct IperfHistoryList: View {
                             .font(.caption.bold().monospacedDigit()).foregroundStyle(NS.text1)
                     }
                     .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onPick?(e.server, e.port) }
+                    .help(onPick == nil ? "" : "Click to test \(e.server):\(e.port) again")
                     if e.id != store.entries.prefix(20).last?.id { Divider() }
                 }
             }
