@@ -28,7 +28,7 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 
 ## Install
 
-1. Download `SNAP-1.5.8.zip` from the [latest release](https://github.com/Sevoog/SNAP/releases/latest).
+1. Download `SNAP-1.5.9.zip` from the [latest release](https://github.com/Sevoog/SNAP/releases/latest).
 2. Unzip it and drag **SNAP** into your Applications folder. It runs natively on Apple silicon and Intel Macs with macOS 14 or later.
 3. Open SNAP. The first time, macOS blocks it, because SNAP isn't notarized by Apple yet. To open it anyway:
    - In the warning ("Apple could not verify…"), click **Done**.
@@ -38,7 +38,24 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
    After that, SNAP opens normally. If you'd rather use Terminal, `xattr -dr com.apple.quarantine /Applications/SNAP.app` does the same thing.
 4. On first launch, SNAP asks for **Location** (macOS only shows Wi-Fi network names to apps that have it) and **Local Network** access. See [Privacy & Security](#privacy--security) for what each is used for. A short Quick Tour opens the first time; reopen it anytime from **Help → Quick Tour…**.
 
-**Check the download (optional):** the release page lists the zip's SHA-256. Compare it with the output of `shasum -a 256 SNAP-1.5.8.zip`. From 1.5.8 on, each release also has a signature file (`SNAP-<version>.zip.sig`); in a clone of this repository, `swift scripts/sign-release.swift verify SNAP-1.5.8.zip SNAP-1.5.8.zip.sig scripts/release-signing-key.pub` confirms the zip came from SNAP's maintainer.
+**Check the download (optional):** the release page lists the zip's SHA-256. Compare it with the output of `shasum -a 256 SNAP-1.5.9.zip`. From 1.5.8 on, each release also has a signature file (`SNAP-<version>.zip.sig`); in a clone of this repository, `swift scripts/sign-release.swift verify SNAP-1.5.9.zip SNAP-1.5.9.zip.sig scripts/release-signing-key.pub` confirms the zip came from SNAP's maintainer.
+
+**Still seeing the old icon?** SNAP's icon changed in 1.5.7. If Launchpad or the Dock still shows the old magnifying glass after you update, macOS is showing a cached copy. Run these in Terminal, in order, and stop once the new icon appears:
+
+1. Look for leftover copies of SNAP:
+   ```bash
+   mdfind 'kMDItemCFBundleIdentifier == "com.sevagbardakjian.snap"'
+   ```
+   Delete every copy except `/Applications/SNAP.app` (they're often in Downloads, an unzipped folder, or the Trash), then empty the Trash.
+2. Have macOS reread SNAP, then restart the Dock, which also refreshes Launchpad:
+   ```bash
+   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f /Applications/SNAP.app
+   killall Dock
+   ```
+3. If the old icon is still there, clear the system's icon cache (asks for your password), then restart your Mac. macOS rebuilds the cache on its own.
+   ```bash
+   sudo rm -rf /Library/Caches/com.apple.iconservices.store
+   ```
 
 **Build it yourself:** see [Building](#building). There are no dependencies, and Xcode signs it to run on your Mac automatically.
 
@@ -113,12 +130,12 @@ If SNAP is useful to you, you can [buy me a coffee](https://buymeacoffee.com/sev
 - **Persistent Bandwidth History** — SQLite-backed, 30-day retention, time-range aggregation
 - **Connection Quality Score** — 0–100 rating (Excellent → Critical) derived from latency, loss, jitter, retransmits, and DNS responsiveness
 - **Sandboxless Networking** — Direct `getifaddrs` / `sysctl` / raw UDP syscalls — no `netstat` spawning for hot-path sampling
-- **Dark-Only UI** — Custom 3-column layout (icon rail + sidebar + main) with NS design tokens throughout
-- **XCTest target:** 364 unit tests across update checks and version comparison, bug-report links, Ping's TCP mode, the network change log, saved iPerf3 servers, SubnetCalculator, DNSWire, DNS Benchmark's resolver list, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip, sysObjectID, walks and fallbacks against a fake agent, Health, Inventory, Interfaces and Watch, Neighbors, Where Is It?, remembered communities, the Status Board watch), iPerf3 output parsing and verdicts, theme contrast, Dashboard GeoIP parsing, Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, WiFi band/channel helpers, connection-health scoring (incl. menu bar dot outage timelines), public-lookup caching, Status Board Wi-Fi readings, and scan-range parsing (CIDR, ranges, limits) (added in v1.2.3, expanded through v1.5.8)
+- **12 themes, dark and light**: Midnight, Daylight, two e-ink themes, and more, from the Appearance menu. Custom 3-column layout (icon rail, sidebar, main) built on shared design tokens.
+- **XCTest target:** 367 unit tests across moving preferences to new names, update checks and version comparison, bug-report links, Ping's TCP mode, the network change log, saved iPerf3 servers, SubnetCalculator, DNSWire, DNS Benchmark's resolver list, OUIDatabase, NetworkMapModel, SNMP (ASN.1 BER round-trip, sysObjectID, walks and fallbacks against a fake agent, Health, Inventory, Interfaces and Watch, Neighbors, Where Is It?, remembered communities, the Status Board watch), iPerf3 output parsing and verdicts, theme contrast, Dashboard GeoIP parsing, Syslog parser (RFC 3164 + 5424), enterprise OUI vendor-pattern inference, CIDR expansion, ARP-cache parsing, WiFi band/channel helpers, connection-health scoring (incl. menu bar dot outage timelines), public-lookup caching, Status Board Wi-Fi readings, and scan-range parsing (CIDR, ranges, limits) (added in v1.2.3, expanded through v1.5.8)
 
 ## Requirements
 - macOS 14.0 (Sonoma) or later
-- Xcode 15+
+- Xcode 27 or later, to build from source
 - Universal binary (Apple Silicon + Intel)
 
 ## Privacy & Security
@@ -344,13 +361,19 @@ To remove everything SNAP has stored:
 open SNAP.xcodeproj
 # ⌘⇧K: Clean Build Folder
 # ⌘R:  Build & Run
-# ⌘U:  Run tests (364 tests in SNAPTests)
+# ⌘U:  Run tests (367 tests in SNAPTests; needs Xcode 27)
 ```
 
 `scripts/make_icon.swift` redraws the app icon at every size. `scripts/release.sh` builds, checks, signs, and publishes a release (maintainer only); each release zip has an Ed25519 signature (`.sig`) you can check against `scripts/release-signing-key.pub` with `swift scripts/sign-release.swift verify`.
 
 ## Version
-Current: **v1.5.8**. See [CHANGELOG.md](CHANGELOG.md).
+Current: **v1.5.9**. See [CHANGELOG.md](CHANGELOG.md).
+
+### What's new in v1.5.9: housekeeping
+- **Preferences carry SNAP's own name.** Settings saved under the old `com.bardaklabs.snap` names move to `com.sevagbardakjian.snap` the first time 1.5.9 opens, with nothing lost. Going back to 1.5.8 or earlier afterward starts those settings fresh.
+- **No deprecation warnings.** 23 uses of deprecated APIs now use the current ones, with the same behavior.
+- **README fixes.** Themes and build requirements are current, and the Install section covers clearing a cached old icon.
+- **Dependabot** keeps the build check's GitHub Actions up to date.
 
 ### What's new in v1.5.8: update checks, TCP ping, network change log, saved iPerf3 servers
 - **Update checks.** SNAP > Check for Updates… tells you when a new version is out, with its release notes. Daily automatic checks are optional (SNAP asks once), and SNAP never downloads or installs anything itself.

@@ -3,6 +3,30 @@ All notable changes to SNAP — Sev's Network Analysis Platform
 
 ---
 
+## [1.5.9] - 2026-11-11
+
+### Changed: preferences carry SNAP's own name
+
+Preferences saved under `com.bardaklabs.snap...` names (theme, favorites, Dashboard and Status Board layouts, input history, the Quick Tour flag, and SNMP hosts) now use `com.sevagbardakjian.snap...`, like the Keychain items renamed in 1.5.7. They move over automatically the first time 1.5.9 opens, and nothing is lost. If you go back to 1.5.8 or earlier afterward, those settings start fresh there.
+
+### Fixed: build warnings
+
+The 22 places that used the older form of SwiftUI's `onChange` (deprecated in macOS 14) and one deprecated Wi-Fi call now use the current APIs. The build has no deprecation warnings.
+
+### Changed: no What's new sheet without news
+
+The *What's new* sheet appears only when a release has something visible to announce. This one doesn't, so it shows no sheet.
+
+### Fixed: outdated README lines
+
+The README listed a "Dark-Only UI" (SNAP has had light themes since 1.5.0) and said Xcode 15 builds it. Building now needs Xcode 27. The Install section also explains what to do if macOS keeps showing SNAP's old icon after an update.
+
+### Added: automatic updates for the build check's actions
+
+GitHub's Dependabot now opens a pull request when the actions used by the build check (`actions/checkout`, `actions/upload-artifact`) have updates, so their pinned versions don't go stale.
+
+---
+
 ## [1.5.8] - 2026-10-31
 
 ### Added: update checks
