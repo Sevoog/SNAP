@@ -141,8 +141,8 @@ enum SNMPCommunityStore {
         /// UserDefaults keys below keep their old prefix: nobody sees them,
         /// and renaming them would need its own migration.
         static let legacyKeychainService = "com.bardaklabs.snap.snmp.community"
-        static let rememberedHostsKey = "com.bardaklabs.snap.snmp.rememberedHosts.v1"
-        static let boardHostKey = "com.bardaklabs.snap.snmp.boardCommunityHost.v1"
+        static let rememberedHostsKey = "com.sevagbardakjian.snap.snmp.rememberedHosts.v1"
+        static let boardHostKey = "com.sevagbardakjian.snap.snmp.boardCommunityHost.v1"
 
         static var live: Backend {
             Backend(secrets: SNMPKeychainSecrets(service: keychainService,

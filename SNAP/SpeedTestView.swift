@@ -1068,7 +1068,7 @@ enum IperfLinkProbe {
         let route = await Shell.run("/sbin/route", args: ["-n", "get", host], timeout: 5)
         guard let iface = interface(fromRoute: route) else { return nil }
         if iface.hasPrefix("lo") { return IperfLink(interface: iface, kind: .loopback) }
-        if CWWiFiClient.interfaceNames()?.contains(iface) == true {
+        if CWWiFiClient.shared().interfaceNames()?.contains(iface) == true {
             let rate = CWWiFiClient.shared().interface(withName: iface)?.transmitRate() ?? 0
             return IperfLink(interface: iface, kind: .wifi, speedMbps: rate > 0 ? rate : nil)
         }

@@ -25,6 +25,7 @@
 		52621DCDF3AB8C2F0EA5DEDB /* MTRView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B51F176A0BA0DC66BA184A76 /* MTRView.swift */; };
 		53FAACE1E31265F56CC322C2 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEC7D2F0D88693F225FE974F /* EmptyStateView.swift */; };
 		7D010000000000000000007D /* Updates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D020000000000000000007D /* Updates.swift */; };
+		7D110000000000000000007D /* PreferenceMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D120000000000000000007D /* PreferenceMigration.swift */; };
 		7D0D0000000000000000007D /* IperfServers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D0E0000000000000000007D /* IperfServers.swift */; };
 		7D070000000000000000007D /* NetworkChangeLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D080000000000000000007D /* NetworkChangeLog.swift */; };
 		7D050000000000000000007D /* LoginItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D060000000000000000007D /* LoginItem.swift */; };
@@ -59,6 +60,7 @@
 		AA0B000000000000000000AA /* SNMPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0C000000000000000000AA /* SNMPTests.swift */; };
 		6C010000000000000000006C /* ThemeContrastTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C020000000000000000006C /* ThemeContrastTests.swift */; };
 		7D030000000000000000007D /* UpdatesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D040000000000000000007D /* UpdatesTests.swift */; };
+		7D130000000000000000007D /* PreferenceMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D140000000000000000007D /* PreferenceMigrationTests.swift */; };
 		7D0F0000000000000000007D /* IperfServersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D100000000000000000007D /* IperfServersTests.swift */; };
 		7D0B0000000000000000007D /* TCPPingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D0C0000000000000000007D /* TCPPingTests.swift */; };
 		7D090000000000000000007D /* NetworkChangeLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D0A0000000000000000007D /* NetworkChangeLogTests.swift */; };
@@ -168,6 +170,7 @@
 		AA0C000000000000000000AA /* SNMPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SNMPTests.swift; sourceTree = "<group>"; };
 		6C020000000000000000006C /* ThemeContrastTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeContrastTests.swift; sourceTree = "<group>"; };
 		7D040000000000000000007D /* UpdatesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatesTests.swift; sourceTree = "<group>"; };
+		7D140000000000000000007D /* PreferenceMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferenceMigrationTests.swift; sourceTree = "<group>"; };
 		7D100000000000000000007D /* IperfServersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IperfServersTests.swift; sourceTree = "<group>"; };
 		7D0C0000000000000000007D /* TCPPingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCPPingTests.swift; sourceTree = "<group>"; };
 		7D0A0000000000000000007D /* NetworkChangeLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkChangeLogTests.swift; sourceTree = "<group>"; };
@@ -209,6 +212,7 @@
 		BDE22D07174D012139567ECC /* PingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingView.swift; sourceTree = "<group>"; };
 		BEC7D2F0D88693F225FE974F /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		7D020000000000000000007D /* Updates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Updates.swift; sourceTree = "<group>"; };
+		7D120000000000000000007D /* PreferenceMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferenceMigration.swift; sourceTree = "<group>"; };
 		7D0E0000000000000000007D /* IperfServers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IperfServers.swift; sourceTree = "<group>"; };
 		7D080000000000000000007D /* NetworkChangeLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkChangeLog.swift; sourceTree = "<group>"; };
 		7D060000000000000000007D /* LoginItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItem.swift; sourceTree = "<group>"; };
@@ -265,6 +269,7 @@
 				AA0C000000000000000000AA /* SNMPTests.swift */,
 				6C020000000000000000006C /* ThemeContrastTests.swift */,
 				7D040000000000000000007D /* UpdatesTests.swift */,
+				7D140000000000000000007D /* PreferenceMigrationTests.swift */,
 				7D100000000000000000007D /* IperfServersTests.swift */,
 				7D0C0000000000000000007D /* TCPPingTests.swift */,
 				7D0A0000000000000000007D /* NetworkChangeLogTests.swift */,
@@ -312,6 +317,7 @@
 				F1E5A81F9DD795FEB54BDAEF /* ConnectionSummaryCard.swift */,
 				BEC7D2F0D88693F225FE974F /* EmptyStateView.swift */,
 				7D020000000000000000007D /* Updates.swift */,
+				7D120000000000000000007D /* PreferenceMigration.swift */,
 				7D0E0000000000000000007D /* IperfServers.swift */,
 				7D080000000000000000007D /* NetworkChangeLog.swift */,
 				7D060000000000000000007D /* LoginItem.swift */,
@@ -478,6 +484,7 @@
 				ECF0F2D5D16BB1BCAF46CBD5 /* NetworkUtilities.swift in Sources */,
 				53FAACE1E31265F56CC322C2 /* EmptyStateView.swift in Sources */,
 				7D010000000000000000007D /* Updates.swift in Sources */,
+				7D110000000000000000007D /* PreferenceMigration.swift in Sources */,
 				7D0D0000000000000000007D /* IperfServers.swift in Sources */,
 				7D070000000000000000007D /* NetworkChangeLog.swift in Sources */,
 				7D050000000000000000007D /* LoginItem.swift in Sources */,
@@ -558,6 +565,7 @@
 				AA0B000000000000000000AA /* SNMPTests.swift in Sources */,
 				6C010000000000000000006C /* ThemeContrastTests.swift in Sources */,
 				7D030000000000000000007D /* UpdatesTests.swift in Sources */,
+				7D130000000000000000007D /* PreferenceMigrationTests.swift in Sources */,
 				7D0F0000000000000000007D /* IperfServersTests.swift in Sources */,
 				7D0B0000000000000000007D /* TCPPingTests.swift in Sources */,
 				7D090000000000000000007D /* NetworkChangeLogTests.swift in Sources */,
@@ -691,7 +699,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10508;
+				CURRENT_PROJECT_VERSION = 10509;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -717,7 +725,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.5.8;
+				MARKETING_VERSION = 1.5.9;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sevagbardakjian.snap;
@@ -826,7 +834,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10508;
+				CURRENT_PROJECT_VERSION = 10509;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -846,7 +854,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.5.8;
+				MARKETING_VERSION = 1.5.9;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sevagbardakjian.snap;
 				PRODUCT_NAME = "$(TARGET_NAME)";

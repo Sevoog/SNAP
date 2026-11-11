@@ -361,7 +361,7 @@ private func hex(_ rgb: UInt32) -> Color {
 @Observable
 final class ThemeManager {
     static let shared = ThemeManager()
-    @ObservationIgnored private let key = "com.bardaklabs.snap.theme.v1"
+    @ObservationIgnored private let key = "com.sevagbardakjian.snap.theme.v1"
 
     var current: Theme
 

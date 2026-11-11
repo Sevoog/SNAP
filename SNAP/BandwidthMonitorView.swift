@@ -421,8 +421,8 @@ struct BandwidthMonitorView: View {
         .tabNavigationTitle(.bandwidth)
         .onAppear { historyRowCount = BandwidthHistoryStore.shared.rowCount() }
         .onDisappear { monitor.stop() }
-        .onChange(of: range) { _ in reloadHistory() }
-        .onChange(of: monitor.selectedInterface) { _ in if range != .live { reloadHistory() } }
+        .onChange(of: range) { reloadHistory() }
+        .onChange(of: monitor.selectedInterface) { if range != .live { reloadHistory() } }
     }
 
     @ViewBuilder

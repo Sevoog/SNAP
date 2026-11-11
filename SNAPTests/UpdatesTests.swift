@@ -113,16 +113,17 @@ final class UpdateCheckerTests: XCTestCase {
 final class WhatsNewTests: XCTestCase {
 
     func test_shouldShow_onceAfterEachUpdate() {
-        XCTAssertFalse(WhatsNew.shouldShow(lastSeen: nil, hasOnboarded: false, current: "1.5.8"), "first install gets the Quick Tour")
-        XCTAssertTrue(WhatsNew.shouldShow(lastSeen: nil, hasOnboarded: true, current: "1.5.8"), "updated from 1.5.7 or earlier")
-        XCTAssertTrue(WhatsNew.shouldShow(lastSeen: "1.5.8", hasOnboarded: true, current: "1.5.9"))
-        XCTAssertFalse(WhatsNew.shouldShow(lastSeen: "1.5.8", hasOnboarded: true, current: "1.5.8"))
-        XCTAssertFalse(WhatsNew.shouldShow(lastSeen: "1.5.9", hasOnboarded: true, current: "1.5.8"), "went back a version")
+        XCTAssertFalse(WhatsNew.shouldShow(lastSeen: nil, hasOnboarded: false, current: "1.5.8", hasItems: true), "first install gets the Quick Tour")
+        XCTAssertTrue(WhatsNew.shouldShow(lastSeen: nil, hasOnboarded: true, current: "1.5.8", hasItems: true), "updated from 1.5.7 or earlier")
+        XCTAssertTrue(WhatsNew.shouldShow(lastSeen: "1.5.8", hasOnboarded: true, current: "1.5.9", hasItems: true))
+        XCTAssertFalse(WhatsNew.shouldShow(lastSeen: "1.5.8", hasOnboarded: true, current: "1.5.8", hasItems: true))
+        XCTAssertFalse(WhatsNew.shouldShow(lastSeen: "1.5.9", hasOnboarded: true, current: "1.5.8", hasItems: true), "went back a version")
+        XCTAssertFalse(WhatsNew.shouldShow(lastSeen: "1.5.8", hasOnboarded: true, current: "1.5.9", hasItems: false),
+                       "a release with nothing to announce shows no sheet")
     }
 
     func test_itemsMatchTheAppVersion() {
-        XCTAssertEqual(WhatsNew.version, AppInfo.version, "update WhatsNew.items for this release")
-        XCTAssertFalse(WhatsNew.items.isEmpty)
+        XCTAssertEqual(WhatsNew.version, AppInfo.version, "update WhatsNew for this release (items may be empty)")
     }
 }
 

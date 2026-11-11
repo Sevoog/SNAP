@@ -73,7 +73,7 @@ enum StatusTileKind: String, CaseIterable, Identifiable, Codable {
 @MainActor
 final class StatusBoardLayout: ObservableObject {
     static let shared = StatusBoardLayout()
-    private let key = "com.bardaklabs.snap.statusboardLayout.v1"
+    private let key = "com.sevagbardakjian.snap.statusboardLayout.v1"
 
     @Published var tiles: [StatusTileKind] = []
 
@@ -429,7 +429,7 @@ private struct SBBandwidthTile: View {
             bwMonitor.start()
             sessionStart = Date()
         }
-        .onChange(of: bwMonitor.rxHistory) { _ in updatePeaksAndTotals() }
+        .onChange(of: bwMonitor.rxHistory) { updatePeaksAndTotals() }
     }
 
     private func cell(_ k: String, _ v: String, _ color: Color) -> some View {

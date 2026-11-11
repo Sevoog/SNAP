@@ -192,12 +192,12 @@ struct TraceMapView: View {
             }
         }
         .mapStyle(.standard)
-        .onChange(of: region.center.latitude, perform: { _ in
+        .onChange(of: region.center.latitude, { _, _ in
             withAnimation(.easeInOut(duration: 0.6)) {
                 position = .region(region)
             }
         })
-        .onChange(of: region.center.longitude, perform: { _ in
+        .onChange(of: region.center.longitude, { _, _ in
             withAnimation(.easeInOut(duration: 0.6)) {
                 position = .region(region)
             }

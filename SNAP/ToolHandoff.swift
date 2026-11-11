@@ -70,7 +70,7 @@ enum ToolHistoryKey: String, CaseIterable {
 final class ToolHistory {
     static let shared = ToolHistory()
     private let max = 10
-    private let prefix = "com.bardaklabs.snap.history.v1."
+    private let prefix = "com.sevagbardakjian.snap.history.v1."
 
     private init() {}
 
@@ -109,7 +109,7 @@ struct ConsumeHandoffModifier: ViewModifier {
             // tab, opening the Status Board over it, and hitting "Run Now".
             // `consume` nils `pending`, so a repeat send to the same tab still
             // registers as a change here.
-            .onChange(of: handoff.pending?.tab) { _ in tryConsume() }
+            .onChange(of: handoff.pending?.tab) { tryConsume() }
     }
 
     private func tryConsume() {

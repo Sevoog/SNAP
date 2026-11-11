@@ -62,7 +62,7 @@ struct InfoView: View {
             }
         }
         .tabNavigationTitle(.info)
-        .onChange(of: selectedName) { _ in
+        .onChange(of: selectedName) {
             loadDHCPForSelected()
         }
         .onAppear { loadDHCPForSelected() }
@@ -126,7 +126,7 @@ struct InfoView: View {
         // The tab stays alive in the background; reload on return, as
         // opening the tab always did.
         .onTabVisibilityChange(shown: { provider.refresh() })
-        .onChange(of: provider.interfaces.count, perform: { _ in
+        .onChange(of: provider.interfaces.count, { _, _ in
             if selectedName == nil {
                 selectedName = provider.activeRouteInterface ?? provider.interfaces.first?.name
             }

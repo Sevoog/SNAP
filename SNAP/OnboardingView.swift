@@ -17,7 +17,7 @@ import AppKit
 
 final class OnboardingManager: ObservableObject {
     static let shared = OnboardingManager()
-    private let key = "com.bardaklabs.snap.didOnboard.v1"
+    private let key = "com.sevagbardakjian.snap.didOnboard.v1"
 
     @Published var isPresented = false
 

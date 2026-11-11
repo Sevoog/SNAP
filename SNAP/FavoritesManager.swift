@@ -37,7 +37,7 @@ struct FavoriteStatus: Equatable {
 @MainActor
 final class FavoritesManager: ObservableObject {
     static let shared = FavoritesManager()
-    private let key = "com.bardaklabs.snap.favorites.v1"
+    private let key = "com.sevagbardakjian.snap.favorites.v1"
     static let maxFavorites = 10
     static let maxHistorySamples = 30
 

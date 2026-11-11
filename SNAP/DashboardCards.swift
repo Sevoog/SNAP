@@ -122,7 +122,7 @@ struct DashCardSpec: Identifiable, Hashable {
 @MainActor
 final class DashboardLayout: ObservableObject {
     static let shared = DashboardLayout()
-    private let key = "com.bardaklabs.snap.dashboardLayout.v1"
+    private let key = "com.sevagbardakjian.snap.dashboardLayout.v1"
 
     @Published var pinned: [SNAPTab] = []
 

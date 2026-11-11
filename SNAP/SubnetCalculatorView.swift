@@ -39,7 +39,7 @@ struct SubnetCalculatorView: View {
                             TextField("e.g. 192.168.1.0", text: $ipAddress)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 200)
-                                .onChange(of: ipAddress, perform: { _ in calculate() })
+                                .onChange(of: ipAddress, { _, _ in calculate() })
                         }
 
                         Picker("Input Mode", selection: $inputMode) {
@@ -56,7 +56,7 @@ struct SubnetCalculatorView: View {
                                 Text("CIDR Prefix:").frame(width: 130, alignment: .trailing).foregroundStyle(.secondary)
                                 Slider(value: $cidr, in: 0...32, step: 1)
                                     .frame(width: 200)
-                                    .onChange(of: cidr, perform: { _ in calculate() })
+                                    .onChange(of: cidr, { _, _ in calculate() })
                                 Text("/\(Int(cidr))")
                                     .font(.headline.monospaced())
                                     .frame(width: 40)
@@ -67,7 +67,7 @@ struct SubnetCalculatorView: View {
                                 TextField("e.g. 255.255.255.0", text: $subnetMaskInput)
                                     .textFieldStyle(.roundedBorder)
                                     .frame(width: 200)
-                                    .onChange(of: subnetMaskInput, perform: { _ in calculate() })
+                                    .onChange(of: subnetMaskInput, { _, _ in calculate() })
                             }
                         }
 

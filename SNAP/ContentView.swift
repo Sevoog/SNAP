@@ -270,7 +270,7 @@ private struct TabVisibilityModifier: ViewModifier {
     let hidden: () -> Void
 
     func body(content: Content) -> some View {
-        content.onChange(of: isActive) { active in
+        content.onChange(of: isActive) { _, active in
             if active { shown() } else { hidden() }
         }
     }
@@ -320,7 +320,7 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .exportSessionReport)) { _ in
             SessionReporter.writeReport()
         }
-        .onChange(of: handoff.requestedTab) { newTab in
+        .onChange(of: handoff.requestedTab) { _, newTab in
             if let newTab {
                 selectedTab = newTab
                 handoff.clearRequestedTab()
@@ -433,7 +433,7 @@ struct ContentView: View {
         }
         .environment(\.activeTabTitle, selectedTab.windowTitle)
         .onAppear { openedTabs.insert(selectedTab) }
-        .onChange(of: selectedTab) { openedTabs.insert($0) }
+        .onChange(of: selectedTab) { _, tab in openedTabs.insert(tab) }
     }
 
     @ViewBuilder

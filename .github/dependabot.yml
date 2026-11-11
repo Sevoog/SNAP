@@ -1,0 +1,11 @@
+# Opens a pull request when the GitHub Actions used by the build check have
+# updates. The workflow pins each action to a commit; Dependabot updates the
+# pin and its version comment together.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: CI

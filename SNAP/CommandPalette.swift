@@ -185,7 +185,7 @@ struct CommandPaletteView: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 15))
                     .focused($inputFocused)
-                    .onChange(of: query) { _ in selectedIndex = 0 }
+                    .onChange(of: query) { selectedIndex = 0 }
                     .onSubmit { execute() }
                 Text(verbatim: "Esc")
                     .font(.system(size: 9, design: .monospaced))
@@ -228,7 +228,7 @@ struct CommandPaletteView: View {
                     }
                 }
                 .frame(maxHeight: 380)
-                .onChange(of: selectedIndex) { idx in
+                .onChange(of: selectedIndex) { _, idx in
                     if idx < filtered.count {
                         withAnimation(.easeOut(duration: 0.1)) {
                             proxy.scrollTo(filtered[idx].id, anchor: .center)

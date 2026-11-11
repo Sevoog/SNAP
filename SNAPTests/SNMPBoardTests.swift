@@ -74,7 +74,7 @@ private final class BoardHarness {
 }
 
 final class SNMPBoardTests: XCTestCase {
-    private let suiteName = "com.bardaklabs.snap.tests.SNMPBoardTests"
+    private let suiteName = "com.sevagbardakjian.snap.tests.SNMPBoardTests"
     private let indexKey = "test.snmp.rememberedHosts"
     private var defaults: UserDefaults!
     private var secrets: MemorySecrets!
@@ -239,13 +239,13 @@ final class SNMPBoardTests: XCTestCase {
         XCTAssertEqual(SNMPCommunityStore.Backend.legacyKeychainService, "com.bardaklabs.snap.snmp.community")
         XCTAssertEqual((SNMPCommunityStore.Backend.live.secrets as? SNMPKeychainSecrets)?.legacyService,
                        SNMPCommunityStore.Backend.legacyKeychainService)
-        XCTAssertEqual(SNMPCommunityStore.Backend.rememberedHostsKey, "com.bardaklabs.snap.snmp.rememberedHosts.v1")
-        XCTAssertEqual(SNMPCommunityStore.Backend.boardHostKey, "com.bardaklabs.snap.snmp.boardCommunityHost.v1")
+        XCTAssertEqual(SNMPCommunityStore.Backend.rememberedHostsKey, "com.sevagbardakjian.snap.snmp.rememberedHosts.v1")
+        XCTAssertEqual(SNMPCommunityStore.Backend.boardHostKey, "com.sevagbardakjian.snap.snmp.boardCommunityHost.v1")
         XCTAssertEqual(SNMPCommunityStore.Backend.live.boardKey, SNMPCommunityStore.Backend.boardHostKey)
         XCTAssertEqual(SNMPCommunityStore.boardAccount, "status-board")
         // A remembered "host:port" can't collide with it.
         XCTAssertNotEqual(SNMPCommunityStore.account(host: "status-board", port: 161), SNMPCommunityStore.boardAccount)
-        XCTAssertEqual(SNMPBoardWatchEnvironment.targetKey, "com.bardaklabs.snap.snmpWatch.v1")
+        XCTAssertEqual(SNMPBoardWatchEnvironment.targetKey, "com.sevagbardakjian.snap.snmpWatch.v1")
     }
 
     // MARK: - The Status Board's own copy

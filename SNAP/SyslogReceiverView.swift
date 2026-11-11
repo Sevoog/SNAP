@@ -478,7 +478,7 @@ struct SyslogReceiverView: View {
                             }
                         }
                     }
-                    .onChange(of: model.filtered.count) { _ in
+                    .onChange(of: model.filtered.count) {
                         guard model.autoScroll, let last = model.filtered.last else { return }
                         withAnimation(.linear(duration: 0.05)) {
                             proxy.scrollTo(last.id, anchor: .bottom)

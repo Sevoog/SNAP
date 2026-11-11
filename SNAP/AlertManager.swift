@@ -211,7 +211,7 @@ struct AlertSettingsPanel: View {
                     .labelsHidden()
                     .scaleEffect(0.75)
                     .frame(width: 36)
-                    .onChange(of: manager.notificationsEnabled) { _ in manager.save() }
+                    .onChange(of: manager.notificationsEnabled) { manager.save() }
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             .contentShape(Rectangle())
@@ -228,7 +228,7 @@ struct AlertSettingsPanel: View {
                     Toggle("", isOn: $t.enabled)
                         .labelsHidden()
                         .toggleStyle(.checkbox)
-                        .onChange(of: t.enabled) { _ in manager.save() }
+                        .onChange(of: t.enabled) { manager.save() }
                     Text(t.metric.label)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(NS.text2)
@@ -243,7 +243,7 @@ struct AlertSettingsPanel: View {
                         .font(.system(size: 11)).foregroundStyle(NS.text3)
                     Stepper("\(t.consecutiveSamples)", value: $t.consecutiveSamples, in: 1...10)
                         .frame(width: 100)
-                        .onChange(of: t.consecutiveSamples) { _ in manager.save() }
+                        .onChange(of: t.consecutiveSamples) { manager.save() }
                     Text("samples").font(.system(size: 11)).foregroundStyle(NS.text3)
                     Spacer()
                 }

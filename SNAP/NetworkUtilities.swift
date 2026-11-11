@@ -130,7 +130,7 @@ enum Shell {
 enum RouteInfo {
     /// (gateway IP, primary interface name) for the default IPv4 route.
     static func defaultIPv4() -> (gateway: String?, interface: String?) {
-        guard let store = SCDynamicStoreCreate(nil, "com.bardaklabs.snap.route" as CFString, nil, nil),
+        guard let store = SCDynamicStoreCreate(nil, "com.sevagbardakjian.snap.route" as CFString, nil, nil),
               let global = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [String: Any]
         else { return (nil, nil) }
         return (global["Router"] as? String, global["PrimaryInterface"] as? String)
@@ -148,7 +148,7 @@ enum RouteInfo {
 /// effective global resolver list — the same set scutil reports.
 enum DNSInfo {
     static func systemResolvers() -> [String] {
-        guard let store = SCDynamicStoreCreate(nil, "com.bardaklabs.snap.dns" as CFString, nil, nil),
+        guard let store = SCDynamicStoreCreate(nil, "com.sevagbardakjian.snap.dns" as CFString, nil, nil),
               let dns = SCDynamicStoreCopyValue(store, "State:/Network/Global/DNS" as CFString) as? [String: Any],
               let servers = dns["ServerAddresses"] as? [String]
         else { return [] }

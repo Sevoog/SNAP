@@ -345,7 +345,7 @@ struct SNMPBoardWatchEnvironment {
     var makeClient: (SNMPBoardTarget, String) -> SNMPClient
     var interval: TimeInterval = 10
 
-    static let targetKey = "com.bardaklabs.snap.snmpWatch.v1"
+    static let targetKey = "com.sevagbardakjian.snap.snmpWatch.v1"
 
     @MainActor static var live: SNMPBoardWatchEnvironment {
         let board = StatusBoardManager.shared

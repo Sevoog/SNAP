@@ -108,10 +108,10 @@ struct PortScanView: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             .background(NS.bg0)
-            .onChange(of: preset) { newPreset in
+            .onChange(of: preset) { _, newPreset in
                 if newPreset != .custom { portRange = newPreset.ports }
             }
-            .onChange(of: portRange) { _ in preset = .custom }
+            .onChange(of: portRange) { preset = .custom }
 
             Divider()
 

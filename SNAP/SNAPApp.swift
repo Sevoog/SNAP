@@ -28,6 +28,12 @@ struct SNAPApp: App {
     @ObservedObject private var updates = UpdateChecker.shared
     @ObservedObject private var loginItem = LoginItem.shared
 
+    init() {
+        // Before anything reads a preference. The test host leaves the real
+        // preferences alone; PreferenceMigrationTests use their own suite.
+        if !AppInfo.isRunningTests { PreferenceMigration.run() }
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

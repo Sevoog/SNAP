@@ -316,30 +316,21 @@ struct UpdateAvailableSheet: View {
 // MARK: - What's new
 
 /// What changed in this version, shown once after updating. Built into the
-/// app, so it needs no network. Update `items` with each release.
+/// app, so it needs no network. Update `version` and `items` with each
+/// release; a release with nothing visible to announce leaves `items` empty
+/// and shows no sheet.
 enum WhatsNew {
-    static let version = "1.5.8"
-    static let items: [(symbol: String, title: String, detail: String)] = [
-        ("arrow.triangle.2.circlepath", "Update checks",
-         "Check for Updates… in the SNAP menu tells you when a new version is out. Daily automatic checks are optional."),
-        ("door.left.hand.open", "TCP ping",
-         "Ping can time a connection to a port instead, for hosts and firewalls that block ICMP."),
-        ("clock.arrow.circlepath", "Network change log",
-         "See when your network, IP address, router, DNS, or VPN changed: Recent Changes in the menu bar, or Window → Network Change Log."),
-        ("star", "Saved iPerf3 servers",
-         "Save iPerf3 servers by name, then pick one with a click from the row under the toolbar."),
-        ("power", "Open at login",
-         "SNAP → Open at Login starts SNAP when you log in."),
-        ("ladybug", "Report a bug",
-         "Help → Report a Bug… opens a GitHub issue with your SNAP and macOS versions filled in. Nothing is sent until you submit it."),
-    ]
+    static let version = "1.5.9"
+    static let items: [(symbol: String, title: String, detail: String)] = []
 
     static let lastSeenKey = "com.sevagbardakjian.snap.whatsNew.lastSeenVersion"
 
     /// Show the sheet after an update: not on a first install (the Quick Tour
-    /// covers that), and only once per version.
-    static func shouldShow(lastSeen: String?, hasOnboarded: Bool, current: String) -> Bool {
-        guard hasOnboarded else { return false }
+    /// covers that), only once per version, and only when there's something
+    /// to list.
+    static func shouldShow(lastSeen: String?, hasOnboarded: Bool, current: String,
+                           hasItems: Bool = !items.isEmpty) -> Bool {
+        guard hasOnboarded, hasItems else { return false }
         guard let lastSeen else { return true }      // updated from 1.5.7 or earlier
         return AppVersion.isNewer(current, than: lastSeen)
     }
