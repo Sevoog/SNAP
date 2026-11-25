@@ -13,6 +13,10 @@ struct WhoisView: View {
     @State private var isRunning = false
     @State private var parsed: [(String, String)] = []
 
+    /// The query without surrounding spaces or line breaks (a pasted
+    /// "example.com " used to reach whois with the space).
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -20,17 +24,18 @@ struct WhoisView: View {
                 TextField("Domain, IP, or ASN", text: $query)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 280)
+                    .onSubmit { if !trimmedQuery.isEmpty && !isRunning { startWhois() } }
                 HistoryMenuButton(key: .whois) { query = $0 }
                 Spacer()
                 if !result.isEmpty {
-                    ToolActionBar("Whois", text: { "Whois \(query)\n\n" + result })
+                    ToolActionBar("Whois", text: { "Whois \(trimmedQuery)\n\n" + result })
                 }
                 if isRunning {
                     ProgressView().controlSize(.small)
                 } else {
                     Button("Lookup") { startWhois() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(query.isEmpty)
+                        .disabled(trimmedQuery.isEmpty)
                         .keyboardShortcut(.return)
                 }
             }
@@ -83,14 +88,15 @@ struct WhoisView: View {
     }
 
     private func startWhois() {
-        let v = query.trimmingCharacters(in: .whitespaces)
-        if !v.isEmpty { ToolHistory.shared.add(.whois, v) }
+        let v = trimmedQuery
+        guard !v.isEmpty else { return }
+        ToolHistory.shared.add(.whois, v)
         result = ""
         parsed = []
         isRunning = true
 
         Task {
-            let output = await Shell.run("/usr/bin/whois", args: [query])
+            let output = await Shell.run("/usr/bin/whois", args: [v])
             await MainActor.run {
                 result = output
                 parsed = parseWhois(output)

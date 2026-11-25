@@ -22,43 +22,74 @@ enum Shell {
     ///     first (which only completes once the child closes it), then wait.
     ///   • **Runaway children** — a `timeout` watchdog terminates a process
     ///     that overruns, so a wedged tool can't hang the app indefinitely.
-    static func run(_ command: String, args: [String] = [], timeout: TimeInterval = 60) async -> String {
-        await withCheckedContinuation { (cont: CheckedContinuation<String, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let task = Process()
-                task.executableURL = URL(fileURLWithPath: command)
-                task.arguments = args
-                let pipe = Pipe()
-                task.standardOutput = pipe
-                task.standardError  = pipe
+    ///
+    /// With `stopsOnCancel`, cancelling the calling task terminates the
+    /// process and returns what it printed so far (used by Stop buttons).
+    /// Off by default, so callers that never expected a cut-short result
+    /// keep getting the whole output.
+    static func run(_ command: String, args: [String] = [], timeout: TimeInterval = 60,
+                    stopsOnCancel: Bool = false) async -> String {
+        // Shared by the worker below and the cancellation handler
+        final class Running: @unchecked Sendable {
+            let lock = NSLock()
+            let task = Process()
+            var cancelled = false
+        }
+        let running = Running()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (cont: CheckedContinuation<String, Never>) in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let task = running.task
+                    task.executableURL = URL(fileURLWithPath: command)
+                    task.arguments = args
+                    let pipe = Pipe()
+                    task.standardOutput = pipe
+                    task.standardError  = pipe
 
-                let lock = NSLock()
-                var finished = false
-                func finish(_ s: String) {
-                    lock.lock(); let already = finished; finished = true; lock.unlock()
-                    if !already { cont.resume(returning: s) }
+                    let lock = NSLock()
+                    var finished = false
+                    func finish(_ s: String) {
+                        lock.lock(); let already = finished; finished = true; lock.unlock()
+                        if !already { cont.resume(returning: s) }
+                    }
+
+                    // Holding the lock across run() means a cancel either lands
+                    // before it (and nothing starts) or after (and terminates it)
+                    running.lock.lock()
+                    if stopsOnCancel && running.cancelled {
+                        running.lock.unlock()
+                        finish("")
+                        return
+                    }
+                    do {
+                        try task.run()
+                    } catch {
+                        running.lock.unlock()
+                        finish("Error: \(error.localizedDescription)")
+                        return
+                    }
+                    running.lock.unlock()
+
+                    // Watchdog: terminate a process that overruns the timeout.
+                    // Terminating closes the pipe, which unblocks the read below.
+                    DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                        if task.isRunning { task.terminate() }
+                    }
+
+                    // Drain to EOF *before* waiting — prevents the >64 KB
+                    // pipe-buffer deadlock. Runs on this background thread, so the
+                    // async caller is never blocked.
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    task.waitUntilExit()
+                    finish(String(data: data, encoding: .utf8) ?? "")
                 }
-
-                do {
-                    try task.run()
-                } catch {
-                    finish("Error: \(error.localizedDescription)")
-                    return
-                }
-
-                // Watchdog: terminate a process that overruns the timeout.
-                // Terminating closes the pipe, which unblocks the read below.
-                DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                    if task.isRunning { task.terminate() }
-                }
-
-                // Drain to EOF *before* waiting — prevents the >64 KB
-                // pipe-buffer deadlock. Runs on this background thread, so the
-                // async caller is never blocked.
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                task.waitUntilExit()
-                finish(String(data: data, encoding: .utf8) ?? "")
             }
+        } onCancel: {
+            guard stopsOnCancel else { return }
+            running.lock.lock()
+            running.cancelled = true
+            if running.task.isRunning { running.task.terminate() }
+            running.lock.unlock()
         }
     }
 
@@ -737,16 +768,92 @@ struct SubnetInfo {
     var usableHosts: Int = 0
     var ipClass: String = ""
     var isPrivate: Bool = false
+    var addressType: String = ""
     var binaryMask: String = ""
 }
 
+/// Why the Subnet Calculator can't show results for what was typed.
+enum SubnetInputError: Error, Equatable {
+    case invalidAddress
+    case invalidMask
+
+    var message: String {
+        switch self {
+        case .invalidAddress:
+            return "Enter an IPv4 address such as 192.168.1.10. Each of the four numbers must be 0 to 255."
+        case .invalidMask:
+            return "That isn't a valid subnet mask. Masks are a run of 255s followed by lower numbers, like 255.255.255.0."
+        }
+    }
+}
+
 class SubnetCalculator {
+    /// Strict dotted-quad parse: exactly four decimal numbers, each 0 to 255.
+    /// (A plain split + compactMap let "1.2.x.3.4" and "1..2.3.4" through.)
+    static func parseIPv4(_ text: String) -> UInt32? {
+        let parts = text.trimmingCharacters(in: .whitespaces)
+            .split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return nil }
+        var value: UInt32 = 0
+        for part in parts {
+            guard (1...3).contains(part.count),
+                  part.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  let octet = UInt32(part), octet <= 255 else { return nil }
+            value = (value << 8) | octet
+        }
+        return value
+    }
+
+    /// Prefix length for a dotted mask, or nil when it isn't a valid mask
+    /// (octets over 255, or bits that aren't contiguous like 255.0.255.0).
+    static func prefixLength(fromMask text: String) -> Int? {
+        guard let mask = parseIPv4(text) else { return nil }
+        // A contiguous mask inverted is 0...01...1, so adding 1 clears every set bit
+        let inverted = ~mask
+        guard inverted & (inverted &+ 1) == 0 else { return nil }
+        return mask.nonzeroBitCount
+    }
+
+    /// Validate what was typed, then calculate. `mask` is the Subnet Mask
+    /// field in mask mode, or nil in CIDR mode (then `cidr` is used).
+    static func evaluate(ip: String, mask: String?, cidr: Int) -> Result<SubnetInfo, SubnetInputError> {
+        guard parseIPv4(ip) != nil else { return .failure(.invalidAddress) }
+        var prefix = cidr
+        if let mask {
+            guard let p = prefixLength(fromMask: mask) else { return .failure(.invalidMask) }
+            prefix = p
+        }
+        guard let info = calculate(ip: ip, cidr: prefix) else { return .failure(.invalidAddress) }
+        return .success(info)
+    }
+
+    /// Plain-English label for the special-purpose ranges (RFC 6890);
+    /// anything not listed is "Public".
+    static func addressType(_ ip: UInt32) -> String {
+        func inRange(_ base: UInt32, _ prefix: Int) -> Bool {
+            let mask: UInt32 = prefix == 0 ? 0 : (0xFFFFFFFF << (32 - prefix))
+            return ip & mask == base
+        }
+        if ip == 0xFFFFFFFF                            { return "Broadcast" }
+        if inRange(0x0A000000, 8) || inRange(0xAC100000, 12) ||
+           inRange(0xC0A80000, 16)                     { return "Private (RFC 1918)" }
+        if inRange(0x64400000, 10)                     { return "Carrier-grade NAT (RFC 6598)" }
+        if inRange(0x7F000000, 8)                      { return "Loopback" }
+        if inRange(0xA9FE0000, 16)                     { return "Link-local" }
+        if inRange(0xE0000000, 4)                      { return "Multicast" }
+        if inRange(0x00000000, 8)                      { return "Reserved (this network)" }
+        if inRange(0xC0000200, 24) || inRange(0xC6336400, 24) ||
+           inRange(0xCB007100, 24)                     { return "Documentation (RFC 5737)" }
+        if inRange(0xC6120000, 15)                     { return "Benchmarking (RFC 2544)" }
+        if inRange(0xC0000000, 24)                     { return "Reserved (IETF protocol assignments)" }
+        if inRange(0xF0000000, 4)                      { return "Reserved" }
+        return "Public"
+    }
+
     static func calculate(ip: String, cidr: Int) -> SubnetInfo? {
         guard cidr >= 0 && cidr <= 32 else { return nil }
-        let parts = ip.split(separator: ".").compactMap { UInt32($0) }
-        guard parts.count == 4, parts.allSatisfy({ $0 <= 255 }) else { return nil }
+        guard let ipInt = parseIPv4(ip) else { return nil }
 
-        let ipInt = (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]
         let maskInt: UInt32 = cidr == 0 ? 0 : (0xFFFFFFFF << (32 - cidr))
         let netInt  = ipInt & maskInt
         let bcastInt = netInt | (~maskInt)
@@ -767,9 +874,10 @@ class SubnetCalculator {
         }
         let binaryGroups = stride(from: 0, to: 32, by: 8).map { String(binary[$0..<($0+8)]) }.joined(separator: ".")
 
-        let isPrivate = (netInt >= 0x0A000000 && netInt <= 0x0AFFFFFF) ||
-                        (netInt >= 0xAC100000 && netInt <= 0xAC1FFFFF) ||
-                        (netInt >= 0xC0A80000 && netInt <= 0xC0A8FFFF)
+        // Classified by the address typed, not the network: a short prefix
+        // like 10.1.2.3/4 has network 0.0.0.0, which isn't what was asked about
+        let typeLabel = Self.addressType(ipInt)
+        let isPrivate = typeLabel == "Private (RFC 1918)"
 
         let ipClass: String
         switch (ipInt >> 24) & 0xFF {
@@ -781,7 +889,7 @@ class SubnetCalculator {
         }
 
         return SubnetInfo(
-            address: ip,
+            address: toIP(ipInt),
             cidr: cidr,
             networkAddress: toIP(netInt),
             broadcastAddress: toIP(bcastInt),
@@ -795,6 +903,7 @@ class SubnetCalculator {
             usableHosts: usable,
             ipClass: ipClass,
             isPrivate: isPrivate,
+            addressType: typeLabel,
             binaryMask: binaryGroups
         )
     }
@@ -802,24 +911,68 @@ class SubnetCalculator {
 
 // MARK: - Wake-on-LAN
 class WakeOnLANSender {
-    static func send(mac: String, broadcastIP: String = "255.255.255.255", port: UInt16 = 9) -> Bool {
-        let cleanMAC = mac.replacingOccurrences(of: ":", with: "")
-                          .replacingOccurrences(of: "-", with: "")
-        guard cleanMAC.count == 12 else { return false }
+    enum SendResult: Equatable {
+        case sent
+        case invalidMAC
+        case invalidAddress
+        case sendFailed
+    }
 
-        var macBytes = [UInt8]()
-        for i in stride(from: 0, to: 12, by: 2) {
-            let s = String(cleanMAC[cleanMAC.index(cleanMAC.startIndex, offsetBy: i)..<cleanMAC.index(cleanMAC.startIndex, offsetBy: i+2)])
-            guard let byte = UInt8(s, radix: 16) else { return false }
-            macBytes.append(byte)
+    /// The six bytes of a MAC written as aa:bb:cc:dd:ee:ff, aa-bb-cc-dd-ee-ff,
+    /// aabb.ccdd.eeff or aabbccddeeff (any case), or nil if it isn't one.
+    static func macBytes(_ mac: String) -> [UInt8]? {
+        let trimmed = mac.trimmingCharacters(in: .whitespaces)
+        let separators: Set<Character> = [":", "-", "."]
+        let used = Set(trimmed.filter { separators.contains($0) })
+        guard used.count <= 1 else { return nil }   // no mixing separators
+        let hex = trimmed.filter { !separators.contains($0) }
+        guard hex.count == 12, hex.allSatisfy({ $0.isASCII && $0.isHexDigit }) else { return nil }
+        if let sep = used.first {
+            // Separators must split the digits evenly: pairs for : and -, groups of four for .
+            let size = sep == "." ? 4 : 2
+            let groups = trimmed.split(separator: sep, omittingEmptySubsequences: false)
+            guard groups.count == 12 / size, groups.allSatisfy({ $0.count == size }) else { return nil }
         }
+        var bytes = [UInt8]()
+        var idx = hex.startIndex
+        for _ in 0..<6 {
+            let next = hex.index(idx, offsetBy: 2)
+            guard let byte = UInt8(hex[idx..<next], radix: 16) else { return nil }
+            bytes.append(byte)
+            idx = next
+        }
+        return bytes
+    }
+
+    /// Canonical lowercase colon form (aa:bb:cc:dd:ee:ff), or nil if invalid.
+    static func normalizedMAC(_ mac: String) -> String? {
+        macBytes(mac)?.map { String(format: "%02x", $0) }.joined(separator: ":")
+    }
+
+    /// UDP port 1 to 65535, or nil.
+    static func parsePort(_ text: String) -> UInt16? {
+        guard let p = UInt16(text.trimmingCharacters(in: .whitespaces)), p > 0 else { return nil }
+        return p
+    }
+
+    /// Strict IPv4 parse. inet_addr turned anything unparseable into
+    /// INADDR_NONE, which is 255.255.255.255, so typos silently broadcast.
+    static func parseIPv4(_ text: String) -> in_addr? {
+        var addr = in_addr()
+        guard inet_pton(AF_INET, text.trimmingCharacters(in: .whitespaces), &addr) == 1 else { return nil }
+        return addr
+    }
+
+    static func send(mac: String, broadcastIP: String = "255.255.255.255", port: UInt16 = 9) -> SendResult {
+        guard let macBytes = macBytes(mac) else { return .invalidMAC }
+        guard let target = parseIPv4(broadcastIP), port > 0 else { return .invalidAddress }
 
         // Magic packet: 6x 0xFF + 16x MAC
         var magic = [UInt8](repeating: 0xFF, count: 6)
         for _ in 0..<16 { magic += macBytes }
 
         let sock = socket(AF_INET, SOCK_DGRAM, 0)
-        guard sock != -1 else { return false }
+        guard sock != -1 else { return .sendFailed }
         defer { close(sock) }
 
         var broadcast: Int32 = 1
@@ -828,15 +981,90 @@ class WakeOnLANSender {
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
         addr.sin_port = port.bigEndian
-        addr.sin_addr.s_addr = inet_addr(broadcastIP)
+        addr.sin_addr = target
 
         let sent = withUnsafePointer(to: &addr) { ptr in
             ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
                 sendto(sock, magic, magic.count, 0, sockPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
         }
-        return sent == magic.count
+        return sent == magic.count ? .sent : .sendFailed
     }
 }
 
+// MARK: - Lists macOS can withhold
 
+/// macOS 27 hides the ARP table and the socket list from tools started by
+/// an app that isn't signed with a Developer ID: `arp` and `netstat` print
+/// no entries (netstat keeps its headers), while the same commands in
+/// Terminal list everything. Local Network and Location permission don't
+/// change it. Release builds are Developer ID signed and get the full
+/// lists; builds signed to run locally (built from source, CI) don't, and
+/// fall back to launchd. These turn a list that still comes back empty into
+/// a message instead of a blank table.
+enum WithheldLists {
+    /// No entries in `arp -an` output. A Mac on a network always has at
+    /// least its router in the table, so with a router known this means
+    /// macOS didn't share it.
+    static func arpIsEmpty(_ output: String) -> Bool {
+        !output.split(separator: "\n").contains { $0.contains(" at ") }
+    }
+
+    static let arpMessage = "macOS didn't give SNAP its ARP table (the devices this Mac has talked to on your network), so there's nothing to list. In Terminal, arp -an still shows it."
+    static let macNote = "macOS didn't share MAC addresses with SNAP, so vendor names that come from them are missing. In Terminal, arp -an still shows them."
+    static let connectionsLimitedNote = "macOS didn't give SNAP the full connection list, so this shows connections of apps running as you. System connections (owned by root) and recently closed ones aren't included."
+    static let connectionsMessage = "macOS didn't give SNAP the connection list, and SNAP couldn't read it another way. In Terminal, netstat -an still shows it."
+
+    /// `arp` with `args`. When SNAP's own run comes back empty on a network
+    /// (macOS withheld the table), it's asked again through launchd.
+    static func arp(_ args: [String], timeout: TimeInterval = 60) async -> String {
+        let direct = await Shell.run("/usr/sbin/arp", args: args, timeout: timeout)
+        guard arpIsEmpty(direct), RouteInfo.defaultGateway() != nil else { return direct }
+        return await Shell.runViaLaunchd("/usr/sbin/arp", args: args) ?? direct
+    }
+}
+
+// MARK: - Running a system tool through launchd (stopgap)
+
+extension Shell {
+    /// The only commands `runViaLaunchd` will run.
+    static let launchdCommands: Set<String> = ["/usr/sbin/arp", "/usr/sbin/netstat"]
+
+    /// Runs `command` as a one-off launchd job and returns what it printed,
+    /// or nil if it couldn't run or didn't finish within `timeout`.
+    ///
+    /// For builds that aren't Developer ID signed, which macOS 27 doesn't
+    /// give the ARP table and socket list (see `WithheldLists`): a job
+    /// launchd starts isn't one of SNAP's own processes, and it gets the
+    /// full list, as Terminal does. Release builds don't need it, since
+    /// their own arp and netstat already list everything.
+    ///
+    /// The job is `launchctl submit`, which launchd would restart when it
+    /// exits, so the job removes itself as its last step. That way it can't
+    /// keep running even if SNAP quits mid-way; SNAP also removes it after.
+    /// Paths are passed as arguments to the script, never pasted into it.
+    static func runViaLaunchd(_ command: String, args: [String], timeout: TimeInterval = 5) async -> String? {
+        guard launchdCommands.contains(command) else { return nil }
+        let id = UUID().uuidString
+        let label = "com.sevagbardakjian.snap.list.\(id)"
+        let out = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snap-list-\(id).txt").path
+        let script = #"label="$1"; out="$2"; shift 2; "$@" > "$out.tmp" 2>&1; /bin/mv "$out.tmp" "$out"; exec /bin/launchctl remove "$label""#
+        defer {
+            try? FileManager.default.removeItem(atPath: out)
+            try? FileManager.default.removeItem(atPath: out + ".tmp")
+        }
+        _ = await Shell.run("/bin/launchctl",
+                            args: ["submit", "-l", label, "--", "/bin/sh", "-c", script, "sh", label, out, command] + args,
+                            timeout: 5)
+        // The file appears (by rename) only once the command has finished
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if FileManager.default.fileExists(atPath: out) { break }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        // Normally already gone (the job removes itself); harmless if so
+        _ = await Shell.run("/bin/launchctl", args: ["remove", label], timeout: 5)
+        return try? String(contentsOfFile: out, encoding: .utf8)
+    }
+}

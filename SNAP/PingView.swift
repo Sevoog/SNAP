@@ -184,6 +184,7 @@ struct PingView: View {
     private var hostField: some View {
         TextField("Hostname or IP", text: $host)
             .textFieldStyle(.roundedBorder)
+            .onSubmit(submitPing)
     }
 
     @ViewBuilder
@@ -203,6 +204,7 @@ struct PingView: View {
         TextField("", text: $count)
             .textFieldStyle(.roundedBorder)
             .frame(width: 50)
+            .onSubmit(submitPing)
 
         Label("Interval:", systemImage: "clock")
             .foregroundStyle(.secondary).font(.caption)
@@ -210,6 +212,7 @@ struct PingView: View {
         TextField("", text: $interval)
             .textFieldStyle(.roundedBorder)
             .frame(width: 50)
+            .onSubmit(submitPing)
 
         if mode == .tcp {
             Label("Port:", systemImage: "door.left.hand.open")
@@ -218,6 +221,7 @@ struct PingView: View {
             TextField("", text: $port)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 60)
+                .onSubmit(submitPing)
         } else {
             Label("Size:", systemImage: "doc")
                 .foregroundStyle(.secondary).font(.caption)
@@ -225,6 +229,7 @@ struct PingView: View {
             TextField("", text: $packetSize)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 50)
+                .onSubmit(submitPing)
         }
     }
 
@@ -243,10 +248,19 @@ struct PingView: View {
         } else {
             Button("Ping") { startPing() }
                 .buttonStyle(.borderedProminent)
-                .disabled(host.isEmpty || (mode == .tcp && TCPPing.port(port) == nil))
+                .disabled(!canStart)
                 .keyboardShortcut(.return)
                 .fixedSize()
         }
+    }
+
+    /// What enables the Ping button; Return in a field checks the same.
+    private var canStart: Bool {
+        !host.isEmpty && !(mode == .tcp && TCPPing.port(port) == nil)
+    }
+
+    private func submitPing() {
+        if !isRunning && canStart { startPing() }
     }
 
     private func startPing() {
@@ -412,11 +426,20 @@ enum TCPPing {
         hints.ai_family = AF_UNSPEC
         hints.ai_socktype = SOCK_STREAM
         var res: UnsafeMutablePointer<addrinfo>?
-        guard getaddrinfo(host, String(port), &hints, &res) == 0, let r = res, let sa = r.pointee.ai_addr else { return nil }
-        defer { freeaddrinfo(r) }
+        guard getaddrinfo(host, String(port), &hints, &res) == 0, let first = res else { return nil }
+        defer { freeaddrinfo(first) }
+        // Prefer IPv4 when a name has both: "localhost" lists ::1 first, and a
+        // service listening on IPv4 only would otherwise read as closed.
+        var pick = first
+        var cur: UnsafeMutablePointer<addrinfo>? = first
+        while let c = cur {
+            if c.pointee.ai_family == AF_INET { pick = c; break }
+            cur = c.pointee.ai_next
+        }
+        guard let sa = pick.pointee.ai_addr else { return nil }
         var name = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-        getnameinfo(sa, r.pointee.ai_addrlen, &name, socklen_t(name.count), nil, 0, NI_NUMERICHOST)
-        return (Data(bytes: sa, count: Int(r.pointee.ai_addrlen)), String(cString: name))
+        getnameinfo(sa, pick.pointee.ai_addrlen, &name, socklen_t(name.count), nil, 0, NI_NUMERICHOST)
+        return (Data(bytes: sa, count: Int(pick.pointee.ai_addrlen)), String(cString: name))
     }
 
     /// One handshake to an address from `resolve`. Blocks for up to

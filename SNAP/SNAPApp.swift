@@ -50,7 +50,6 @@ struct SNAPApp: App {
                     updates.checkNow()
                 }
                 .disabled(updates.isChecking)
-                Toggle("Check for Updates Automatically", isOn: $updates.autoCheck)
                 Divider()
                 Toggle("Open at Login", isOn: Binding(get: { loginItem.isEnabled },
                                                       set: { loginItem.set($0) }))

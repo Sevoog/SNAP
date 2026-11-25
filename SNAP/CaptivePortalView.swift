@@ -268,10 +268,44 @@ final class NetworkHealthModel: ObservableObject {
 
     @Published var isRunning = false
     @Published var lastChecked: Date? = nil
+    // Nothing answered at all on the last run: no internet, not a filtering network
+    @Published var offline = false
+
+    // Whether each basic probe reached a server (an HTTP reply or a TCP connect)
+    private var portalReached: [Bool] = []
+    private var portsReached: [Bool] = []
 
     var overallVerdict: HealthVerdict? {
-        guard let _ = lastChecked else { return nil }
-        let categories = [captivePortal, dnsHijack, proxy, portBlocking]
+        guard lastChecked != nil, !isRunning else { return nil }
+        return Self.verdict(for: [captivePortal, dnsHijack, proxy, portBlocking], offline: offline)
+    }
+
+    /// Every probe failed without reaching any server, so the Mac has no
+    /// working internet path. Checked before any filtering verdict.
+    nonisolated static func looksOffline(portalReached: [Bool], portsReached: [Bool]) -> Bool {
+        let all = portalReached + portsReached
+        return !all.isEmpty && !all.contains(true)
+    }
+
+    /// URL errors that mean no server was reached (no network, no DNS, no route, timeout).
+    nonisolated static func isConnectivityError(_ error: Error) -> Bool {
+        guard let e = error as? URLError else { return false }
+        let codes: Set<URLError.Code> = [.notConnectedToInternet, .networkConnectionLost, .cannotFindHost,
+                                         .cannotConnectToHost, .timedOut, .dnsLookupFailed,
+                                         .internationalRoamingOff, .dataNotAllowed]
+        return codes.contains(e.code)
+    }
+
+    /// The banner verdict, or nil while any check is still running (a pending
+    /// check would otherwise count as a pass and show "Clean Network" mid-run).
+    static func verdict(for categories: [HealthCategory], offline: Bool) -> HealthVerdict? {
+        guard !categories.contains(where: { $0.checks.contains { $0.status == .pending } }) else { return nil }
+        if offline {
+            return HealthVerdict(title: "Offline",
+                                 detail: "You appear to be offline. Connect to a network, then press Re-check.",
+                                 icon: "wifi.slash",
+                                 color: NS.amber)
+        }
         let maxSev = categories.map { $0.aggregate.severity }.max() ?? 0
         switch maxSev {
         case 0:
@@ -297,6 +331,9 @@ final class NetworkHealthModel: ObservableObject {
     func runAll() {
         guard !isRunning else { return }
         isRunning = true
+        offline = false
+        portalReached = []
+        portsReached = []
         resetCategories()
 
         Task {
@@ -305,6 +342,7 @@ final class NetworkHealthModel: ObservableObject {
             async let proxyDone:     Void = runProxy()
             async let portsDone:     Void = runPortBlocking()
             _ = await (portalDone, dnsDone, proxyDone, portsDone)
+            offline = Self.looksOffline(portalReached: portalReached, portsReached: portsReached)
             isRunning = false
             lastChecked = Date()
         }
@@ -320,11 +358,12 @@ final class NetworkHealthModel: ObservableObject {
     // MARK: 1) Captive Portal
 
     private func runCaptivePortal() async {
-        await withTaskGroup(of: (Int, HealthStatus, String).self) { group in
+        await withTaskGroup(of: (Int, HealthStatus, String, Bool).self) { group in
             for (i, ep) in PortalProbes.checks.enumerated() {
                 group.addTask { await PortalProbes.run(index: i, endpoint: ep) }
             }
-            for await (i, status, result) in group {
+            for await (i, status, result, reached) in group {
+                portalReached.append(reached)
                 if i < captivePortal.checks.count {
                     captivePortal.checks[i].status = status
                     captivePortal.checks[i].result = result
@@ -371,11 +410,12 @@ final class NetworkHealthModel: ObservableObject {
     // MARK: 4) Port Blocking
 
     private func runPortBlocking() async {
-        await withTaskGroup(of: (Int, HealthStatus, String).self) { group in
+        await withTaskGroup(of: (Int, HealthStatus, String, Bool).self) { group in
             for (i, c) in PortBlockingChecks.checks.enumerated() {
                 group.addTask { await PortBlockingChecks.run(index: i, check: c) }
             }
-            for await (i, status, result) in group {
+            for await (i, status, result, connected) in group {
+                portsReached.append(connected)
                 if i < portBlocking.checks.count {
                     portBlocking.checks[i].status = status
                     portBlocking.checks[i].result = result
@@ -428,9 +468,10 @@ private enum PortalProbes {
                  expectStatus: 200, expectBodyContains: "success"),
     ]
 
-    static func run(index: Int, endpoint: Endpoint) async -> (Int, HealthStatus, String) {
+    /// The last element says whether a server answered at all (used to tell offline from filtered).
+    static func run(index: Int, endpoint: Endpoint) async -> (Int, HealthStatus, String, Bool) {
         guard let url = URL(string: endpoint.url) else {
-            return (index, .fail, "Bad URL")
+            return (index, .fail, "Bad URL", false)
         }
         var req = URLRequest(url: url)
         req.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
@@ -445,7 +486,7 @@ private enum PortalProbes {
         do {
             let (data, resp) = try await session.data(for: req)
             guard let http = resp as? HTTPURLResponse else {
-                return (index, .fail, "Non-HTTP response")
+                return (index, .fail, "Non-HTTP response", true)
             }
             let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
             let codeMatches = http.statusCode == endpoint.expectStatus
@@ -454,15 +495,17 @@ private enum PortalProbes {
                 return data.isEmpty
             }()
             if (300..<400).contains(http.statusCode), let loc = http.value(forHTTPHeaderField: "Location") {
-                return (index, .fail, "redirect → \(loc.prefix(80))")
+                return (index, .fail, "redirect → \(loc.prefix(80))", true)
             }
             if codeMatches && bodyMatches {
-                return (index, .ok, "expected \(http.statusCode), \(data.count)B body")
+                return (index, .ok, "expected \(http.statusCode), \(data.count)B body", true)
             } else {
-                return (index, .fail, "got \(http.statusCode), unexpected body (\(data.count)B)")
+                return (index, .fail, "got \(http.statusCode), unexpected body (\(data.count)B)", true)
             }
         } catch {
-            return (index, .fail, error.localizedDescription)
+            // A TLS or protocol error still means something answered; only
+            // "couldn't get there at all" errors count toward offline
+            return (index, .fail, error.localizedDescription, !NetworkHealthModel.isConnectivityError(error))
         }
     }
 }
@@ -686,19 +729,25 @@ private enum PortBlockingChecks {
         Check(port: 3478,  host: "stun.l.google.com", serviceName: "STUN"),
     ]
 
-    static func run(index: Int, check: Check) async -> (Int, HealthStatus, String) {
-        let (ok, ms) = await tcpConnect(host: check.host, port: check.port, timeout: 3.0)
+    /// The last element is true when the TCP connect succeeded.
+    static func run(index: Int, check: Check) async -> (Int, HealthStatus, String, Bool) {
+        let (ok, ms, resolved) = await tcpConnect(host: check.host, port: check.port, timeout: 3.0)
         if ok {
-            return (index, .ok, "open · \(Int(ms)) ms")
+            return (index, .ok, "open · \(Int(ms)) ms", true)
+        }
+        // No address for the host means DNS failed: the port was never tried,
+        // so calling it blocked would be wrong
+        if !resolved {
+            return (index, .warning, "couldn't look up \(check.host), port not tested", false)
         }
         // 443 / 80 to a major CDN failing is essentially a network outage;
         // surface this differently from "intentionally blocked".
         let severity: HealthStatus = (check.port == 80 || check.port == 443) ? .warning : .fail
-        return (index, severity, "blocked or unreachable")
+        return (index, severity, "blocked or unreachable", false)
     }
 
     /// TCP connect with timeout via non-blocking socket + select().
-    private static func tcpConnect(host: String, port: UInt16, timeout: TimeInterval) async -> (ok: Bool, ms: Double) {
+    private static func tcpConnect(host: String, port: UInt16, timeout: TimeInterval) async -> (ok: Bool, ms: Double, resolved: Bool) {
         await withCheckedContinuation { cont in
             DispatchQueue.global(qos: .userInitiated).async {
                 cont.resume(returning: blockingConnect(host: host, port: port, timeout: timeout))
@@ -706,18 +755,18 @@ private enum PortBlockingChecks {
         }
     }
 
-    private static func blockingConnect(host: String, port: UInt16, timeout: TimeInterval) -> (Bool, Double) {
+    private static func blockingConnect(host: String, port: UInt16, timeout: TimeInterval) -> (Bool, Double, Bool) {
         // Resolve host first via getaddrinfo (one IP — try A records only)
         var hints = addrinfo()
         hints.ai_family = AF_INET
         hints.ai_socktype = SOCK_STREAM
         var res: UnsafeMutablePointer<addrinfo>?
         let portStr = String(port)
-        guard getaddrinfo(host, portStr, &hints, &res) == 0, let r = res else { return (false, 0) }
+        guard getaddrinfo(host, portStr, &hints, &res) == 0, let r = res else { return (false, 0, false) }
         defer { freeaddrinfo(r) }
 
         let sock = Darwin.socket(r.pointee.ai_family, r.pointee.ai_socktype, r.pointee.ai_protocol)
-        guard sock >= 0 else { return (false, 0) }
+        guard sock >= 0 else { return (false, 0, true) }
         defer { Darwin.close(sock) }
 
         // Non-blocking mode so connect() can be timed
@@ -727,26 +776,26 @@ private enum PortBlockingChecks {
         let t0 = Date()
         let cr = Darwin.connect(sock, r.pointee.ai_addr, r.pointee.ai_addrlen)
         if cr == 0 {
-            return (true, Date().timeIntervalSince(t0) * 1000)
+            return (true, Date().timeIntervalSince(t0) * 1000, true)
         }
         // EINPROGRESS = in-flight; wait via select
-        guard errno == EINPROGRESS else { return (false, 0) }
+        guard errno == EINPROGRESS else { return (false, 0, true) }
 
         var writeSet = fd_set()
         SnapFDZero(&writeSet)
         SnapFDSet(sock, &writeSet)
         var tv = timeval(tv_sec: Int(timeout), tv_usec: Int32((timeout - Double(Int(timeout))) * 1_000_000))
         let sel = select(sock + 1, nil, &writeSet, nil, &tv)
-        guard sel > 0 else { return (false, 0) }
+        guard sel > 0 else { return (false, 0, true) }
 
         // Verify the connect actually succeeded (SO_ERROR == 0)
         var so_err: Int32 = 0
         var len = socklen_t(MemoryLayout<Int32>.size)
         let go = getsockopt(sock, SOL_SOCKET, SO_ERROR, &so_err, &len)
         if go == 0 && so_err == 0 {
-            return (true, Date().timeIntervalSince(t0) * 1000)
+            return (true, Date().timeIntervalSince(t0) * 1000, true)
         }
-        return (false, 0)
+        return (false, 0, true)
     }
 }
 

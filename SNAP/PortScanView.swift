@@ -15,7 +15,6 @@ struct PortResult: Identifiable, Hashable {
     var port: Int
     var service: String
     var status: PortStatus
-    var banner: String = ""
 
     enum PortStatus: String { case open = "Open", closed = "Closed", filtered = "Filtered", scanning = "Scanning..." }
 }
@@ -31,6 +30,10 @@ struct PortScanView: View {
     @State private var scannedCount = 0
     @State private var totalCount = 0
     @State private var scanTask: Task<Void, Never>?
+    // Identifies the current scan, so a stopped scan's late results can't
+    // land in the next one's table
+    @State private var runID = UUID()
+    @State private var errorMessage: String?
 
     private var displayResults: [PortResult] {
         onlyOpen ? results.filter { $0.status == .open } : results
@@ -115,6 +118,17 @@ struct PortScanView: View {
 
             Divider()
 
+            if let errorMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(NS.amber)
+                    Text(errorMessage).font(.caption).foregroundStyle(NS.text1)
+                    Spacer()
+                }
+                .padding(.horizontal, 16).padding(.vertical, 6)
+                .background(NS.bg3)
+                Divider()
+            }
+
             // Summary bar
             if !results.isEmpty {
                 HStack(spacing: 16) {
@@ -151,16 +165,13 @@ struct PortScanView: View {
                             .font(.caption)
                             .foregroundStyle(statusColor(r.status))
                     }
-                }.width(100)
-                TableColumn("Banner") { r in
-                    Text(r.banner).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
         }
         .tabNavigationTitle(.portScan)
         // Runs when the window closes (tabs now stay alive across switches) — cancel the scan instead of
         // letting it probe up to 65k ports with no UI handle left to stop it
-        .onDisappear { scanTask?.cancel(); isRunning = false }
+        .onDisappear { stopScan() }
         .consumeHandoff(for: .portScan) { host = $0 }
     }
 
@@ -173,6 +184,7 @@ struct PortScanView: View {
     private var hostField: some View {
         TextField("Hostname or IP", text: $host)
             .textFieldStyle(.roundedBorder)
+            .onSubmit(submitScan)
     }
 
     private func optionLabel(_ title: String) -> some View {
@@ -191,10 +203,12 @@ struct PortScanView: View {
         TextField("e.g. 1-1024 or 22,80,443", text: $portRange)
             .textFieldStyle(.roundedBorder)
             .frame(minWidth: portsMin, maxWidth: portsMax)
+            .onSubmit(submitScan)
         optionLabel("Timeout(s):")
         TextField("", text: $timeout)
             .textFieldStyle(.roundedBorder)
             .frame(width: 50)
+            .onSubmit(submitScan)
         Toggle("Open only", isOn: $onlyOpen)
             .toggleStyle(.checkbox)
             .fixedSize()
@@ -204,12 +218,12 @@ struct PortScanView: View {
     private var scanActions: some View {
         if !results.isEmpty {
             ToolActionBar("Port-Scan",
-                          text: { "Port scan \(host)\n\nport\tservice\tstatus\tbanner\n" + results.sorted { $0.port < $1.port }.map { "\($0.port)\t\($0.service)\t\($0.status.rawValue)\t\($0.banner)" }.joined(separator: "\n") },
-                          csv: { "port,service,status,banner\n" + results.sorted { $0.port < $1.port }.map { "\($0.port),\(csvEscape($0.service)),\($0.status.rawValue),\(csvEscape($0.banner))" }.joined(separator: "\n") })
+                          text: { "Port scan \(host)\n\nport\tservice\tstatus\n" + results.sorted { $0.port < $1.port }.map { "\($0.port)\t\($0.service)\t\($0.status.rawValue)" }.joined(separator: "\n") },
+                          csv: { "port,service,status\n" + results.sorted { $0.port < $1.port }.map { "\($0.port),\(csvEscape($0.service)),\($0.status.rawValue)" }.joined(separator: "\n") })
                 .fixedSize()
         }
         if isRunning {
-            Button("Stop") { scanTask?.cancel(); isRunning = false }
+            Button("Stop") { stopScan() }
                 .buttonStyle(.bordered).tint(.red)
                 .fixedSize()
             ProgressView(value: progress)
@@ -234,91 +248,104 @@ struct PortScanView: View {
         }
     }
 
+    /// Return in a toolbar field: same conditions as the Scan button.
+    private func submitScan() {
+        if !isRunning && !host.isEmpty { startScan() }
+    }
+
+    private func stopScan() {
+        runID = UUID()  // drop anything the stopped scan still delivers
+        scanTask?.cancel()
+        scanTask = nil
+        isRunning = false
+    }
+
     private func startScan() {
         let v = host.trimmingCharacters(in: .whitespaces)
-        if !v.isEmpty { ToolHistory.shared.add(.portScan, v) }
+        guard !v.isEmpty else { return }
+        ToolHistory.shared.add(.portScan, v)
         results = []
-        isRunning = true
+        errorMessage = nil
         progress = 0
-
-        let ports = parsePorts(portRange)
-        totalCount = ports.count
         scannedCount = 0
-        let timeoutSecs = Double(timeout) ?? 1.0
-        let targetHost = host
+
+        let ports = PortScan.parsePorts(portRange)
+        guard !ports.isEmpty else {
+            totalCount = 0
+            errorMessage = "Enter ports like 22,80,443 or a range like 1-1024."
+            return
+        }
+        // Zero or less would mark every port Filtered at once.
+        guard let timeoutSecs = Double(timeout.trimmingCharacters(in: .whitespaces)),
+              timeoutSecs >= 0.1, timeoutSecs <= 30 else {
+            totalCount = 0
+            errorMessage = "Enter a timeout from 0.1 to 30 seconds."
+            return
+        }
+        totalCount = ports.count
+        isRunning = true
+        let services = commonServices
+        let id = UUID()
+        runID = id
 
         scanTask = Task {
+            // Resolve once up front. An unknown name used to fail every
+            // connection, so every port read "Closed".
+            guard let address = await PortScan.resolve(v) else {
+                guard runID == id else { return }
+                errorMessage = "Couldn't find \(v). Check the spelling or use its IP address."
+                isRunning = false
+                return
+            }
+            guard runID == id else { return }
+
+            // Sliding window: start the first batch, then one more each time
+            // a probe finishes, so results show up as they come in
             await withTaskGroup(of: PortResult.self) { group in
-                let semaphore = AsyncSemaphore(limit: 100)
-                for port in ports {
-                    await semaphore.wait()
+                var next = 0
+                func enqueue() {
+                    let port = ports[next]
+                    let service = services[port] ?? ""
+                    next += 1
                     group.addTask {
-                        defer { Task { await semaphore.signal() } }
-                        return await self.checkPort(host: targetHost, port: port, timeout: timeoutSecs)
+                        let status = await PortScan.probe(host: address, port: port, timeout: timeoutSecs)
+                        return PortResult(port: port, service: service, status: status)
                     }
                 }
-                for await result in group {
-                    guard !Task.isCancelled else { break }
-                    await MainActor.run {
-                        results.append(result)
-                        results.sort { $0.port < $1.port }
-                        scannedCount += 1
-                        progress = Double(scannedCount) / Double(totalCount)
-                    }
+                while next < min(PortScan.maxConcurrent, ports.count) { enqueue() }
+                while let result = await group.next() {
+                    guard !Task.isCancelled, runID == id else { group.cancelAll(); break }
+                    results.insert(result, at: PortScan.insertionIndex(of: result.port, in: results))
+                    scannedCount += 1
+                    progress = Double(scannedCount) / Double(totalCount)
+                    if next < ports.count { enqueue() }
                 }
             }
-            await MainActor.run { isRunning = false }
+            if runID == id { isRunning = false }
         }
     }
+}
 
-    private func checkPort(host: String, port: Int, timeout: Double) async -> PortResult {
-        let service = commonServices[port] ?? ""
-        // Use a class-based token to safely share 'resolved' state across concurrent closures
-        final class ResolvedToken: @unchecked Sendable { var value = false }
-        return await withCheckedContinuation { cont in
-            let conn = NWConnection(
-                host: NWEndpoint.Host(host),
-                port: NWEndpoint.Port(integerLiteral: UInt16(port)),
-                using: .tcp
-            )
-            let token = ResolvedToken()
-            let q = DispatchQueue(label: "port.\(port)")
-            conn.stateUpdateHandler = { state in
-                q.async {
-                    guard !token.value else { return }
-                    switch state {
-                    case .ready:
-                        token.value = true
-                        conn.cancel()
-                        cont.resume(returning: PortResult(port: port, service: service, status: .open))
-                    case .failed, .cancelled:
-                        token.value = true
-                        // cancel() is required teardown even after .failed —
-                        // the connection otherwise retains its handler forever
-                        conn.cancel()
-                        cont.resume(returning: PortResult(port: port, service: service, status: .closed))
-                    default: break
-                    }
-                }
-            }
-            conn.start(queue: q)
-            q.asyncAfter(deadline: .now() + timeout) {
-                guard !token.value else { return }
-                token.value = true
-                conn.cancel()
-                cont.resume(returning: PortResult(port: port, service: service, status: .filtered))
-            }
-        }
-    }
+// MARK: - Probing
 
-    private func parsePorts(_ str: String) -> [Int] {
+/// The scan's pure parts and its probe, kept out of the view so tests can
+/// reach them.
+enum PortScan {
+    /// Probes in flight at once.
+    static let maxConcurrent = 100
+
+    /// "22,80,443", "1-1024", or a mix. Out-of-range and malformed parts are
+    /// skipped; the result is sorted with no duplicates.
+    static func parsePorts(_ str: String) -> [Int] {
         var ports = Set<Int>()
         for part in str.split(separator: ",") {
             let trimmed = part.trimmingCharacters(in: .whitespaces)
             if trimmed.contains("-") {
                 let bounds = trimmed.split(separator: "-")
-                if bounds.count == 2, let lo = Int(bounds[0]), let hi = Int(bounds[1]) {
-                    // Clamp both ends and skip reversed ranges — `8080-80`
+                if bounds.count == 2,
+                   let lo = Int(bounds[0].trimmingCharacters(in: .whitespaces)),
+                   let hi = Int(bounds[1].trimmingCharacters(in: .whitespaces)) {
+                    // Clamp both ends and skip reversed ranges: `8080-80`
                     // must not trap Range's lowerBound <= upperBound check
                     let l = max(1, lo), h = min(hi, 65535)
                     if l <= h { (l...h).forEach { ports.insert($0) } }
@@ -328,6 +355,85 @@ struct PortScanView: View {
             }
         }
         return ports.sorted()
+    }
+
+    /// Where `port` goes in `results` (sorted by port) to keep it sorted.
+    static func insertionIndex(of port: Int, in results: [PortResult]) -> Int {
+        var lo = 0, hi = results.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if results[mid].port < port { lo = mid + 1 } else { hi = mid }
+        }
+        return lo
+    }
+
+    /// What a connection state says about the port, or nil to keep waiting.
+    /// A refused connection arrives as `.waiting`, not `.failed` (the
+    /// connection would retry it), which used to leave closed ports sitting
+    /// until the timeout and then reading "Filtered".
+    static func status(for state: NWConnection.State) -> PortResult.PortStatus? {
+        switch state {
+        case .ready:
+            return .open
+        case .waiting(let error):
+            return isRefused(error) ? .closed : nil
+        case .failed(let error):
+            // Anything but a reset (no route, host down) means no answer
+            return isRefused(error) ? .closed : .filtered
+        default:
+            return nil
+        }
+    }
+
+    private static func isRefused(_ error: NWError) -> Bool {
+        if case .posix(let code) = error { return code == .ECONNREFUSED || code == .ECONNRESET }
+        return false
+    }
+
+    /// The address to scan, as text, or nil if the name doesn't resolve.
+    static func resolve(_ host: String) async -> String? {
+        await Task.detached { TCPPing.resolve(host, port: 80)?.display }.value
+    }
+
+    /// One TCP connect to `host` (an address from `resolve`). Cancelling the
+    /// task cancels the connection, so Stop ends in-flight probes at once.
+    static func probe(host: String, port: Int, timeout: Double) async -> PortResult.PortStatus {
+        guard let nwPort = NWEndpoint.Port(rawValue: UInt16(clamping: port)) else { return .filtered }
+        let conn = NWConnection(host: NWEndpoint.Host(host), port: nwPort, using: .tcp)
+        // Shared by the state handler, the timeout and cancellation, so the
+        // continuation resumes exactly once
+        final class Once: @unchecked Sendable {
+            private let lock = NSLock()
+            private var done = false
+            func claim() -> Bool {
+                lock.lock(); defer { lock.unlock() }
+                if done { return false }
+                done = true
+                return true
+            }
+        }
+        let once = Once()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (cont: CheckedContinuation<PortResult.PortStatus, Never>) in
+                let finish: @Sendable (PortResult.PortStatus) -> Void = { s in
+                    guard once.claim() else { return }
+                    // cancel() is required teardown even after .failed;
+                    // the connection otherwise retains its handler forever
+                    conn.cancel()
+                    cont.resume(returning: s)
+                }
+                if Task.isCancelled { finish(.filtered); return }
+                let q = DispatchQueue(label: "port.\(port)")
+                conn.stateUpdateHandler = { state in
+                    if case .cancelled = state { finish(.filtered); return }
+                    if let s = status(for: state) { finish(s) }
+                }
+                conn.start(queue: q)
+                q.asyncAfter(deadline: .now() + timeout) { finish(.filtered) }
+            }
+        } onCancel: {
+            conn.cancel()
+        }
     }
 }
 

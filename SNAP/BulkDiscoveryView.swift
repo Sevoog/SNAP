@@ -62,8 +62,14 @@ final class BulkDiscoveryModel: ObservableObject {
     @Published var isRunning: Bool = false
     @Published var status: String = ""
     @Published var errorMessage: String?
+    /// macOS gave no ARP entries, so assets have no MAC or OUI vendor
+    @Published var macsWithheld = false
 
     private var task: Task<Void, Never>?
+    // Identifies the current run. A cancelled run keeps going until its
+    // in-flight probes return, so every state write checks this first;
+    // otherwise Stop then Start let the old run mark the new one Done.
+    private var runID = UUID()
 
     /// Bulk Discovery does far more per host than the Network Map (optional
     /// port scan + SNMP), so it keeps a lower ceiling: 8,192 addresses (a /19).
@@ -82,7 +88,9 @@ final class BulkDiscoveryModel: ObservableObject {
     }
 
     func start() {
+        guard !isRunning else { return }
         errorMessage = nil
+        macsWithheld = false
         assets.removeAll()
         alive = 0
         scanned = 0
@@ -100,14 +108,17 @@ final class BulkDiscoveryModel: ObservableObject {
         let snmp = probeSNMP
         let community = self.community
         let ports = includePortScan
+        let id = UUID()
+        runID = id
 
         task = Task { [weak self] in
             guard let self = self else { return }
-            await self.run(hosts: hosts, doSNMP: snmp, community: community, doPorts: ports)
+            await self.run(hosts: hosts, doSNMP: snmp, community: community, doPorts: ports, id: id)
         }
     }
 
     func cancel() {
+        runID = UUID()
         task?.cancel()
         task = nil
         isRunning = false
@@ -117,10 +128,13 @@ final class BulkDiscoveryModel: ObservableObject {
     private func run(hosts: [String],
                      doSNMP: Bool,
                      community: String,
-                     doPorts: Bool) async {
+                     doPorts: Bool,
+                     id: UUID) async {
 
         // Phase 1: aliveness sweep.
-        let live = await aliveSweep(hosts)
+        let live = await aliveSweep(hosts, id: id)
+        // Cancelled during the sweep: don't go on to probe the partial list
+        guard !Task.isCancelled, runID == id else { return }
 
         await MainActor.run {
             self.alive = live.count
@@ -128,7 +142,9 @@ final class BulkDiscoveryModel: ObservableObject {
         }
 
         // Phase 2: per-host probes, bounded concurrency.
-        let arpMap = readARPCache()
+        let arpMap = await readARPCache()
+        let withheld = arpMap.isEmpty && !live.isEmpty
+        await MainActor.run { self.macsWithheld = withheld }
         let semaphore = AsyncSemaphore(limit: 12)
 
         await withTaskGroup(of: DiscoveredAsset.self) { group in
@@ -149,7 +165,7 @@ final class BulkDiscoveryModel: ObservableObject {
                 }
             }
             for await a in group {
-                if Task.isCancelled { break }
+                if Task.isCancelled || runID != id { break }
                 await MainActor.run {
                     self.assets.append(a)
                     self.assets.sort { ipLessThan($0.ip, $1.ip) }
@@ -157,6 +173,7 @@ final class BulkDiscoveryModel: ObservableObject {
             }
         }
 
+        guard !Task.isCancelled, runID == id else { return }
         await MainActor.run {
             self.isRunning = false
             self.status = "Done · \(self.assets.count) asset\(self.assets.count == 1 ? "" : "s") inventoried"
@@ -167,7 +184,7 @@ final class BulkDiscoveryModel: ObservableObject {
 
     private static let alivePorts: [UInt16] = [80, 22, 443, 8443, 161, 445, 23]
 
-    private func aliveSweep(_ hosts: [String]) async -> [String] {
+    private func aliveSweep(_ hosts: [String], id: UUID) async -> [String] {
         let sem = AsyncSemaphore(limit: 64)
         var alive: [String] = []
 
@@ -184,7 +201,7 @@ final class BulkDiscoveryModel: ObservableObject {
             // Results are consumed serially in this for-await loop, so no
             // explicit lock is needed around the local `alive` array.
             for await result in group {
-                if Task.isCancelled { break }
+                if Task.isCancelled || runID != id { break }
                 if let ip = result { alive.append(ip) }
                 await MainActor.run { self.scanned += 1 }
             }
@@ -192,14 +209,19 @@ final class BulkDiscoveryModel: ObservableObject {
         return alive
     }
 
-    /// True if TCP-connect to *any* of the given ports completes within
-    /// `timeout` (either ready or refused — both prove the host is reachable).
+    /// True if TCP-connect to *any* of the given ports gets an answer within
+    /// `timeout`: either it connects or the host refuses it. Both prove the
+    /// host is up. A refused connection arrives as `.waiting`, not `.failed`,
+    /// so the old check here never saw it and missed hosts that refuse every
+    /// port it tried; Port Scan's probe reads both.
     private static func tcpAlive(host: String,
                                  ports: [UInt16],
                                  timeout: TimeInterval) async -> Bool {
         await withTaskGroup(of: Bool.self) { group -> Bool in
             for port in ports {
-                group.addTask { await tcpConnectAttempt(host: host, port: port, timeout: timeout) }
+                group.addTask {
+                    answered(await PortScan.probe(host: host, port: Int(port), timeout: timeout))
+                }
             }
             for await r in group {
                 if r { group.cancelAll(); return true }
@@ -208,44 +230,10 @@ final class BulkDiscoveryModel: ObservableObject {
         }
     }
 
-    private static func tcpConnectAttempt(host: String,
-                                          port: UInt16,
-                                          timeout: TimeInterval) async -> Bool {
-        await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-            guard let nwPort = NWEndpoint.Port(rawValue: port) else {
-                cont.resume(returning: false); return
-            }
-            let conn = NWConnection(host: NWEndpoint.Host(host),
-                                    port: nwPort,
-                                    using: .tcp)
-            // `resumed` is shared between the NW state handler queue and the
-            // dispatch deadline closure; wrap it so a Sendable-safe local
-            // closure can mutate it under the same lock.
-            final class Box: @unchecked Sendable {
-                let lock = NSLock()
-                var resumed = false
-            }
-            let box = Box()
-            let finish: @Sendable (Bool) -> Void = { r in
-                box.lock.lock(); let done = box.resumed; box.resumed = true; box.lock.unlock()
-                if done { return }
-                conn.cancel()
-                cont.resume(returning: r)
-            }
-            conn.stateUpdateHandler = { state in
-                switch state {
-                case .ready:           finish(true)
-                case .failed(let e):
-                    // ECONNREFUSED means the host is up but the port is closed.
-                    if case .posix(let code) = e, code == .ECONNREFUSED { finish(true) }
-                    else { finish(false) }
-                case .cancelled:       finish(false)
-                default: break
-                }
-            }
-            conn.start(queue: DispatchQueue.global())
-            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { finish(false) }
-        }
+    /// The host answered: the port is open, or the host refused it. Only no
+    /// answer at all (filtered, unreachable, timed out) counts as not there.
+    nonisolated static func answered(_ status: PortResult.PortStatus) -> Bool {
+        status == .open || status == .closed
     }
 
     // MARK: - Phase 2 (per-host probe)
@@ -316,9 +304,10 @@ final class BulkDiscoveryModel: ObservableObject {
         await withTaskGroup(of: Int?.self) { group in
             for port in Self.mgmtPortPreset {
                 group.addTask {
-                    let alive = await Self.tcpConnectAttempt(
-                        host: ip, port: UInt16(port), timeout: 0.8)
-                    return alive ? port : nil
+                    // Only a completed connection is an open port; a refusal
+                    // means the port is closed.
+                    let status = await PortScan.probe(host: ip, port: port, timeout: 0.8)
+                    return status == .open ? port : nil
                 }
             }
             var open: [Int] = []
@@ -431,19 +420,10 @@ private func ipLessThan(_ a: String, _ b: String) -> Bool {
 /// empty map if the call fails. (Tech-debt note: SystemConfiguration's
 /// `SCDynamicStore` would be a pure-Swift alternative; flagged as a
 /// follow-up across the codebase.)
-private func readARPCache() -> [String: String] {
+private func readARPCache() async -> [String: String] {
     var map: [String: String] = [:]
-    let task = Process()
-    task.executableURL = URL(fileURLWithPath: "/usr/sbin/arp")
-    task.arguments = ["-an"]
-    let pipe = Pipe()
-    task.standardOutput = pipe
-    try? task.run()
-    // Drain the pipe before waiting — a large ARP cache can exceed the pipe
-    // buffer, and waiting first deadlocks both processes (see Shell.run)
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    task.waitUntilExit()
-    let text = String(data: data, encoding: .utf8) ?? ""
+    // Through launchd when macOS withholds the table from SNAP's own arp
+    let text = await WithheldLists.arp(["-an"])
     for line in text.split(separator: "\n") {
         // Format: ? (192.168.1.1) at 8c:85:90:aa:bb:cc on en0 ifscope [ethernet]
         guard let lp = line.firstIndex(of: "("),
@@ -472,6 +452,9 @@ struct BulkDiscoveryView: View {
             configBar
             Divider().background(NS.borderMid)
             if let err = model.errorMessage { errorBanner(err) }
+            if model.macsWithheld && !model.assets.isEmpty {
+                WithheldNotice(text: WithheldLists.macNote)
+            }
             progressBar
             results
         }
@@ -568,6 +551,7 @@ struct BulkDiscoveryView: View {
         TextField("192.168.1.0/24", text: $model.cidr)
             .textFieldStyle(.roundedBorder).frame(width: 200)
             .disabled(model.isRunning)
+            .onSubmit { if !model.isRunning { model.start() } }
             .help("A subnet (10.0.0.0/22), a range (10.0.0.1-10.0.3.254 or 192.168.1.100-150), a /24 shorthand (192.168.1), or a single address — several separated by commas.")
         Toggle("Port scan", isOn: $model.includePortScan).toggleStyle(.checkbox).font(.system(size: 11))
             .fixedSize()
@@ -579,6 +563,7 @@ struct BulkDiscoveryView: View {
             TextField("community", text: $model.community)
                 .textFieldStyle(.roundedBorder).frame(width: 90)
                 .disabled(model.isRunning)
+                .onSubmit { if !model.isRunning { model.start() } }
         }
     }
 

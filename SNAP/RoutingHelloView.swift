@@ -22,6 +22,7 @@
 
 import SwiftUI
 import Network
+import dnssd
 
 // MARK: - Detected speaker
 
@@ -39,6 +40,24 @@ struct RoutingSpeaker: Identifiable, Hashable {
     var state: String
     var virtualIP: String
     var lastSeen: Date
+    /// False for a GLBP packet with no Hello part (a Request/Response or
+    /// Auth-only packet): it shows the router is there but says nothing
+    /// about its priority, state, or virtual IP.
+    var hasDetails = true
+
+    /// `existing` updated by a newer packet from the same speaker. A packet
+    /// without details only refreshes Last Seen; it used to blank the
+    /// priority, state, and virtual IP the router's Hello had reported.
+    static func merged(_ existing: RoutingSpeaker, with new: RoutingSpeaker) -> RoutingSpeaker {
+        var out = existing
+        out.lastSeen = new.lastSeen
+        guard new.hasDetails else { return out }
+        out.priority = new.priority
+        out.state = new.state
+        out.virtualIP = new.virtualIP
+        out.hasDetails = true
+        return out
+    }
 }
 
 // MARK: - Listener model
@@ -72,18 +91,38 @@ final class RoutingHelloModel: ObservableObject {
             ("224.0.0.102", 3222, .glbp,   parseGLBP),
         ]
 
-        var anyJoined = false
+        // One group failing (two share UDP 1985) shouldn't silence the others
         for (groupAddr, port, _, parser) in configs {
-            do {
-                let g = try joinMulticast(groupAddr: groupAddr, port: port, parser: parser)
+            if let g = try? joinMulticast(groupAddr: groupAddr, port: port, parser: parser) {
                 groups.append(g)
-                anyJoined = true
-            } catch {
-                errorMessage = "Could not join \(groupAddr):\(port) — \(error.localizedDescription)"
             }
         }
-        if anyJoined {
-            isListening = true
+        guard !groups.isEmpty else {
+            listenFailed()
+            return
+        }
+        isListening = true
+    }
+
+    static let listenFailedMessage = "SNAP couldn't listen for router hellos on this network. Check that SNAP is allowed Local Network access in System Settings > Privacy & Security, then press Listen again."
+
+    /// Every group failed: leave them all so the UI never says "listening" while deaf.
+    private func listenFailed() {
+        stop()
+        errorMessage = Self.listenFailedMessage
+    }
+
+    /// Failed, or waiting because Local Network access was denied: either
+    /// way this group will never hear anything.
+    nonisolated static func isDead(_ state: NWConnectionGroup.State) -> Bool {
+        switch state {
+        case .failed:
+            return true
+        case .waiting(let error):
+            if case .dns(let code) = error, code == DNSServiceErrorType(kDNSServiceErr_PolicyDenied) { return true }
+            return false
+        default:
+            return false
         }
     }
 
@@ -121,13 +160,14 @@ final class RoutingHelloModel: ObservableObject {
                 }
             }
         }
-        group.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .failed(let e):
-                DispatchQueue.main.async {
-                    self?.errorMessage = "\(groupAddr):\(port) failed — \(e.localizedDescription)"
-                }
-            default: break
+        group.stateUpdateHandler = { [weak self, weak group] state in
+            guard Self.isDead(state) else { return }
+            DispatchQueue.main.async {
+                // Ignore a group from an earlier session that already stopped
+                guard let self, let group, self.groups.contains(where: { $0 === group }) else { return }
+                group.cancel()
+                self.groups.removeAll { $0 === group }
+                if self.groups.isEmpty { self.listenFailed() }
             }
         }
         group.start(queue: DispatchQueue.global(qos: .utility))
@@ -136,10 +176,7 @@ final class RoutingHelloModel: ObservableObject {
 
     private func upsert(_ sp: RoutingSpeaker) {
         if let idx = speakers.firstIndex(where: { $0.id == sp.id }) {
-            speakers[idx].priority = sp.priority
-            speakers[idx].state = sp.state
-            speakers[idx].virtualIP = sp.virtualIP
-            speakers[idx].lastSeen = sp.lastSeen
+            speakers[idx] = RoutingSpeaker.merged(speakers[idx], with: sp)
         } else {
             speakers.append(sp)
         }
@@ -181,7 +218,8 @@ private func parseHSRPv1(_ data: Data, _ src: String) -> RoutingSpeaker? {
                           lastSeen: Date())
 }
 
-private func parseHSRPv2(_ data: Data, _ src: String) -> RoutingSpeaker? {
+// Internal (not private) so tests can check the no-TLV case
+func parseHSRPv2(_ data: Data, _ src: String) -> RoutingSpeaker? {
     // RFC 5798 / Cisco HSRPv2 uses a TLV format. First byte = type (0x01
     // for Group State TLV), second = length. We scan TLVs for the Group
     // State TLV (40 bytes) which carries group number, state, priority,
@@ -218,15 +256,9 @@ private func parseHSRPv2(_ data: Data, _ src: String) -> RoutingSpeaker? {
         }
         i += 2 + length
     }
-    // No Group State TLV recognized — record a bare sighting.
-    return RoutingSpeaker(id: "HSRPv2|\(src)|0",
-                          proto: .hsrpV2,
-                          sourceIP: src,
-                          group: 0,
-                          priority: 0,
-                          state: "?",
-                          virtualIP: "—",
-                          lastSeen: Date())
+    // No Group State TLV recognized: the packet still counts toward the
+    // packet total, but a made-up group 0 / priority 0 row would read as a real speaker
+    return nil
 }
 
 private func hsrpStateLabel(_ s: UInt8) -> String {
@@ -241,7 +273,7 @@ private func hsrpStateLabel(_ s: UInt8) -> String {
     }
 }
 
-private func parseGLBP(_ data: Data, _ src: String) -> RoutingSpeaker? {
+func parseGLBP(_ data: Data, _ src: String) -> RoutingSpeaker? {
     // GLBP is also TLV. Header is:
     //   version(1) reserved(1) group(2) reserved(2) sender_id(6) ...
     // Followed by TLVs (Hello, Request/Response, Auth, etc.).
@@ -254,12 +286,14 @@ private func parseGLBP(_ data: Data, _ src: String) -> RoutingSpeaker? {
     var priority = 0
     var state = "—"
     var vip = "—"
+    var sawHello = false
     var i = 12
     while i + 2 <= b.count {
         let type = b[i]
         let length = Int(b[i + 1])
         if length < 2 || i + length > b.count { break }
         if type == 1 && length >= 12 {           // Hello TLV
+            sawHello = true
             state = glbpStateLabel(b[i + 6])
             priority = Int(b[i + 7])
             // Hello can include a virtual IPv4 address near the tail.
@@ -278,7 +312,8 @@ private func parseGLBP(_ data: Data, _ src: String) -> RoutingSpeaker? {
         priority: priority,
         state: state,
         virtualIP: vip,
-        lastSeen: Date()
+        lastSeen: Date(),
+        hasDetails: sawHello
     )
 }
 
@@ -334,8 +369,11 @@ struct RoutingHelloView: View {
                 Button("Stop") { model.stop() }
                     .buttonStyle(.bordered).tint(.red)
             } else {
+                // Plain Return: Listen has no text field to submit from
                 Button("Listen") { model.start() }
                     .buttonStyle(.borderedProminent)
+                    // ⌘Return, not plain Return: with no text field here, plain
+                    // Return would also fire from the sidebar's search box.
                     .keyboardShortcut(.return)
             }
         }

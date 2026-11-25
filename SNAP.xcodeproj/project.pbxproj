@@ -61,6 +61,11 @@
 		6C010000000000000000006C /* ThemeContrastTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C020000000000000000006C /* ThemeContrastTests.swift */; };
 		7D030000000000000000007D /* UpdatesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D040000000000000000007D /* UpdatesTests.swift */; };
 		7D130000000000000000007D /* PreferenceMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D140000000000000000007D /* PreferenceMigrationTests.swift */; };
+		7E110000000000000000007E /* Fixes1510SpeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E120000000000000000007E /* Fixes1510SpeedTests.swift */; };
+		7E210000000000000000007E /* Fixes1510ScanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E220000000000000000007E /* Fixes1510ScanTests.swift */; };
+		7E310000000000000000007E /* Fixes1510ToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E320000000000000000007E /* Fixes1510ToolsTests.swift */; };
+		7E410000000000000000007E /* Fixes1510MonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E420000000000000000007E /* Fixes1510MonitorTests.swift */; };
+		7E510000000000000000007E /* Fixes1510DashboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E520000000000000000007E /* Fixes1510DashboardTests.swift */; };
 		7D0F0000000000000000007D /* IperfServersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D100000000000000000007D /* IperfServersTests.swift */; };
 		7D0B0000000000000000007D /* TCPPingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D0C0000000000000000007D /* TCPPingTests.swift */; };
 		7D090000000000000000007D /* NetworkChangeLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D0A0000000000000000007D /* NetworkChangeLogTests.swift */; };
@@ -171,6 +176,11 @@
 		6C020000000000000000006C /* ThemeContrastTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeContrastTests.swift; sourceTree = "<group>"; };
 		7D040000000000000000007D /* UpdatesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatesTests.swift; sourceTree = "<group>"; };
 		7D140000000000000000007D /* PreferenceMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferenceMigrationTests.swift; sourceTree = "<group>"; };
+		7E120000000000000000007E /* Fixes1510SpeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fixes1510SpeedTests.swift; sourceTree = "<group>"; };
+		7E220000000000000000007E /* Fixes1510ScanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fixes1510ScanTests.swift; sourceTree = "<group>"; };
+		7E320000000000000000007E /* Fixes1510ToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fixes1510ToolsTests.swift; sourceTree = "<group>"; };
+		7E420000000000000000007E /* Fixes1510MonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fixes1510MonitorTests.swift; sourceTree = "<group>"; };
+		7E520000000000000000007E /* Fixes1510DashboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fixes1510DashboardTests.swift; sourceTree = "<group>"; };
 		7D100000000000000000007D /* IperfServersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IperfServersTests.swift; sourceTree = "<group>"; };
 		7D0C0000000000000000007D /* TCPPingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCPPingTests.swift; sourceTree = "<group>"; };
 		7D0A0000000000000000007D /* NetworkChangeLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkChangeLogTests.swift; sourceTree = "<group>"; };
@@ -270,6 +280,11 @@
 				6C020000000000000000006C /* ThemeContrastTests.swift */,
 				7D040000000000000000007D /* UpdatesTests.swift */,
 				7D140000000000000000007D /* PreferenceMigrationTests.swift */,
+				7E120000000000000000007E /* Fixes1510SpeedTests.swift */,
+				7E220000000000000000007E /* Fixes1510ScanTests.swift */,
+				7E320000000000000000007E /* Fixes1510ToolsTests.swift */,
+				7E420000000000000000007E /* Fixes1510MonitorTests.swift */,
+				7E520000000000000000007E /* Fixes1510DashboardTests.swift */,
 				7D100000000000000000007D /* IperfServersTests.swift */,
 				7D0C0000000000000000007D /* TCPPingTests.swift */,
 				7D0A0000000000000000007D /* NetworkChangeLogTests.swift */,
@@ -566,6 +581,11 @@
 				6C010000000000000000006C /* ThemeContrastTests.swift in Sources */,
 				7D030000000000000000007D /* UpdatesTests.swift in Sources */,
 				7D130000000000000000007D /* PreferenceMigrationTests.swift in Sources */,
+				7E110000000000000000007E /* Fixes1510SpeedTests.swift in Sources */,
+				7E210000000000000000007E /* Fixes1510ScanTests.swift in Sources */,
+				7E310000000000000000007E /* Fixes1510ToolsTests.swift in Sources */,
+				7E410000000000000000007E /* Fixes1510MonitorTests.swift in Sources */,
+				7E510000000000000000007E /* Fixes1510DashboardTests.swift in Sources */,
 				7D0F0000000000000000007D /* IperfServersTests.swift in Sources */,
 				7D0B0000000000000000007D /* TCPPingTests.swift in Sources */,
 				7D090000000000000000007D /* NetworkChangeLogTests.swift in Sources */,
@@ -699,7 +719,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10509;
+				CURRENT_PROJECT_VERSION = 10510;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -725,7 +745,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.5.9;
+				MARKETING_VERSION = 1.5.10;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sevagbardakjian.snap;
@@ -834,7 +854,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10509;
+				CURRENT_PROJECT_VERSION = 10510;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -854,7 +874,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.5.9;
+				MARKETING_VERSION = 1.5.10;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sevagbardakjian.snap;
 				PRODUCT_NAME = "$(TARGET_NAME)";

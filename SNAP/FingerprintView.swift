@@ -108,6 +108,7 @@ struct FingerprintView: View {
     private var hostField: some View {
         TextField("Hostname or IP", text: $host)
             .textFieldStyle(.roundedBorder)
+            .onSubmit { if !host.isEmpty && !isRunning { startFingerprint() } }
     }
 
     private var snmpOptions: some View {

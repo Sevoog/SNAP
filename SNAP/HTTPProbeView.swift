@@ -28,6 +28,8 @@ struct HTTPProbeView: View {
     @State private var isRunning = false
     @State private var error = ""
     @State private var redirectChain: [String] = []
+    /// Follow Redirects as it was when the request was sent
+    @State private var redirectsFollowed = true
 
     let methods = ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"]
 
@@ -52,6 +54,7 @@ struct HTTPProbeView: View {
 
                 TextField("https://example.com", text: $url)
                     .textFieldStyle(.roundedBorder)
+                    .onSubmit { if !trimmedURL.isEmpty && !isRunning { probe() } }
                 HistoryMenuButton(key: .http) { url = $0 }
 
                 Toggle("Follow Redirects", isOn: $followRedirects)
@@ -60,7 +63,7 @@ struct HTTPProbeView: View {
 
                 if statusCode != 0 {
                     ToolActionBar("HTTP-Probe", text: {
-                        var s = "\(method) \(url)\nStatus: \(statusCode) · \(String(format: "%.0f ms", responseTime))\n"
+                        var s = "\(method) \(trimmedURL)\nStatus: \(statusCode) · \(String(format: "%.0f ms", responseTime * 1000))\n"
                         if !redirectChain.isEmpty { s += "Redirects:\n" + redirectChain.map { "  → \($0)" }.joined(separator: "\n") + "\n" }
                         s += "\nResponse headers:\n" + responseHeaders.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
                         s += "\n\nBody:\n" + responseBody
@@ -72,6 +75,7 @@ struct HTTPProbeView: View {
                 } else {
                     Button("Send") { probe() }
                         .buttonStyle(.borderedProminent)
+                        .disabled(trimmedURL.isEmpty)
                         .keyboardShortcut(.return)
                 }
             }
@@ -103,9 +107,12 @@ struct HTTPProbeView: View {
                         GroupBox("Redirect Chain") {
                             VStack(alignment: .leading, spacing: 4) {
                                 ForEach(Array(redirectChain.enumerated()), id: \.offset) { i, url in
+                                    // The check marks where the response came from, so
+                                    // not when redirects weren't followed
+                                    let isFinal = i == redirectChain.count - 1 && redirectsFollowed
                                     HStack {
-                                        Image(systemName: i == redirectChain.count - 1 ? "checkmark.circle.fill" : "arrow.turn.down.right")
-                                            .foregroundStyle(i == redirectChain.count - 1 ? .green : .blue)
+                                        Image(systemName: isFinal ? "checkmark.circle.fill" : "arrow.turn.down.right")
+                                            .foregroundStyle(isFinal ? .green : .blue)
                                             .font(.caption)
                                         Text(url).font(.caption.monospaced()).lineLimit(1)
                                     }
@@ -181,17 +188,22 @@ struct HTTPProbeView: View {
         .consumeHandoff(for: .http) { url = $0 }
     }
 
+    /// The URL without surrounding spaces or line breaks.
+    private var trimmedURL: String { url.trimmingCharacters(in: .whitespacesAndNewlines) }
+
     private func probe() {
-        let v = url.trimmingCharacters(in: .whitespaces)
-        if !v.isEmpty { ToolHistory.shared.add(.http, v) }
+        let v = trimmedURL
+        guard !v.isEmpty else { return }
+        ToolHistory.shared.add(.http, v)
         statusCode = 0
         responseHeaders = []
         responseBody = ""
         error = ""
         redirectChain = []
+        redirectsFollowed = followRedirects
         isRunning = true
 
-        guard let reqURL = URL(string: url) else {
+        guard let reqURL = URL(string: v) else {
             error = "Invalid URL"
             isRunning = false
             return

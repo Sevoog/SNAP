@@ -22,6 +22,176 @@ struct BandwidthSample: Identifiable, Hashable {
     let interface: String
 }
 
+// MARK: - Chart helpers
+
+/// X axis gridlines and labels for the bandwidth charts, picked from how much
+/// time the chart spans. One 15-second stride for every range drew 240
+/// gridlines on 1 h and about 40,000 on 7 d, with no hour or date.
+struct BandwidthTimeAxis: Equatable {
+    let component: Calendar.Component
+    let count: Int
+    let format: Date.FormatStyle
+
+    /// Live and 5 min stay in seconds and minutes, 1 h and 6 h show hour and
+    /// minute, 24 h shows hours, 7 d shows the day. A history range with
+    /// only a little data in it gets the finer axis that data needs.
+    static func forSpan(_ seconds: TimeInterval) -> BandwidthTimeAxis {
+        switch seconds {
+        case ..<150:     return .init(component: .second, count: 15, format: .dateTime.minute().second())
+        case ..<600:     return .init(component: .minute, count: 1,  format: .dateTime.hour().minute())
+        case ..<5_400:   return .init(component: .minute, count: 10, format: .dateTime.hour().minute())
+        case ..<28_800:  return .init(component: .hour,   count: 1,  format: .dateTime.hour().minute())
+        case ..<129_600: return .init(component: .hour,   count: 3,  format: .dateTime.hour())
+        default:         return .init(component: .day,    count: 1,  format: .dateTime.weekday(.abbreviated).day())
+        }
+    }
+
+    static func forSamples(_ samples: [BandwidthSample]) -> BandwidthTimeAxis {
+        guard let first = samples.first, let last = samples.last else { return forSpan(0) }
+        return forSpan(last.time.timeIntervalSince(first.time))
+    }
+
+    /// Length of one stride, for checking how many gridlines a span draws.
+    var strideSeconds: TimeInterval {
+        switch component {
+        case .second: return TimeInterval(count)
+        case .minute: return TimeInterval(count * 60)
+        case .hour:   return TimeInterval(count * 3_600)
+        default:      return TimeInterval(count * 86_400)
+        }
+    }
+}
+
+/// What the latency and packet loss sections show in place of a chart.
+enum MonitorReadingState: Equatable {
+    case chart         // two or more readings
+    case measuring     // running, first readings on the way
+    case unreachable   // running, and the last round got no reply at all
+    case idle          // not running
+
+    /// `lastRoundLost` is true when every probe in the latest round went
+    /// unanswered (packet loss 100%).
+    static func decide(isRunning: Bool, readings: Int, lastRoundLost: Bool) -> MonitorReadingState {
+        if readings > 1 { return .chart }
+        if !isRunning { return .idle }
+        return lastRoundLost ? .unreachable : .measuring
+    }
+}
+
+/// An address the Bandwidth Monitor times TCP connections to.
+struct LatencyTarget: Equatable {
+    let host: String
+    let port: UInt16
+
+    /// Tried in order: 1.1.1.1:80 is the usual one; the others are used only
+    /// when it gets no answer and they do.
+    static let all = [LatencyTarget(host: "1.1.1.1", port: 80),
+                      LatencyTarget(host: "1.1.1.1", port: 443),
+                      LatencyTarget(host: "8.8.8.8", port: 443)]
+}
+
+/// The Bandwidth Monitor's latency round: a few TCP connects in a row, each
+/// timed. Blocking; run off the main thread.
+enum LatencyProbe {
+    static let probesPerRound = 4
+    static let timeout: TimeInterval = 3
+    /// A round stops early when this many probes in a row go unanswered
+    /// from the start, so a blocked address is found in about 6 s, not 12.
+    static let giveUpAfter = 2
+    /// While measuring to a backup address, every this many rounds (about
+    /// a minute) SNAP checks whether the usual one answers again.
+    static let retryUsualEvery = 20
+
+    /// Connect times in ms for the probes that got an answer.
+    static func round(to target: LatencyTarget, giveUpAfter: Int = probesPerRound) -> (times: [Double], lost: Int) {
+        round(giveUpAfter: giveUpAfter) { connectTime(to: target) }
+    }
+
+    /// One round of `probe` (ms, or nil for no answer). If the first
+    /// `giveUpAfter` probes all go unanswered the round ends there and
+    /// counts as fully lost.
+    static func round(giveUpAfter: Int, probe: () -> Double?) -> (times: [Double], lost: Int) {
+        var times: [Double] = []
+        for i in 0..<probesPerRound {
+            if let ms = probe() { times.append(ms) }
+            if times.isEmpty && i + 1 >= giveUpAfter { break }
+        }
+        return (times, probesPerRound - times.count)
+    }
+
+    /// Where the next round measures: the usual address again when it's
+    /// time to check and it answers, otherwise `current`.
+    static func nextTarget(current: LatencyTarget, round: Int,
+                           usualAnswers: () -> Bool) -> LatencyTarget {
+        let usual = LatencyTarget.all[0]
+        guard current != usual, round > 0, round % retryUsualEvery == 0 else { return current }
+        return usualAnswers() ? usual : current
+    }
+
+    /// The first of `targets` (in order) that answers one probe, checked
+    /// all at once.
+    static func firstAnswering(_ targets: [LatencyTarget]) -> LatencyTarget? {
+        guard !targets.isEmpty else { return nil }
+        var answered = [Bool](repeating: false, count: targets.count)
+        let lock = NSLock()
+        DispatchQueue.concurrentPerform(iterations: targets.count) { i in
+            let ok = connectTime(to: targets[i]) != nil
+            lock.lock(); answered[i] = ok; lock.unlock()
+        }
+        return zip(targets, answered).first { $0.1 }?.0
+    }
+
+    /// Loss, average and jitter for one round.
+    static func stats(times: [Double], probes: Int) -> (loss: Double, avg: Double, jitter: Double) {
+        guard !times.isEmpty, probes > 0 else { return (100, 0, 0) }
+        let loss = Double(probes - times.count) / Double(probes) * 100
+        let avg = times.reduce(0, +) / Double(times.count)
+        let jitter = times.count > 1
+            ? times.map { abs($0 - avg) }.reduce(0, +) / Double(times.count)
+            : 0
+        return (loss, avg, jitter)
+    }
+
+    /// Whether a connection state is an answer (true), no answer (false),
+    /// or not decided yet (nil). A refused connection is an answer: the
+    /// host sent it back, so the round trip is real. It arrives as
+    /// `.waiting`, which the old code never counted.
+    static func answered(_ state: NWConnection.State) -> Bool? {
+        if case .cancelled = state { return false }
+        guard let status = PortScan.status(for: state) else { return nil }
+        return status != .filtered
+    }
+
+    /// Milliseconds to an answer, or nil if none came within `timeout`.
+    static func connectTime(to target: LatencyTarget) -> Double? {
+        guard let port = NWEndpoint.Port(rawValue: target.port) else { return nil }
+        let conn = NWConnection(host: NWEndpoint.Host(target.host), port: port, using: .tcp)
+        let lock = NSLock()
+        var result: Double?
+        var done = false
+        let sema = DispatchSemaphore(value: 0)
+        let t0 = Date()
+        conn.stateUpdateHandler = { state in
+            guard let ok = answered(state) else { return }
+            lock.lock()
+            if done { lock.unlock(); return }
+            done = true
+            if ok { result = Date().timeIntervalSince(t0) * 1000 }
+            lock.unlock()
+            sema.signal()
+        }
+        conn.start(queue: .global())
+        if sema.wait(timeout: .now() + timeout) == .timedOut {
+            lock.lock(); done = true; lock.unlock()
+        }
+        // Required teardown, answered or not; a connection left open leaked
+        // for the whole session
+        conn.cancel()
+        lock.lock(); defer { lock.unlock() }
+        return result
+    }
+}
+
 // MARK: - Monitor
 
 final class BandwidthMonitor: ObservableObject {
@@ -64,10 +234,27 @@ final class BandwidthMonitor: ObservableObject {
     private var baseRetransmits: UInt32 = 0        // snapshot at session start
     private var baseTCPSent: UInt32 = 0
     private let maxSamples = 120
-    private let pingHost = "1.1.1.1"
+    /// Where latency is measured. Starts at `LatencyTarget.all[0]` and
+    /// moves to the next one only when the current one stops answering but
+    /// another does (a firewall blocking 1.1.1.1:80 used to read as 100%
+    /// packet loss and "Critical" on a working connection).
+    @Published private(set) var latencyTarget = LatencyTarget.all[0]
+    /// A latency round is running. Rounds can take up to 12 s when probes go
+    /// unanswered, and the timer fires every 3 s; without this they piled up.
+    private var latencyRoundRunning = false
+    /// Rounds measured this session, for the periodic check of the usual
+    /// address while on a backup one
+    private var latencyRounds = 0
+    /// Bumped by start() and stop() so a round from an earlier session
+    /// doesn't land in this one.
+    private var latencySession = 0
 
     func start() {
         isRunning = true
+        latencySession += 1
+        latencyRoundRunning = false
+        latencyRounds = 0
+        latencyTarget = LatencyTarget.all[0]
         samples = []; latencyHistory = []; packetLossHistory = []
         currentRx = 0; currentTx = 0
         peakRx = 0; peakTx = 0
@@ -109,6 +296,8 @@ final class BandwidthMonitor: ObservableObject {
         timer?.invalidate(); latencyTimer?.invalidate()
         sessionTimer?.invalidate(); ispTimer?.invalidate()
         timer = nil; latencyTimer = nil; sessionTimer = nil; ispTimer = nil
+        latencySession += 1
+        latencyRoundRunning = false
         isRunning = false
     }
 
@@ -152,78 +341,48 @@ final class BandwidthMonitor: ObservableObject {
         lastRx = rx; lastTx = tx; lastTime = now
     }
 
-    // MARK: Latency + jitter + packet loss via TCP connect to 1.1.1.1:80
+    // MARK: Latency + jitter + packet loss via TCP connect
 
     private func measureLatency() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self else { return }
-            // `times`/`lost`/`resolved` are shared between this loop and the
-            // state handler running on a Network.framework queue — the lock
-            // makes that safe even when a handler fires after the 3s timeout
-            var times: [Double] = []
-            var lost = 0
-            let lock = NSLock()
+        // Main thread (the timer runs on the main run loop)
+        guard !latencyRoundRunning else { return }
+        latencyRoundRunning = true
+        latencyRounds += 1
+        let session = latencySession
+        let roundNumber = latencyRounds
+        let current = latencyTarget
 
-            for _ in 0..<4 {
-                guard let port = NWEndpoint.Port(rawValue: 80) else { continue }
-                let conn = NWConnection(host: "1.1.1.1", port: port, using: .tcp)
-                var resolved = false
-                let t0 = Date()
-                let sema = DispatchSemaphore(value: 0)
-                conn.stateUpdateHandler = { state in
-                    lock.lock()
-                    if resolved { lock.unlock(); return }
-                    switch state {
-                    case .ready:
-                        resolved = true
-                        times.append(Date().timeIntervalSince(t0) * 1000)
-                        lock.unlock()
-                        conn.cancel()
-                        sema.signal()
-                    case .failed:
-                        resolved = true
-                        lost += 1
-                        lock.unlock()
-                        conn.cancel()
-                        sema.signal()
-                    default:
-                        lock.unlock()
-                    }
-                }
-                conn.start(queue: .global())
-                if sema.wait(timeout: .now() + 3) == .timedOut {
-                    // A connection stuck in .preparing/.waiting counts as
-                    // lost, and must be cancelled — this leaked one
-                    // NWConnection per sample for the whole session
-                    lock.lock()
-                    if !resolved { resolved = true; lost += 1 }
-                    lock.unlock()
-                    conn.cancel()
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            // Back to the usual address once it answers again
+            let target = LatencyProbe.nextTarget(current: current, round: roundNumber) {
+                LatencyProbe.connectTime(to: LatencyTarget.all[0]) != nil
+            }
+            var used = target
+            var round = LatencyProbe.round(to: target, giveUpAfter: LatencyProbe.giveUpAfter)
+            if round.times.isEmpty {
+                // Nothing answered. Is it this address or the connection?
+                // If another target answers, measure there instead of
+                // reporting a blocked port as packet loss.
+                if let alt = LatencyProbe.firstAnswering(LatencyTarget.all.filter { $0 != target }) {
+                    used = alt
+                    round = LatencyProbe.round(to: alt)
                 }
             }
-
-            lock.lock()
-            let sampleTimes = times
-            let sampleLost = lost
-            lock.unlock()
-
-            let loss = sampleTimes.isEmpty ? 100.0 : Double(sampleLost) / 4.0 * 100.0
-            let avg  = sampleTimes.isEmpty ? 0.0 : sampleTimes.reduce(0,+) / Double(sampleTimes.count)
-            let jit  = sampleTimes.count > 1
-                ? sampleTimes.map { abs($0 - avg) }.reduce(0,+) / Double(sampleTimes.count)
-                : 0.0
+            let stats = LatencyProbe.stats(times: round.times, probes: LatencyProbe.probesPerRound)
 
             DispatchQueue.main.async { [weak self] in
-                guard let s = self else { return }
-                s.latencyMs   = avg
-                s.jitterMs    = jit
-                s.packetLoss  = loss
-                if avg > 0 {
-                    s.latencyHistory.append(avg)
+                guard let s = self, s.latencySession == session else { return }
+                s.latencyRoundRunning = false
+                if used != s.latencyTarget { s.latencyTarget = used }
+                s.latencyMs   = stats.avg
+                s.jitterMs    = stats.jitter
+                s.packetLoss  = stats.loss
+                if stats.avg > 0 {
+                    s.latencyHistory.append(stats.avg)
                     if s.latencyHistory.count > 60 { s.latencyHistory.removeFirst() }
                 }
                 // Always record loss (0% is valid data)
-                s.packetLossHistory.append(loss)
+                s.packetLossHistory.append(stats.loss)
                 if s.packetLossHistory.count > 60 { s.packetLossHistory.removeFirst() }
                 s.sampleTCPRetransmits()
                 s.updateQuality()
@@ -396,6 +555,7 @@ struct BandwidthMonitorView: View {
     @State private var historySamples: [BandwidthSample] = []
     @State private var historyRowCount: Int = 0
     @State private var isLoadingHistory: Bool = false
+    @State private var confirmClearAll = false
 
     private let green  = NS.green
     private let blue   = NS.blue
@@ -423,6 +583,15 @@ struct BandwidthMonitorView: View {
         .onDisappear { monitor.stop() }
         .onChange(of: range) { reloadHistory() }
         .onChange(of: monitor.selectedInterface) { if range != .live { reloadHistory() } }
+        .confirmationDialog("Clear all bandwidth history?", isPresented: $confirmClearAll) {
+            Button("Clear History", role: .destructive) {
+                BandwidthHistoryStore.shared.clearAll()
+                historySamples = []
+                historyRowCount = 0
+            }
+        } message: {
+            Text("This deletes the saved bandwidth history for every interface. It can't be undone.")
+        }
     }
 
     @ViewBuilder
@@ -439,19 +608,28 @@ struct BandwidthMonitorView: View {
         } else {
             ScrollView {
                 VStack(spacing: 0) {
-                    statsRow
-                    Divider()
-                    qualityRow
+                    // The stats, quality, latency and loss sections read the
+                    // running monitor, so in a history range they'd show live
+                    // or stale values beside saved charts. Only Live has them.
+                    if range.isLive {
+                        statsRow
+                        Divider()
+                        qualityRow
+                    } else {
+                        historyNote
+                    }
                     Divider()
                     bandwidthChart(samples: displayedSamples, valueKey: \.rxBps,
                                    color: green, label: "Download (RX)")
                     Divider()
                     bandwidthChart(samples: displayedSamples, valueKey: \.txBps,
                                    color: blue, label: "Upload (TX)")
-                    Divider()
-                    latencySection
-                    Divider()
-                    packetLossSection
+                    if range.isLive {
+                        Divider()
+                        latencySection
+                        Divider()
+                        packetLossSection
+                    }
                 }
             }
         }
@@ -489,11 +667,7 @@ struct BandwidthMonitorView: View {
 
             Menu {
                 Button("Refresh", action: reloadHistory)
-                Button("Clear all history…", role: .destructive) {
-                    BandwidthHistoryStore.shared.clearAll()
-                    historySamples = []
-                    historyRowCount = 0
-                }
+                Button("Clear all history…", role: .destructive) { confirmClearAll = true }
             } label: {
                 Image(systemName: "ellipsis.circle").font(.system(size: 12))
             }
@@ -571,6 +745,20 @@ struct BandwidthMonitorView: View {
             statCell("TOTAL TX",   formatBytes(monitor.totalTx), color: .cyan)
         }
         .padding(.vertical, 10)
+        .background(NS.bg3)
+    }
+
+    // MARK: History note
+
+    private var historyNote: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "info.circle").foregroundStyle(NS.blue)
+            Text("Saved history shows download and upload. Current speed, totals, latency, packet loss and connection quality are live readings, so they're in the Live range.")
+                .font(.caption).foregroundStyle(NS.text2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
         .background(NS.bg3)
     }
 
@@ -676,6 +864,17 @@ struct BandwidthMonitorView: View {
 
     // MARK: Latency section
 
+    private var latencyState: MonitorReadingState {
+        .decide(isRunning: monitor.isRunning, readings: monitor.latencyHistory.count,
+                lastRoundLost: monitor.packetLossHistory.last == 100)
+    }
+
+    private var latencyNow: String {
+        if monitor.latencyMs > 0 { return String(format: "%.1f ms now", monitor.latencyMs) }
+        if !monitor.isRunning { return "Not running" }
+        return monitor.packetLossHistory.last == 100 ? "No reply" : "Measuring…"
+    }
+
     private var latencySection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
@@ -684,13 +883,20 @@ struct BandwidthMonitorView: View {
                 Text("Latency (ms)")
                     .font(.caption.bold()).foregroundStyle(.secondary)
                 Spacer()
-                Text(monitor.latencyMs > 0 ? String(format: "%.1f ms now", monitor.latencyMs) : "Measuring…")
+                Text(latencyNow)
                     .font(.caption.bold().monospaced()).foregroundStyle(latencyColor)
                 Text("· sampled every 3s").font(.caption2).foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
 
-            if monitor.latencyHistory.count > 1 {
+            switch latencyState {
+            case .measuring:
+                measuringPlaceholder("Measuring latency to \(monitor.latencyTarget.host)…")
+            case .unreachable:
+                readingMessage("Can't reach 1.1.1.1 or 8.8.8.8 to measure latency. You may be offline, or a firewall or VPN may be blocking them. The bandwidth figures above are still accurate.")
+            case .idle:
+                readingMessage("Latency is measured every 3 seconds while the monitor runs. Click Start to measure it.")
+            case .chart:
                 Chart {
                     ForEach(Array(monitor.latencyHistory.enumerated()), id: \.offset) { i, v in
                         let segColor: Color = v > 150 ? .red : v > 80 ? .yellow : .green
@@ -736,17 +942,31 @@ struct BandwidthMonitorView: View {
                     legendPill(color: .red,    label: "Poor (>150ms)")
                 }
                 .padding(.horizontal, 16).padding(.bottom, 12)
-            } else {
-                HStack {
-                    ProgressView().scaleEffect(0.7)
-                    Text("Measuring latency to 1.1.1.1…")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .frame(height: 60)
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 12)
             }
         }
+    }
+
+    private func measuringPlaceholder(_ text: String) -> some View {
+        HStack {
+            ProgressView().scaleEffect(0.7)
+            Text(text)
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(height: 60)
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 12)
+    }
+
+    /// In place of a chart that has nothing to show, and no spinner, since
+    /// nothing is on the way.
+    private func readingMessage(_ text: String) -> some View {
+        Text(text)
+            .font(.caption).foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(minHeight: 60)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16).padding(.bottom, 12)
     }
 
     // MARK: Packet loss section
@@ -765,7 +985,14 @@ struct BandwidthMonitorView: View {
             }
             .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
 
-            if monitor.packetLossHistory.count > 1 {
+            switch MonitorReadingState.decide(isRunning: monitor.isRunning,
+                                              readings: monitor.packetLossHistory.count,
+                                              lastRoundLost: false) {
+            case .measuring, .unreachable:
+                measuringPlaceholder("Measuring packet loss…")
+            case .idle:
+                readingMessage("Packet loss is measured every 3 seconds while the monitor runs. Click Start to measure it.")
+            case .chart:
                 Chart {
                     // Reference lines — labels on y-axis, no trailing annotations
                     RuleMark(y: .value("Threshold", 1.0))
@@ -825,16 +1052,6 @@ struct BandwidthMonitorView: View {
                     legendPill(color: .red,    label: "Critical (>5%)")
                 }
                 .padding(.horizontal, 16).padding(.bottom, 12)
-
-            } else {
-                HStack {
-                    ProgressView().scaleEffect(0.7)
-                    Text("Measuring packet loss…")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .frame(height: 60)
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 12)
             }
         }
     }
@@ -847,6 +1064,7 @@ struct BandwidthMonitorView: View {
                                  color: Color, label: String) -> some View {
         let values = samples.map { $0[keyPath: valueKey] }
         let peakBps = values.max() ?? 1
+        let axis = BandwidthTimeAxis.forSamples(samples)
         let (divisor, unit): (Double, String) = {
             if peakBps >= 1_000_000_000 { return (1_000_000_000, "GB/s") }
             if peakBps >= 1_000_000     { return (1_000_000,     "MB/s") }
@@ -889,11 +1107,11 @@ struct BandwidthMonitorView: View {
                 }
             }
             .chartXAxis {
-                AxisMarks(values: .stride(by: .second, count: 15)) { _ in
+                AxisMarks(values: .stride(by: axis.component, count: axis.count)) { _ in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4,4]))
                         .foregroundStyle(Color.secondary.opacity(0.3))
                     AxisTick()
-                    AxisValueLabel(format: .dateTime.minute().second()).foregroundStyle(ChartAxis.text)
+                    AxisValueLabel(format: axis.format).foregroundStyle(ChartAxis.text)
                 }
             }
             .frame(height: 160)

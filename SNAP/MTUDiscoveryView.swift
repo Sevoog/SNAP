@@ -19,6 +19,10 @@ struct MTUDiscoveryView: View {
     @State private var isRunning = false
     @State private var bestPayload: Int? = nil
     @State private var error = ""
+    @State private var runTask: Task<Void, Never>?
+    // Identifies the current run, so a stopped run's last ping can't add a
+    // step or a result to the next one
+    @State private var runID = UUID()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,6 +36,9 @@ struct MTUDiscoveryView: View {
             }
         }
         .tabNavigationTitle(.mtuDiscovery)
+        // Runs when the window closes (tabs stay alive across switches), so
+        // the search doesn't keep pinging with nothing left to stop it
+        .onDisappear { stop() }
     }
 
     private var toolbar: some View {
@@ -63,6 +70,7 @@ struct MTUDiscoveryView: View {
     private var hostField: some View {
         TextField("Host or IP", text: $host)
             .textFieldStyle(.roundedBorder)
+            .onSubmit(submit)
     }
 
     private var rangeFields: some View {
@@ -70,9 +78,11 @@ struct MTUDiscoveryView: View {
             Text("Range").font(.caption).foregroundStyle(.secondary)
             TextField("", value: $lowerBound, format: .number)
                 .textFieldStyle(.roundedBorder).frame(width: 60)
+                .onSubmit(submit)
             Text("–").foregroundStyle(.secondary)
             TextField("", value: $upperBound, format: .number)
                 .textFieldStyle(.roundedBorder).frame(width: 60)
+                .onSubmit(submit)
         }
         .fixedSize()
     }
@@ -86,12 +96,30 @@ struct MTUDiscoveryView: View {
             .opacity(steps.isEmpty ? 0 : 1)
             .disabled(steps.isEmpty)
             .accessibilityHidden(steps.isEmpty)
-        Button(isRunning ? "Searching…" : "Discover") { run() }
-            .buttonStyle(.borderedProminent)
-            .disabled(isRunning || host.isEmpty)
-            .keyboardShortcut(.return)
-            .fixedSize()
-        if isRunning { ProgressView().controlSize(.small) }
+        if isRunning {
+            Button("Stop") { stop() }
+                .buttonStyle(.bordered).tint(.red)
+                .fixedSize()
+            ProgressView().controlSize(.small)
+        } else {
+            Button("Discover") { run() }
+                .buttonStyle(.borderedProminent)
+                .disabled(host.isEmpty)
+                .keyboardShortcut(.return)
+                .fixedSize()
+        }
+    }
+
+    /// Return in a toolbar field: same conditions as the Discover button.
+    private func submit() {
+        if !isRunning && !host.isEmpty { run() }
+    }
+
+    private func stop() {
+        runID = UUID()  // drop the stopped run's in-flight ping
+        runTask?.cancel()
+        runTask = nil
+        isRunning = false
     }
 
     private var errorBar: some View {
@@ -206,25 +234,37 @@ struct MTUDiscoveryView: View {
         let hi = upperBound
 
         isRunning = true
+        let id = UUID()
+        runID = id
+        // False once Stop is pressed or a newer run has started
+        func current() -> Bool { !Task.isCancelled && runID == id }
 
-        Task {
+        runTask = Task {
             // Binary search: largest payload that passes with DF set
             var low = lo
             var high = hi
             var best: Int? = nil
             var attempt = 0
 
+            // First make sure the host answers at all. Any failed first ping
+            // (unknown name, ICMP blocked, offline) used to be reported as
+            // the lower bound fragmenting.
+            let answers = await Self.pingDF(host: h, payload: Self.reachabilityPayload)
+            guard current() else { return }
+            if !answers {
+                error = Self.noAnswerMessage(host: h)
+                isRunning = false
+                return
+            }
+
             // Sanity check: lower bound first
             attempt += 1
             let loPassed = await Self.pingDF(host: h, payload: low)
-            await MainActor.run {
-                steps.append(MTUStep(attempt: attempt, payload: low, passed: loPassed))
-            }
+            guard current() else { return }
+            steps.append(MTUStep(attempt: attempt, payload: low, passed: loPassed))
             if !loPassed {
-                await MainActor.run {
-                    error = "Lower bound \(low) already fragments. Try a smaller lower bound."
-                    isRunning = false
-                }
+                error = "Lower bound \(low) already fragments. Try a smaller lower bound."
+                isRunning = false
                 return
             }
             best = low
@@ -232,14 +272,11 @@ struct MTUDiscoveryView: View {
             // Sanity check: upper bound
             attempt += 1
             let hiPassed = await Self.pingDF(host: h, payload: high)
-            await MainActor.run {
-                steps.append(MTUStep(attempt: attempt, payload: high, passed: hiPassed))
-            }
+            guard current() else { return }
+            steps.append(MTUStep(attempt: attempt, payload: high, passed: hiPassed))
             if hiPassed {
-                await MainActor.run {
-                    bestPayload = high
-                    isRunning = false
-                }
+                bestPayload = high
+                isRunning = false
                 return
             }
 
@@ -248,23 +285,33 @@ struct MTUDiscoveryView: View {
                 attempt += 1
                 let mid = (low + high) / 2
                 let ok = await Self.pingDF(host: h, payload: mid)
-                await MainActor.run {
-                    steps.append(MTUStep(attempt: attempt, payload: mid, passed: ok))
-                }
+                guard current() else { return }
+                steps.append(MTUStep(attempt: attempt, payload: mid, passed: ok))
                 if ok { best = mid; low = mid } else { high = mid }
             }
 
-            await MainActor.run {
-                bestPayload = best
-                isRunning = false
-            }
+            bestPayload = best
+            isRunning = false
         }
+    }
+
+    /// Payload for the "does it answer at all" ping: small enough that it
+    /// never needs fragmenting.
+    nonisolated static let reachabilityPayload = 56
+
+    nonisolated static func noAnswerMessage(host: String) -> String {
+        "\(host) didn't answer a ping, so SNAP can't measure the path. Check the address, or try a host that answers ping, such as 1.1.1.1."
     }
 
     /// Sends a single DF-set ICMP echo via system ping. Returns true if it gets through.
     fileprivate static func pingDF(host: String, payload: Int) async -> Bool {
         let out = await Shell.run("/sbin/ping",
                                   args: ["-c", "1", "-W", "2000", "-D", "-s", "\(payload)", host])
+        return pingPassed(out)
+    }
+
+    /// Reads one `ping -c 1` run's output: true if the echo came back.
+    nonisolated static func pingPassed(_ out: String) -> Bool {
         // Successful: "1 packets transmitted, 1 packets received"
         // Fail w/ DF: "Message too long" or "0 packets received"
         if out.contains("Message too long") { return false }

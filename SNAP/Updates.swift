@@ -11,8 +11,9 @@
 //
 // "Check for Updates…" only contacts GitHub when clicked. Automatic checks
 // (at most once a day) are off until the user turns them on; SNAP asks once,
-// after the Quick Tour or the "What's new" sheet, and the choice can be
-// changed any time from the SNAP menu.
+// after the Quick Tour or the "What's new" sheet. The choice can be changed
+// from the checkbox shown after any "Check for Updates…" (up to date, update
+// available, or couldn't check). It moves to the Settings window later.
 //
 // A check sends GitHub the request itself (so your IP address) and SNAP's
 // version in the User-Agent. It uses an ephemeral session, so no cookies or
@@ -150,7 +151,7 @@ final class UpdateChecker: ObservableObject {
         It never downloads or installs anything on its own.
 
         Each check sends GitHub your IP address and SNAP's version, nothing else. \
-        You can change this any time in the SNAP menu.
+        To change this later, choose SNAP > Check for Updates…
         """
         alert.addButton(withTitle: "Check Automatically")
         alert.addButton(withTitle: "Not Now")
@@ -204,7 +205,7 @@ final class UpdateChecker: ObservableObject {
     private func finish(release: ReleaseInfo?, status: Int, error: Error?, userInitiated: Bool) {
         isChecking = false
         guard let release, status == 200 else {
-            if userInitiated { Self.showFailure(status: status, error: error) }
+            if userInitiated { showFailure(status: status, error: error) }
             return
         }
         defaults.set(Date(), forKey: Keys.lastCheck)
@@ -242,14 +243,29 @@ final class UpdateChecker: ObservableObject {
 
     // MARK: Alerts
 
+    /// The checkbox under a manual check's result, for turning automatic
+    /// checks on or off.
+    static let autoCheckLabel = "Check for updates automatically"
+
+    /// Runs `alert` with the automatic-checks checkbox under it and saves
+    /// the checkbox when the alert closes.
+    private func runWithAutoCheckBox(_ alert: NSAlert) {
+        alert.showsSuppressionButton = true
+        alert.suppressionButton?.title = Self.autoCheckLabel
+        alert.suppressionButton?.state = autoCheck ? .on : .off
+        alert.runModal()
+        let ticked = alert.suppressionButton?.state == .on
+        if ticked != autoCheck { autoCheck = ticked }
+    }
+
     private func showUpToDate() {
         let alert = NSAlert()
         alert.messageText = "You're up to date"
         alert.informativeText = "SNAP \(currentVersion) is the latest version."
-        alert.runModal()
+        runWithAutoCheckBox(alert)
     }
 
-    private static func showFailure(status: Int, error: Error?) {
+    private func showFailure(status: Int, error: Error?) {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Couldn't check for updates"
@@ -261,7 +277,7 @@ final class UpdateChecker: ObservableObject {
         default:
             alert.informativeText = error?.localizedDescription ?? "GitHub didn't answer. Check your connection and try again."
         }
-        alert.runModal()
+        runWithAutoCheckBox(alert)
     }
 }
 
@@ -298,6 +314,10 @@ struct UpdateAvailableSheet: View {
             .frame(minHeight: 220, maxHeight: 340)
             .background(NS.bg2)
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            Toggle(UpdateChecker.autoCheckLabel, isOn: $checker.autoCheck)
+                .toggleStyle(.checkbox)
+                .font(.system(size: 12))
+                .foregroundStyle(NS.text1)
             HStack {
                 Button("Skip This Version") { checker.skip(release) }
                 Spacer()
@@ -320,8 +340,21 @@ struct UpdateAvailableSheet: View {
 /// release; a release with nothing visible to announce leaves `items` empty
 /// and shows no sheet.
 enum WhatsNew {
-    static let version = "1.5.9"
-    static let items: [(symbol: String, title: String, detail: String)] = []
+    static let version = "1.5.10"
+    static let items: [(symbol: String, title: String, detail: String)] = [
+        ("return", "Return runs every tool",
+         "Type a host and press Return to start. ⌘Return still works."),
+        ("stop.circle", "Stop really stops",
+         "Port Scan, Network Map, MTR, MTU Discovery, and Bulk Discovery stop right away and keep what they found."),
+        ("speedometer", "Speed Test fixes",
+         "Larger tests upload the full amount, a failed test isn't saved to history, and the history chart shows download and upload side by side."),
+        ("lock.shield", "More from the SSL/TLS Checker",
+         "It now shows the TLS version, cipher, key, issuer, and whether macOS trusts the certificate."),
+        ("power", "Wake-on-LAN remembers devices",
+         "Devices you add are saved between launches, and each has a Delete button."),
+        ("exclamationmark.bubble", "No more silent failures",
+         "Tools that used to fail quietly or look like they worked now say what went wrong."),
+    ]
 
     static let lastSeenKey = "com.sevagbardakjian.snap.whatsNew.lastSeenVersion"
 

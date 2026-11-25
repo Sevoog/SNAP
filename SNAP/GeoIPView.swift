@@ -37,6 +37,7 @@ struct GeoIPResult {
     var timezone: String = ""
     var timezoneAbbr: String = ""
     var timezoneUTC: String = ""
+    var timezoneOffset: Int?        // seconds from UTC
     var currentTime: String = ""
     // Security signals (present on some responses)
     var isAnonymous: Bool = false
@@ -202,6 +203,7 @@ final class GeoIPViewModel: ObservableObject {
                     r.timezone      = tz["id"]           as? String ?? ""
                     r.timezoneAbbr  = tz["abbr"]         as? String ?? ""
                     r.timezoneUTC   = tz["utc"]          as? String ?? ""
+                    r.timezoneOffset = tz["offset"]      as? Int
                     r.currentTime   = tz["current_time"] as? String ?? ""
                 }
 
@@ -277,6 +279,8 @@ struct GeoIPMapView: View {
 
 struct GeoIPView: View {
     @State private var query = ""
+    /// "My IP" clears the field, so Try Again needs to know what to repeat
+    @State private var lastLookupWasMyIP = false
     @StateObject private var model = GeoIPViewModel()
 
     var body: some View {
@@ -301,7 +305,7 @@ struct GeoIPView: View {
             TextField("IP address or hostname…", text: $query)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 290)
-                .onSubmit { performLookup() }
+                .onSubmit { if !model.isLoading { performLookup() } }
             HistoryMenuButton(key: .geoIP) { query = $0 }
 
             Button("Lookup") { performLookup() }
@@ -310,7 +314,7 @@ struct GeoIPView: View {
 
             Button("My IP") {
                 query = ""
-                model.lookupMyIP()
+                lookUpMyIP()
             }
             .buttonStyle(.bordered)
             .disabled(model.isLoading)
@@ -373,7 +377,7 @@ struct GeoIPView: View {
                 .foregroundStyle(NS.text3)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
-            Button("Look Up My IP") { model.lookupMyIP() }
+            Button("Look Up My IP") { lookUpMyIP() }
                 .buttonStyle(.borderedProminent)
                 .padding(.top, 4)
             Spacer()
@@ -398,9 +402,11 @@ struct GeoIPView: View {
                 .foregroundStyle(NS.text3)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 340)
-            Button("Try Again") { performLookup() }
-                .buttonStyle(.bordered)
-                .disabled(query.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("Try Again") {
+                if lastLookupWasMyIP { lookUpMyIP() } else { performLookup() }
+            }
+            .buttonStyle(.bordered)
+            .disabled(!lastLookupWasMyIP && query.trimmingCharacters(in: .whitespaces).isEmpty)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -497,8 +503,8 @@ struct GeoIPView: View {
                     sectionBox(title: "Timezone", icon: "clock") {
                         infoRow("Timezone",   value: result.timezone,     mono: true)
                         infoRow("Abbr / UTC", value: "\(result.timezoneAbbr)  (\(result.timezoneUTC))", mono: true)
-                        if !result.currentTime.isEmpty {
-                            infoRow("Local Time", value: formatTime(result.currentTime))
+                        if let local = GeoIPViewModel.localTime(timezoneID: result.timezone, offset: result.timezoneOffset) {
+                            infoRow("Local Time", value: local)
                         }
                     }
                 }
@@ -671,18 +677,26 @@ struct GeoIPView: View {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return }
         ToolHistory.shared.add(.geoIP, q)
+        lastLookupWasMyIP = false
         model.lookup(query: q)
     }
 
-    private func formatTime(_ iso: String) -> String {
-        // ipwho.is returns ISO 8601 with offset, e.g. "2026-04-29T10:30:00-07:00"
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        if let date = f.date(from: iso) {
-            let df = DateFormatter()
-            df.dateFormat = "MMM d, yyyy · h:mm a"
-            return df.string(from: date)
-        }
-        return iso
+    private func lookUpMyIP() {
+        lastLookupWasMyIP = true
+        model.lookupMyIP()
+    }
+}
+
+extension GeoIPViewModel {
+    /// The time at the target, in the target's time zone. This used to format
+    /// ipwho.is's current_time in the Mac's own zone; ipwho.is no longer sends
+    /// current_time (checked 2026-11-20), so it's computed from the zone id,
+    /// falling back to the UTC offset in seconds.
+    static func localTime(timezoneID: String, offset: Int?, now: Date = Date()) -> String? {
+        guard let zone = TimeZone(identifier: timezoneID) ?? offset.flatMap({ TimeZone(secondsFromGMT: $0) }) else { return nil }
+        let df = DateFormatter()
+        df.timeZone = zone
+        df.dateFormat = "MMM d, yyyy · h:mm a"
+        return df.string(from: now)
     }
 }

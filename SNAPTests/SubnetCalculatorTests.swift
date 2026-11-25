@@ -118,4 +118,96 @@ final class SubnetCalculatorTests: XCTestCase {
     func test_invalid_ipGarbage() {
         XCTAssertNil(SubnetCalculator.calculate(ip: "not.an.ip.addr", cidr: 24))
     }
+
+    // MARK: Strict parsing (1.5.10): compactMap used to drop the bad parts
+
+    func test_parseIPv4_isStrict() {
+        XCTAssertEqual(SubnetCalculator.parseIPv4("192.168.1.10"), 0xC0A8010A)
+        XCTAssertEqual(SubnetCalculator.parseIPv4(" 10.0.0.1 "), 0x0A000001)
+        for bad in ["1.2.x.3.4", "1..2.3.4", "1.2.3.4.", "1.2.3", "1.2.3.256", "1.2.3.-1", "1.2.3.4 5", "", "1234.1.1.1"] {
+            XCTAssertNil(SubnetCalculator.parseIPv4(bad), bad)
+        }
+    }
+
+    func test_prefixLength_validMasks() {
+        XCTAssertEqual(SubnetCalculator.prefixLength(fromMask: "255.255.255.0"), 24)
+        XCTAssertEqual(SubnetCalculator.prefixLength(fromMask: "255.255.240.0"), 20)
+        XCTAssertEqual(SubnetCalculator.prefixLength(fromMask: "255.255.255.255"), 32)
+        XCTAssertEqual(SubnetCalculator.prefixLength(fromMask: "0.0.0.0"), 0)
+        XCTAssertEqual(SubnetCalculator.prefixLength(fromMask: "128.0.0.0"), 1)
+    }
+
+    func test_prefixLength_rejectsNonContiguousAndOutOfRange() {
+        for bad in ["255.0.255.0", "255.255.0.255", "0.255.255.255", "255.255.255.1", "255.256.0.0", "255.255", "mask"] {
+            XCTAssertNil(SubnetCalculator.prefixLength(fromMask: bad), bad)
+        }
+    }
+
+    func test_evaluate_reportsWhichInputIsWrong() {
+        XCTAssertEqual(errorOf(SubnetCalculator.evaluate(ip: "300.1.1.1", mask: nil, cidr: 24)), .invalidAddress)
+        XCTAssertEqual(errorOf(SubnetCalculator.evaluate(ip: "", mask: nil, cidr: 24)), .invalidAddress)
+        // A bad mask no longer falls back to the slider value
+        XCTAssertEqual(errorOf(SubnetCalculator.evaluate(ip: "10.0.0.1", mask: "255.0.255.0", cidr: 24)), .invalidMask)
+        XCTAssertEqual(errorOf(SubnetCalculator.evaluate(ip: "10.0.0.1", mask: "garbage", cidr: 24)), .invalidMask)
+        if case .success(let s) = SubnetCalculator.evaluate(ip: "10.0.0.1", mask: "255.255.252.0", cidr: 24) {
+            XCTAssertEqual(s.cidr, 22)
+        } else {
+            XCTFail("valid mask rejected")
+        }
+        if case .success(let s) = SubnetCalculator.evaluate(ip: "10.0.0.1", mask: nil, cidr: 16) {
+            XCTAssertEqual(s.cidr, 16)
+        } else {
+            XCTFail("CIDR mode rejected")
+        }
+    }
+
+    func test_errorMessages() {
+        XCTAssertEqual(SubnetInputError.invalidAddress.message,
+                       "Enter an IPv4 address such as 192.168.1.10. Each of the four numbers must be 0 to 255.")
+        XCTAssertEqual(SubnetInputError.invalidMask.message,
+                       "That isn't a valid subnet mask. Masks are a run of 255s followed by lower numbers, like 255.255.255.0.")
+    }
+
+    // MARK: Address type (1.5.10): special ranges used to read "Public"
+
+    func test_addressType_specialRanges() throws {
+        let cases: [(String, String)] = [
+            ("10.1.2.3", "Private (RFC 1918)"),
+            ("172.31.255.1", "Private (RFC 1918)"),
+            ("192.168.0.1", "Private (RFC 1918)"),
+            ("100.64.0.1", "Carrier-grade NAT (RFC 6598)"),
+            ("100.127.255.254", "Carrier-grade NAT (RFC 6598)"),
+            ("127.0.0.1", "Loopback"),
+            ("169.254.10.20", "Link-local"),
+            ("224.0.0.251", "Multicast"),
+            ("239.255.255.250", "Multicast"),
+            ("240.0.0.1", "Reserved"),
+            ("255.255.255.255", "Broadcast"),
+            ("0.1.2.3", "Reserved (this network)"),
+            ("192.0.2.5", "Documentation (RFC 5737)"),
+            ("198.51.100.5", "Documentation (RFC 5737)"),
+            ("203.0.113.5", "Documentation (RFC 5737)"),
+            ("198.18.0.1", "Benchmarking (RFC 2544)"),
+            ("192.0.0.8", "Reserved (IETF protocol assignments)"),
+            ("8.8.8.8", "Public"),
+            ("100.128.0.1", "Public"),
+            ("172.32.0.1", "Public"),
+        ]
+        for (ip, label) in cases {
+            let info = try XCTUnwrap(SubnetCalculator.calculate(ip: ip, cidr: 24), ip)
+            XCTAssertEqual(info.addressType, label, ip)
+            XCTAssertEqual(info.isPrivate, label == "Private (RFC 1918)", ip)
+        }
+    }
+
+    func test_addressType_followsTheAddressNotTheNetwork() throws {
+        // 10.1.2.3/4 has network 0.0.0.0, but the address typed is private
+        let info = try XCTUnwrap(SubnetCalculator.calculate(ip: "10.1.2.3", cidr: 4))
+        XCTAssertEqual(info.addressType, "Private (RFC 1918)")
+    }
+
+    private func errorOf(_ r: Result<SubnetInfo, SubnetInputError>) -> SubnetInputError? {
+        if case .failure(let e) = r { return e }
+        return nil
+    }
 }

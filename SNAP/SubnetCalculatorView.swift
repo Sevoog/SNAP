@@ -12,20 +12,18 @@ struct SubnetCalculatorView: View {
     @State private var cidr = 24.0
     @State private var subnetMaskInput = "255.255.255.0"
     @State private var info: SubnetInfo?
+    @State private var inputError: SubnetInputError?
     @State private var inputMode: InputMode = .cidr
 
     enum InputMode: String, CaseIterable { case cidr = "CIDR", mask = "Subnet Mask" }
 
-    private var cidrFromMask: Int? {
-        let parts = subnetMaskInput.split(separator: ".").compactMap { UInt32($0) }
-        guard parts.count == 4 else { return nil }
-        let maskInt = (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]
-        return (0..<32).reduce(0) { $0 + Int((maskInt >> (31 - $1)) & 1) }
-    }
-
     private func calculate() {
-        let c = inputMode == .cidr ? Int(cidr) : (cidrFromMask ?? Int(cidr))
-        info = SubnetCalculator.calculate(ip: ipAddress, cidr: c)
+        // An unparseable mask used to fall back to the slider value silently
+        let mask = inputMode == .mask ? subnetMaskInput : nil
+        switch SubnetCalculator.evaluate(ip: ipAddress, mask: mask, cidr: Int(cidr)) {
+        case .success(let s): info = s; inputError = nil
+        case .failure(let e): info = nil; inputError = e
+        }
     }
 
     var body: some View {
@@ -50,6 +48,7 @@ struct SubnetCalculatorView: View {
                         // label until it wraps (same bug as the Network Map's
                         // "View" picker).
                         .fixedSize()
+                        .onChange(of: inputMode, { _, _ in calculate() })
 
                         if inputMode == .cidr {
                             HStack {
@@ -68,6 +67,16 @@ struct SubnetCalculatorView: View {
                                     .textFieldStyle(.roundedBorder)
                                     .frame(width: 200)
                                     .onChange(of: subnetMaskInput, { _, _ in calculate() })
+                            }
+                        }
+
+                        if let inputError {
+                            HStack(alignment: .top, spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(NS.red)
+                                Text(inputError.message)
+                                    .font(.caption)
+                                    .foregroundStyle(NS.red)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
 
@@ -97,7 +106,7 @@ struct SubnetCalculatorView: View {
                         VStack(spacing: 8) {
                             detailRow("IP Class", s.ipClass)
                             detailRow("CIDR Notation", "\(s.address)/\(s.cidr)")
-                            detailRow("Address Type", s.isPrivate ? "Private (RFC 1918)" : "Public")
+                            detailRow("Address Type", s.addressType)
                             detailRow("Binary Mask", s.binaryMask)
                         }
                         .padding(8)

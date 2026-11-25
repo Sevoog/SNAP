@@ -28,6 +28,10 @@ final class ConnectionSummary: ObservableObject {
     @Published var primaryIfaceDisplay:  String  = "Detecting…"
     @Published var primaryMediaIcon:     String  = "network"
     @Published var ssid:                 String? = nil
+    /// The default route runs over the Wi-Fi interface (with or without an SSID).
+    @Published var onWiFi:               Bool    = false
+    /// On Wi-Fi with no SSID because SNAP lacks Location access.
+    @Published var wifiNameNeedsLocation: Bool   = false
 
     // Local network info for the primary interface
     @Published var hostname:    String  = ProcessInfo.processInfo.hostName
@@ -89,8 +93,11 @@ final class ConnectionSummary: ObservableObject {
 
         vpnActive = Self.hasActiveVPNTunnel()
 
-        // Wi-Fi specifics if the primary iface is en* and CoreWLAN reports a join
-        if iface?.hasPrefix("en") == true, let info = Self.fetchWiFi() {
+        // Wi-Fi specifics if the primary iface is the Wi-Fi interface and
+        // CoreWLAN reports a join. Without Location access there's no SSID,
+        // but it's still Wi-Fi.
+        if let name = iface, name.hasPrefix("en"), let info = Self.fetchWiFi(iface: name) {
+            onWiFi = true
             ssid = info.ssid
             wifiBSSID      = info.bssid
             wifiChannel    = info.channel
@@ -98,15 +105,19 @@ final class ConnectionSummary: ObservableObject {
             wifiRSSI       = info.rssi
             wifiTxRateMbps = info.txRate
             wifiSecurity   = info.security
-            // If we have an SSID + channel, refine the icon to plain wifi vs ethernet
             primaryMediaIcon = "wifi"
+            primaryIfaceDisplay = "Connected via Wi-Fi (\(name))"
+            wifiNameNeedsLocation = info.ssid == nil && !WiFiDashText.locationAllowed()
         } else {
+            onWiFi = false
             ssid = nil
             wifiBSSID = nil; wifiChannel = nil; wifiBandLabel = nil
             wifiRSSI = nil; wifiTxRateMbps = nil; wifiSecurity = nil
-            // No SSID + en* iface → most likely Ethernet
-            if iface?.hasPrefix("en") == true {
+            wifiNameNeedsLocation = false
+            // en* iface that isn't joined Wi-Fi → most likely Ethernet
+            if let name = iface, name.hasPrefix("en") {
                 primaryMediaIcon = "cable.connector"
+                primaryIfaceDisplay = "Connected via Ethernet (\(name))"
             }
         }
 
@@ -166,6 +177,17 @@ final class ConnectionSummary: ObservableObject {
         internetLatencyMs = inetMs
 
         lastRefresh = Date()
+    }
+
+    /// The header's title and subtitle. With no SSID (Ethernet, or Wi-Fi
+    /// without Location access) the interface line isn't shown twice.
+    nonisolated static func headerText(ssid: String?, onWiFi: Bool, display: String,
+                                       needsLocation: Bool) -> (title: String, subtitle: String?) {
+        if let ssid { return (ssid, display) }
+        if onWiFi {
+            return ("Wi-Fi", needsLocation ? "\(display). Allow Location access to see the network name." : display)
+        }
+        return (display, nil)
     }
 
     fileprivate struct GeoFields {
@@ -230,13 +252,17 @@ final class ConnectionSummary: ObservableObject {
         let security: String?
     }
 
-    /// Full Wi-Fi snapshot via CoreWLAN. Returns nil if no Wi-Fi interface
-    /// is active or the user hasn't granted Location permission.
-    private static func fetchWiFi() -> WiFiInfo? {
-        guard let iface = CWWiFiClient.shared().interface() else { return nil }
-        let ssid = iface.ssid()
-        guard ssid?.isEmpty == false else { return nil }
+    /// Full Wi-Fi snapshot via CoreWLAN for `name`. Returns nil if it isn't
+    /// a Wi-Fi interface, or Wi-Fi is off or not joined. Without Location
+    /// permission the SSID and BSSID are nil but the rest is still read.
+    private static func fetchWiFi(iface name: String) -> WiFiInfo? {
+        let client = CWWiFiClient.shared()
+        guard let iface = client.interfaces()?.first(where: { $0.interfaceName == name }),
+              iface.powerOn() else { return nil }
+        let raw = iface.ssid()
+        let ssid = (raw?.isEmpty == false) ? raw : nil
         let chan = iface.wlanChannel()
+        guard ssid != nil || chan != nil || iface.rssiValue() != 0 else { return nil }
         let channelNum: Int? = chan.map { Int($0.channelNumber) }
         let band: String? = {
             guard let b = chan?.channelBand else { return nil }
@@ -349,7 +375,7 @@ final class ConnectionSummary: ObservableObject {
         guard let ip = RouteInfo.defaultGateway() else { return (nil, nil) }
 
         // Look up MAC in ARP cache for vendor lookup
-        let arp = await Shell.run("/usr/sbin/arp", args: ["-n", ip])
+        let arp = await WithheldLists.arp(["-n", ip])
         var mac: String? = nil
         if let r = arp.range(of: " at ") {
             let tail = arp[r.upperBound...]
@@ -558,19 +584,18 @@ struct ConnectionSummaryCard: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(NS.amber)
             }
+            let lines = ConnectionSummary.headerText(ssid: summary.ssid, onWiFi: summary.onWiFi,
+                                                     display: summary.primaryIfaceDisplay,
+                                                     needsLocation: summary.wifiNameNeedsLocation)
             VStack(alignment: .leading, spacing: 2) {
-                if let s = summary.ssid {
-                    Text(s)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(NS.text1)
-                } else {
-                    Text(summary.primaryIfaceDisplay)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(NS.text1)
+                Text(lines.title)
+                    .font(.system(size: lines.subtitle == nil ? 15 : 17, weight: .semibold))
+                    .foregroundStyle(NS.text1)
+                if let sub = lines.subtitle {
+                    Text(sub)
+                        .font(.system(size: 11))
+                        .foregroundStyle(NS.text3)
                 }
-                Text(summary.primaryIfaceDisplay)
-                    .font(.system(size: 11))
-                    .foregroundStyle(NS.text3)
             }
             Spacer()
             let up = summary.primaryIface != nil

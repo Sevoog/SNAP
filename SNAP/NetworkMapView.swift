@@ -77,6 +77,8 @@ final class NetworkMapModel: ObservableObject {
     @Published var gatewayIP: String? = nil
     @Published var selfIP: String? = nil
     @Published var lastScan: Date? = nil
+    /// macOS gave the last scan no ARP entries, so devices have no MACs
+    @Published var macsWithheld = false
     /// IPs currently being re-pinged (for the detail panel's Ping button)
     @Published var pinging: Set<String> = []
 
@@ -124,6 +126,9 @@ final class NetworkMapModel: ObservableObject {
 
     /// Addresses for the scan in progress, fixed when it starts.
     private var scanTargets: [String] = []
+    /// The scan in progress, so Stop can cancel it. Every stage checks
+    /// cancellation, and a cancelled scan writes nothing more.
+    private var scanTask: Task<Void, Never>?
 
     var canScan: Bool {
         if case .success = scanRange { return true }
@@ -197,9 +202,10 @@ final class NetworkMapModel: ObservableObject {
         progress = 0
         phase = .arp
 
-        Task {
+        scanTask = Task {
             // Stage 0: parse ARP cache + LAN-wide detection of self/gateway
             await loadARP()
+            guard !Task.isCancelled else { return }
 
             // Stage 1: ping sweep + unicast UBNT sweep + LAN broadcast sweep.
             // All three run concurrently. The unicast UBNT sweep catches
@@ -214,6 +220,7 @@ final class NetworkMapModel: ObservableObject {
             _ = await pingDevices
             let unicastResults = await ubntUnicast
             let lan = await lanDiscovery
+            guard !Task.isCancelled else { return }
             gatewayIP = lan.gatewayIP
             selfIP    = lan.selfIP
             applyLANSweep(lan)
@@ -222,6 +229,7 @@ final class NetworkMapModel: ObservableObject {
             // Stage 2: per-device probes (NetBIOS / HTTP / rDNS / UBNT-unicast)
             phase = .perDeviceProbes
             await perDeviceProbes()
+            guard !Task.isCancelled else { return }
 
             // Tag self + gateway (must happen after all role-inferring signals)
             tagSelfAndGateway()
@@ -231,14 +239,28 @@ final class NetworkMapModel: ObservableObject {
             phase = .done
             lastScan = Date()
             isScanning = false
+            scanTask = nil
             persist()
         }
+    }
+
+    /// Stop button: ends the scan and keeps the devices found so far. The
+    /// partial result isn't saved, so the last full scan is what reopens.
+    func stopScan() {
+        guard isScanning else { return }
+        scanTask?.cancel()
+        scanTask = nil
+        devices.sort { Self.ipNumeric($0.ip) < Self.ipNumeric($1.ip) }
+        isScanning = false
+        phase = .idle
+        progress = 0
     }
 
     // MARK: Stage 0 — ARP
 
     private func loadARP() async {
-        let out = await Shell.run("/usr/sbin/arp", args: ["-an"])
+        let out = await WithheldLists.arp(["-an"])
+        macsWithheld = RouteInfo.defaultGateway() != nil && WithheldLists.arpIsEmpty(out)
         for line in out.split(separator: "\n").map(String.init) {
             guard let ipOpen = line.firstIndex(of: "("),
                   let ipClose = line.firstIndex(of: ")"),
@@ -269,6 +291,7 @@ final class NetworkMapModel: ObservableObject {
         let total = Double(targets.count)
         var completed = 0.0
         for start in stride(from: 0, to: targets.count, by: chunkSize) {
+            if Task.isCancelled { return }
             let batch = targets[start..<min(start + chunkSize, targets.count)]
             await withTaskGroup(of: (String, Double?)?.self) { group in
                 for ip in batch {
@@ -277,11 +300,13 @@ final class NetworkMapModel: ObservableObject {
                     }
                 }
                 for await result in group {
+                    if Task.isCancelled { continue }
                     if let (ip, ms) = result {
                         recordPing(ip: ip, ms: ms)
                     }
                 }
             }
+            if Task.isCancelled { return }
             completed += Double(batch.count)
             progress = min(0.5, completed / total * 0.5)
         }
@@ -302,6 +327,7 @@ final class NetworkMapModel: ObservableObject {
         // Chunked to keep file-descriptor usage bounded.
         let chunkSize = 48
         for start in stride(from: 0, to: targets.count, by: chunkSize) {
+            if Task.isCancelled { break }
             let chunk = targets[start..<min(start + chunkSize, targets.count)]
             let batch = await withTaskGroup(of: (String, IdentitySignal?).self) { group -> [(String, IdentitySignal)] in
                 for ip in chunk {
@@ -383,6 +409,7 @@ final class NetworkMapModel: ObservableObject {
                 }
             }
             for await (ip, sigs) in group {
+                if Task.isCancelled { group.cancelAll(); break }
                 if var d = devices.first(where: { $0.ip == ip }) {
                     for s in sigs { d.identity.merge(s) }
                     upsert(d)
@@ -632,6 +659,10 @@ struct NetworkMapView: View {
             Divider()
             FilterBar(model: model, filters: $filters)
             Divider()
+            if model.macsWithheld && !model.devices.isEmpty {
+                WithheldNotice(text: WithheldLists.macNote)
+                Divider()
+            }
 
             if model.devices.isEmpty && !model.isScanning {
                 EmptyStateView(title: "No Devices Found",
@@ -660,6 +691,9 @@ struct NetworkMapView: View {
         }
         .tabNavigationTitle(.networkMap)
         .onAppear { model.restoreLastScan() }
+        // Runs when the window closes (tabs stay alive across switches), so a
+        // long scan doesn't keep probing with nothing left to stop it
+        .onDisappear { model.stopScan() }
         .alert(Text(verbatim: model.pendingLargeScan.map { "Scan \($0.hostCount.formatted()) addresses?" } ?? ""),
                isPresented: Binding(get: { model.pendingLargeScan != nil },
                                     set: { if !$0 { model.pendingLargeScan = nil } }),
@@ -746,6 +780,7 @@ struct NetworkMapView: View {
         TextField("Range (e.g. 192.168.1.0/24)", text: $model.subnet)
             .textFieldStyle(.roundedBorder)
             .disabled(model.isScanning)
+            .onSubmit { if !model.isScanning && model.canScan { model.requestScan() } }
             .help("""
                   A subnet (10.0.0.0/16), a range (10.0.0.1-10.0.3.254 or 192.168.1.100-150), \
                   a /24 shorthand (192.168.1), or a single address — several separated by commas. \
@@ -804,12 +839,18 @@ struct NetworkMapView: View {
         }
     }
 
-    private var scanButton: some View {
-        Button(model.isScanning ? "Scanning…" : "Scan Network") { model.requestScan() }
-            .buttonStyle(.borderedProminent)
-            .disabled(model.isScanning || !model.canScan)
-            .keyboardShortcut(.return)
-            .fixedSize()
+    @ViewBuilder private var scanButton: some View {
+        if model.isScanning {
+            Button("Stop") { model.stopScan() }
+                .buttonStyle(.bordered).tint(.red)
+                .fixedSize()
+        } else {
+            Button("Scan Network") { model.requestScan() }
+                .buttonStyle(.borderedProminent)
+                .disabled(!model.canScan)
+                .keyboardShortcut(.return)
+                .fixedSize()
+        }
     }
 }
 

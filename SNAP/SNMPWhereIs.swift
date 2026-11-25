@@ -458,7 +458,7 @@ enum SNMPWhereIs {
     /// This Mac's ARP cache entry for `ip`, read with arp -n.
     static func macFromThisMac(_ ip: String) async -> [UInt8]? {
         guard case .ip? = SNMPLocateQuery.parse(ip) else { return nil }
-        let raw = await Shell.run("/usr/sbin/arp", args: ["-n", ip], timeout: 5)
+        let raw = await WithheldLists.arp(["-n", ip], timeout: 5)
         // The ARP Table tool's parser. It lives on that view, so on the main actor.
         let entries = await MainActor.run { ARPTableView.parseARP(raw, gateway: nil) }
         for e in entries where e.ip == ip {

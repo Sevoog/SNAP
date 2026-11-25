@@ -17,8 +17,16 @@
 # the script fills it in (or replaces an older checksum) each run, and
 # --publish uploads that same zip in the same run.
 #
-# Needs: Xcode, the signing key in the Keychain (scripts/sign-release.swift),
-# and an authenticated `gh` for --publish.
+# Needs: Xcode, a Developer ID Application certificate in the Keychain (the
+# only one there, or the one named by SNAP_SIGNING_IDENTITY), the release
+# signing key in the Keychain (scripts/sign-release.swift), and an
+# authenticated `gh` for --publish.
+#
+# The app is signed with the Developer ID, the hardened runtime, and Apple's
+# secure timestamp. That signature also matters at run time: macOS 27 gives
+# the ARP table and the connection list to arp and netstat only when the app
+# that starts them is signed this way. (Builds signed to run locally fall
+# back to launchd for those; see Shell.runViaLaunchd.)
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -70,6 +78,23 @@ xcodebuild -project SNAP.xcodeproj -scheme SNAP -configuration Release -destinat
   || { tail -30 "$WORK/build.log"; fail "build failed (log above)"; }
 APP="$WORK/build/Build/Products/Release/SNAP.app"
 
+step "Signing with Developer ID"
+# Use the certificate's SHA-1, not its name, so nothing personal is printed
+IDENTITY=${SNAP_SIGNING_IDENTITY:-}
+if [ -z "$IDENTITY" ]; then
+  IDS=$(security find-identity -v -p codesigning | grep '"Developer ID Application:' || true)
+  [ "$(printf '%s' "$IDS" | grep -c .)" = 1 ] \
+    || fail "need exactly one valid Developer ID Application certificate in the Keychain, or set SNAP_SIGNING_IDENTITY"
+  IDENTITY=$(printf '%s' "$IDS" | awk '{print $2}')
+fi
+codesign --force --options runtime --timestamp -s "$IDENTITY" "$APP" > "$WORK/sign.log" 2>&1 \
+  || { cat "$WORK/sign.log"; fail "codesign failed (if macOS asked for the key, allow it and run again)"; }
+SIGNATURE=$(codesign -dvv "$APP" 2>&1)
+grep -q '^Authority=Developer ID Application:' <<< "$SIGNATURE" || fail "the app isn't signed with a Developer ID"
+grep -q 'flags=.*runtime' <<< "$SIGNATURE" || fail "the hardened runtime is off"
+grep -q '^Timestamp=' <<< "$SIGNATURE" || fail "the signature has no secure timestamp"
+echo "Developer ID, hardened runtime, timestamped"
+
 step "Checking the app"
 ARCHS=$(lipo -archs "$APP/Contents/MacOS/SNAP")
 [[ "$ARCHS" == *arm64* && "$ARCHS" == *x86_64* ]] || fail "not universal: $ARCHS"
@@ -77,7 +102,7 @@ ARCHS=$(lipo -archs "$APP/Contents/MacOS/SNAP")
 [ "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Contents/Info.plist")" = "$BUILD" ] || fail "build number mismatch"
 codesign --verify --deep --strict "$APP" || fail "code signature doesn't verify"
 if strings "$APP/Contents/MacOS/SNAP" | grep -q "$HOME"; then fail "the binary contains paths from this Mac"; fi
-echo "universal ($ARCHS), version $VERSION, build $BUILD, signature OK, no local paths"
+echo "universal ($ARCHS), version $VERSION, build $BUILD, Developer ID signature OK, no local paths"
 
 # ---- Zip, checksum, signature ---------------------------------------------
 
@@ -92,6 +117,8 @@ swift scripts/sign-release.swift sign "$ZIP"
 swift scripts/sign-release.swift verify "$ZIP" "$ZIP.sig" scripts/release-signing-key.pub
 mkdir "$WORK/unzip" && ditto -x -k "$ZIP" "$WORK/unzip"
 codesign --verify --deep --strict "$WORK/unzip/SNAP.app" || fail "the unzipped app's signature doesn't verify"
+codesign -dvv "$WORK/unzip/SNAP.app" 2>&1 | grep -q '^Authority=Developer ID Application:' \
+  || fail "the unzipped app lost its Developer ID signature"
 echo "$ZIP  $(stat -f %z "$ZIP") bytes"
 echo "SHA-256 $SHA"
 

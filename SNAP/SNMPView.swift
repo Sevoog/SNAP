@@ -158,6 +158,10 @@ final class SNMPQueryModel: ObservableObject {
     @Published var status = ""
     /// Problems with what was typed (bad OID, bad port). Cleared when the mode changes.
     @Published var inputError: String?
+    /// Remember was ticked but the Keychain refused the community. Never
+    /// includes the community itself. Cleared by the next query or a click
+    /// on Remember.
+    @Published var saveError: String?
 
     // Results and failures, per mode: one mode's card never shows under another.
     @Published private(set) var failures: [SNMPMode: SNMPFailure] = [:]
@@ -256,6 +260,7 @@ final class SNMPQueryModel: ObservableObject {
     /// rememberCommunity too, but never forgets anything.)
     func userSetRemember(_ on: Bool) {
         rememberCommunity = on
+        saveError = nil
         guard !on else { return }
         let h = host.trimmingCharacters(in: .whitespaces)
         if let p = UInt16(port.trimmingCharacters(in: .whitespaces)), !h.isEmpty {
@@ -282,6 +287,7 @@ final class SNMPQueryModel: ObservableObject {
 
     func run() {
         inputError = nil
+        saveError = nil
         let host = self.host.trimmingCharacters(in: .whitespaces)
         guard !host.isEmpty else { inputError = "Enter a host or IP address."; return }
         guard let portNum = UInt16(port.trimmingCharacters(in: .whitespaces)), portNum > 0 else {
@@ -364,13 +370,7 @@ final class SNMPQueryModel: ObservableObject {
                                               defaultCommunity: community == "public", date: Date())
                 self.configs[mode] = SNMPClientConfig(host: host, port: portNum, community: community,
                                                       version: current.version, timeout: timeout, retries: retries)
-                // Remember as it is now, not when the query started: unticking
-                // it during a query must win. Only for the host that answered.
-                if self.rememberCommunity,
-                   self.currentAccount == SNMPCommunityStore.account(host: host, port: portNum) {
-                    SNMPCommunityStore.save(host: host, port: portNum, community: community)
-                    self.lastHandled = nil
-                }
+                self.rememberIfTicked(host: host, port: portNum, community: community)
                 self.status = Self.summary(outcome) + (fellBack ? " (answered over v1)" : "")
                 self.isRunning = false
             } catch {
@@ -385,6 +385,19 @@ final class SNMPQueryModel: ObservableObject {
                 self.isRunning = false
             }
         }
+    }
+
+    /// After a query answered. Remember as it is now, not when the query
+    /// started: unticking it during a query must win. Only for the host that
+    /// answered. A refused Keychain write unticks Remember and says so.
+    func rememberIfTicked(host: String, port: UInt16, community: String) {
+        guard rememberCommunity,
+              currentAccount == SNMPCommunityStore.account(host: host, port: port) else { return }
+        if !SNMPCommunityStore.save(host: host, port: port, community: community) {
+            rememberCommunity = false
+            saveError = "Couldn't save the community string in your Keychain."
+        }
+        lastHandled = nil
     }
 
     private func clearResults(for mode: SNMPMode) {
@@ -580,6 +593,9 @@ private func snmpTypeLabel(_ v: SNMPValue) -> String {
 
 struct SNMPView: View {
     @StateObject private var model = SNMPQueryModel()
+    /// The Interfaces pane's Watch, held here so Return in the fields can
+    /// tell that a Watch is running. The pane still starts and stops it.
+    @StateObject private var interfacesWatcher = SNMPInterfaceWatcher()
     @State private var showOptions = false
 
     init() {}
@@ -671,6 +687,17 @@ struct SNMPView: View {
     private var hostField: some View {
         TextField("Host or IP", text: $model.host)
             .textFieldStyle(.roundedBorder)
+            .onSubmit { queryFromReturn() }
+    }
+
+    /// Return in the Host, OID or address field: the same conditions as the
+    /// Query button. Not while Interfaces is watching live, where a new query
+    /// would clear the table and stop the Watch (⌘Return still does that).
+    private func queryFromReturn() {
+        guard !model.isRunning,
+              !model.host.trimmingCharacters(in: .whitespaces).isEmpty,
+              !(model.mode == .interfaces && interfacesWatcher.isWatching) else { return }
+        model.run()
     }
 
     @ViewBuilder
@@ -713,9 +740,11 @@ struct SNMPView: View {
             TextField("IP or MAC to find", text: $model.locateQuery)
                 .textFieldStyle(.roundedBorder)
                 .help("An IPv4 address (192.168.1.20) or a MAC address (aa:bb:cc:dd:ee:ff)")
+                .onSubmit { queryFromReturn() }
         } else {
             TextField("OID (e.g. 1.3.6.1.2.1.2.2)", text: $model.customOID)
                 .textFieldStyle(.roundedBorder)
+                .onSubmit { queryFromReturn() }
         }
     }
 
@@ -755,11 +784,17 @@ struct SNMPView: View {
         if let msg = model.inputError {
             inputBanner(msg)
         }
+        if let msg = model.saveError {
+            inputBanner(msg)
+        }
         if model.hasResults(for: model.mode) {
             if let i = model.info[model.mode] { sourceLine(i) }
             switch model.mode {
             case .system:     systemPane
-            case .interfaces: if let r = model.interfaceReport { SNMPInterfacesPane(model: model, report: r) }
+            case .interfaces:
+                if let r = model.interfaceReport {
+                    SNMPInterfacesPane(model: model, report: r, watcher: interfacesWatcher, selection: nil)
+                }
             case .health:     if let r = model.health { SNMPHealthPane(model: model, report: r) }
             case .inventory:  if let r = model.inventory { SNMPInventoryPane(model: model, report: r) }
             case .neighbors:  if let r = model.neighbors { SNMPNeighborsPane(model: model, report: r) }
@@ -1036,6 +1071,7 @@ struct SNMPPinButton: View {
     let target: SNMPBoardTarget
     @ObservedObject private var watch = SNMPBoardWatch.shared
     @State private var confirming = false
+    @State private var saveFailed = false
 
     /// Pinned means the same device (host and port) and the same port on it.
     /// Names and speeds can change between queries.
@@ -1061,10 +1097,17 @@ struct SNMPPinButton: View {
         .help(isPinned ? "Remove from the Status Board's SNMP Watch tile" : "Watch this on the Status Board's SNMP Watch tile")
         .confirmationDialog("Show \(displayName) on the Status Board?",
                             isPresented: $confirming) {
-            Button("Save Community and Show") { watch.pin(target, community: config.community) }
+            Button("Save Community and Show") {
+                if !watch.pin(target, community: config.community) { saveFailed = true }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("The SNMP Watch tile asks \(target.host) every 10 seconds while the Status Board is open. To do that it needs the community string, so SNAP saves it in your Keychain. The tile replaces anything it watched before.")
+        }
+        .alert("Couldn't save the community string in your Keychain", isPresented: $saveFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The Status Board needs it to keep asking \(target.host), so its SNMP Watch tile isn't watching anything now. Check that your login keychain is unlocked, then try again.")
         }
     }
 }

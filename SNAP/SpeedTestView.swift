@@ -31,6 +31,9 @@ enum TestSize: String, CaseIterable, Identifiable {
     // All providers use 25 MB chunks for streaming accuracy
     var chunkBytes: Int { 25_000_000 }
     var chunks: Int { max(1, downloadBytes / chunkBytes) }
+    // Upload goes up in 1 MB requests, as many as it takes to send uploadBytes
+    static let uploadChunkBytes = 1_000_000
+    var uploadChunks: Int { max(1, uploadBytes / Self.uploadChunkBytes) }
     var uploadBytes: Int {
         switch self {
         case .mb25:  return 10_000_000
@@ -74,9 +77,12 @@ enum SpeedProvider: String, CaseIterable, Identifiable {
         }
     }
 
+    // An empty download from the speed test server itself, as Cloudflare's
+    // own test does. (A HEAD to www.cloudflare.com/cdn-cgi/trace answers 404,
+    // so it can't tell a reply from a failure.)
     var pingURL: String {
         switch self {
-        case .cloudflare: return "https://www.cloudflare.com/cdn-cgi/trace"
+        case .cloudflare: return "https://speed.cloudflare.com/__down?bytes=0"
         case .iperf:      return ""
         }
     }
@@ -100,6 +106,92 @@ enum SpeedProvider: String, CaseIterable, Identifiable {
     var isInternetProvider: Bool { self != .iperf }
 }
 
+// MARK: - Internet test helpers
+
+/// Why an internet test stopped short. None of these save to history: a
+/// history row needs both a download and an upload figure, and a 0 would
+/// drag down the chart and the Status Board tile.
+enum SpeedTestFailure: Equatable {
+    case unreachable   // no ping reply, so nothing was measured
+    case download      // ping worked, the download didn't finish
+    case upload        // the download finished, the upload didn't
+
+    func message(downloadMbps: Double) -> String {
+        let after = "Check that you're online, then click Test Again. Nothing was saved to history."
+        switch self {
+        case .unreachable:
+            return "Couldn't reach Cloudflare's speed test server. " + after
+        case .download:
+            return "The download from Cloudflare's speed test server didn't finish. " + after
+        case .upload:
+            return "Download finished at \(String(format: "%.1f", downloadMbps)) Mbps, but the upload to Cloudflare's speed test server didn't finish. " + after
+        }
+    }
+}
+
+enum InternetSpeedTest {
+    /// Only a 2xx reply counts. An error reply (429, 5xx) still has a body,
+    /// and its bytes and round trip aren't a measurement.
+    static func isSuccess(_ response: URLResponse?) -> Bool {
+        guard let http = response as? HTTPURLResponse else { return false }
+        return (200..<300).contains(http.statusCode)
+    }
+
+    /// Average and jitter from successful ping times, slowest dropped.
+    /// nil when no ping got a reply.
+    static func pingStats(_ times: [Double]) -> (avg: Double, jitter: Double)? {
+        guard let first = times.first else { return nil }
+        guard times.count > 1 else { return (first, 0) }
+        let sorted = times.sorted().dropLast()
+        let avg = sorted.reduce(0,+) / Double(sorted.count)
+        let jitter = sorted.map { abs($0 - avg) }.reduce(0,+) / Double(sorted.count)
+        return (avg, jitter)
+    }
+
+    /// One test in the history chart. Tests sit in even slots, oldest on the
+    /// left, so tests days apart don't squeeze each other into slivers.
+    struct HistoryBar: Identifiable, Equatable {
+        let id: UUID
+        let slot: String     // the x category, unique per test
+        let time: String
+        let day: String?     // set on the first test of each day
+        let download: Double
+        let upload: Double
+    }
+
+    static func historyBars(_ results: [SpeedResult], limit: Int = 10,
+                            calendar: Calendar = .current) -> [HistoryBar] {
+        var bars: [HistoryBar] = []
+        var lastDay: Date?
+        for (i, r) in results.prefix(limit).reversed().enumerated() {
+            let day = calendar.startOfDay(for: r.date)
+            bars.append(HistoryBar(id: r.id, slot: String(i),
+                                   time: r.date.formatted(date: .omitted, time: .shortened),
+                                   day: day == lastDay ? nil : r.date.formatted(.dateTime.month(.abbreviated).day()),
+                                   download: r.download, upload: r.upload))
+            lastDay = day
+        }
+        return bars
+    }
+
+    /// Copy / Export text for one finished test, stamped with when it ran.
+    static func copyText(for r: SpeedResult) -> String {
+        let upload = TestSize(rawValue: r.testSize)?.uploadDescription ?? ""
+        return """
+        SNAP Speed Test Result
+        ──────────────────────
+        Provider:  \(r.provider)
+        Test Size: \(r.testSize) down · \(upload)
+        Date:      \(r.date.formatted())
+
+        HTTP Ping: \(String(format:"%.1f", r.ping)) ms
+        Jitter:    \(String(format:"%.1f", r.jitter)) ms
+        Download:  \(String(format:"%.2f", r.download)) Mbps
+        Upload:    \(String(format:"%.2f", r.upload)) Mbps
+        """
+    }
+}
+
 // MARK: - Main View
 
 struct SpeedTestView: View {
@@ -118,6 +210,8 @@ struct SpeedTestView: View {
     @State private var livePoints: [LivePoint] = []
     @State private var bytesTransferred: Int = 0
     @State private var totalBytesTarget: Int = 0
+    @State private var lastResult: SpeedResult?     // the finished test, for Copy / Export
+    @State private var confirmClear = false
     // iPerf3
     @State private var iperfHost = ""
     @State private var iperfPort = "5201"
@@ -141,23 +235,13 @@ struct SpeedTestView: View {
     }
     enum TestPhase: String {
         case idle = "Ready", ping = "Ping", download = "Download", upload = "Upload", done = "Complete"
+        case failed = "Failed"   // stopped short; `status` says why
     }
 
     // Formatted result text for Copy/Export
     private var resultText: String {
-        guard phase == .done else { return "No results yet." }
-        return """
-        SNAP Speed Test Result
-        ──────────────────────
-        Provider:  \(provider.rawValue)
-        Test Size: \(testSize.rawValue) down · \(testSize.uploadDescription)
-        Date:      \(Date().formatted())
-
-        HTTP Ping: \(String(format:"%.1f", pingMs)) ms
-        Jitter:    \(String(format:"%.1f", jitterMs)) ms
-        Download:  \(String(format:"%.2f", downloadMbps)) Mbps
-        Upload:    \(String(format:"%.2f", uploadMbps)) Mbps
-        """
+        guard phase == .done, let r = lastResult else { return "No results yet." }
+        return InternetSpeedTest.copyText(for: r)
     }
 
     var body: some View {
@@ -230,7 +314,9 @@ struct SpeedTestView: View {
                 Button("Stop") { testTask?.cancel(); phase = .idle; status = "Stopped" }
                     .buttonStyle(.bordered).tint(.red)
             } else if provider.isInternetProvider {
-                Button(phase == .done ? "Test Again" : "Start Test") { startTest() }
+                // ⌘Return, not plain Return: with no text field here, plain
+                // Return would also fire from the sidebar's search box.
+                Button(phase == .done || phase == .failed ? "Test Again" : "Start Test") { startTest() }
                     .buttonStyle(.borderedProminent).keyboardShortcut(.return)
             }
         }
@@ -238,7 +324,7 @@ struct SpeedTestView: View {
         .background(NS.bg0)
     }
 
-    private var isRunning: Bool { phase != .idle && phase != .done }
+    private var isRunning: Bool { phase != .idle && phase != .done && phase != .failed }
 
     // MARK: - Internet Test View
 
@@ -250,6 +336,7 @@ struct SpeedTestView: View {
                 if isRunning { progressBarView }
                 if !status.isEmpty && phase != .done {
                     Text(status).font(.caption).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center).padding(.horizontal)
                 }
                 if historyStore.results.isEmpty && phase == .idle { emptyState }
                 if !historyStore.results.isEmpty { historySection }
@@ -375,9 +462,16 @@ struct SpeedTestView: View {
         TextField("192.168.1.x", text: $iperfHost)
             .textFieldStyle(.roundedBorder)
             .frame(minWidth: 110, idealWidth: 140, maxWidth: 160)
+            .onSubmit { if canRunIperf { runIperf() } }
         Text("Port:").font(.caption).foregroundStyle(.secondary).fixedSize()
         TextField("5201", text: $iperfPort)
             .textFieldStyle(.roundedBorder).frame(width: 60)
+            .onSubmit { if canRunIperf { runIperf() } }
+    }
+
+    /// Exactly when Run iPerf3 Test is enabled; Return in the fields obeys it too.
+    private var canRunIperf: Bool {
+        !iperfHost.trimmingCharacters(in: .whitespaces).isEmpty && !isRunning
     }
 
     private var iperfOptions: some View {
@@ -406,7 +500,7 @@ struct SpeedTestView: View {
     @ViewBuilder private var iperfActions: some View {
         Button("Run iPerf3 Test") { runIperf() }
             .buttonStyle(.borderedProminent).fixedSize()
-            .disabled(iperfHost.trimmingCharacters(in: .whitespaces).isEmpty || isRunning)
+            .disabled(!canRunIperf)
         if !iperfAllOutput.isEmpty {
             CopyButton { iperfAllOutput }.fixedSize()
             ExportButton(toolName: "iPerf3", getText: { iperfAllOutput }).fixedSize()
@@ -502,29 +596,59 @@ struct SpeedTestView: View {
 
     private var historySection: some View {
         let axisText = ChartAxis.text
+        let bars = InternetSpeedTest.historyBars(historyStore.results)
+        let count = historyStore.results.count
         return VStack(spacing: 12) {
             GroupBox {
-                Chart(historyStore.results.prefix(10).reversed() as [SpeedResult]) { r in
-                    BarMark(x: .value("t", r.date, unit: .second), y: .value("↓", r.download))
-                        .foregroundStyle(.blue.opacity(0.75))
+                // Download and upload side by side in each test's slot
+                Chart(bars) { b in
+                    BarMark(x: .value("Test", b.slot), y: .value("Mbps", b.download))
+                        .foregroundStyle(by: .value("Direction", "Download"))
+                        .position(by: .value("Direction", "Download"))
                         .annotation(position: .top) {
-                            Text(String(format:"%.0f", r.download)).font(.system(size:9)).foregroundStyle(.blue)
+                            Text(String(format:"%.0f", b.download)).font(.system(size:9)).foregroundStyle(.blue)
                         }
-                    BarMark(x: .value("t", r.date, unit: .second), y: .value("↑", r.upload))
-                        .foregroundStyle(.orange.opacity(0.75))
+                    BarMark(x: .value("Test", b.slot), y: .value("Mbps", b.upload))
+                        .foregroundStyle(by: .value("Direction", "Upload"))
+                        .position(by: .value("Direction", "Upload"))
+                        .annotation(position: .top) {
+                            Text(String(format:"%.0f", b.upload)).font(.system(size:9)).foregroundStyle(.orange)
+                        }
                 }
+                .chartForegroundStyleScale(["Download": Color.blue.opacity(0.75), "Upload": Color.orange.opacity(0.75)])
+                .chartLegend(position: .top, alignment: .leading)
                 .chartYAxisLabel { Text("Mbps").foregroundStyle(axisText) }
                 .chartYAxis { AxisMarks { AxisGridLine(stroke:StrokeStyle(lineWidth:0.5,dash:[4,4])); AxisValueLabel().foregroundStyle(axisText) } }
-                .frame(height: 130).padding(.top, 4)
+                .chartXAxis {
+                    AxisMarks { value in
+                        AxisValueLabel {
+                            if let slot = value.as(String.self), let b = bars.first(where: { $0.slot == slot }) {
+                                VStack(spacing: 0) {
+                                    Text(b.time)
+                                    if let day = b.day { Text(day) }
+                                }
+                                .font(.system(size: 9)).foregroundStyle(axisText)
+                            }
+                        }
+                    }
+                }
+                .frame(height: 160).padding(.top, 4)
             } label: {
                 HStack {
                     Label("Test History", systemImage: "chart.bar").font(.caption.bold())
                     Spacer()
-                    Button("Clear") { historyStore.clear() }
+                    Button("Clear") { confirmClear = true }
                         .font(.caption).buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal)
+            .confirmationDialog("Clear the speed test history?", isPresented: $confirmClear) {
+                Button("Clear History", role: .destructive) { historyStore.clear() }
+            } message: {
+                Text(count == 1
+                     ? "This deletes the 1 saved internet speed test result. It can't be undone."
+                     : "This deletes all \(count) saved internet speed test results. It can't be undone.")
+            }
 
             VStack(spacing: 0) {
                 ForEach(historyStore.results.prefix(20)) { r in
@@ -570,15 +694,20 @@ struct SpeedTestView: View {
         phase = .ping; progress = 0
         downloadMbps = 0; uploadMbps = 0; pingMs = 0; jitterMs = 0
         livePoints = []; bytesTransferred = 0; totalBytesTarget = 0
+        lastResult = nil
         status = "Connecting to \(provider.rawValue)…"
         let sel = provider; let size = testSize
 
         testTask = Task {
             await MainActor.run { self.phase = .ping; self.status = "Measuring latency…" }
-            let (avgPing, jitter) = await measurePing(urlStr: sel.pingURL)
+            let ping = await measurePing(urlStr: sel.pingURL)
             // Check cancellation BEFORE publishing — Stop sets status/phase
             // and a late update here would clobber the "Stopped" state
             guard !Task.isCancelled else { return }
+            guard let (avgPing, jitter) = ping else {
+                await MainActor.run { self.fail(.unreachable) }
+                return
+            }
             await MainActor.run { self.pingMs = avgPing; self.jitterMs = jitter; self.progress = 0.15 }
 
             await MainActor.run {
@@ -586,8 +715,12 @@ struct SpeedTestView: View {
                 self.totalBytesTarget = size.downloadBytes
                 self.status = "Downloading \(size.rawValue) via \(sel.rawValue)…"
             }
-            let dlMbps = await measureDownload(provider: sel, size: size)
+            let download = await measureDownload(provider: sel, size: size)
             guard !Task.isCancelled else { return }
+            guard let dlMbps = download else {
+                await MainActor.run { self.fail(.download) }
+                return
+            }
             await MainActor.run { self.downloadMbps = dlMbps; self.progress = 0.75 }
 
             await MainActor.run {
@@ -595,48 +728,62 @@ struct SpeedTestView: View {
                 self.bytesTransferred = 0; self.totalBytesTarget = size.uploadBytes
                 self.status = "Uploading \(size.uploadDescription) to \(sel.rawValue)…"
             }
-            let ulMbps = await measureUpload(size: size)
+            let upload = await measureUpload(size: size)
             // A test stopped mid-upload must not flip to "Complete" or save
             // a partial result to history
             guard !Task.isCancelled else { return }
+            guard let ulMbps = upload else {
+                await MainActor.run { self.fail(.upload) }
+                return
+            }
             await MainActor.run {
                 self.uploadMbps = ulMbps; self.progress = 1.0; self.phase = .done
                 self.status = "Complete — \(sel.rawValue) · \(size.rawValue)"
                 let result = SpeedResult(date: Date(), download: dlMbps, upload: ulMbps,
                                          ping: avgPing, jitter: jitter,
                                          provider: sel.rawValue, testSize: size.rawValue)
+                self.lastResult = result
                 self.historyStore.add(result)
             }
         }
     }
 
+    /// Ends a test that couldn't finish: says why, keeps only readings that
+    /// were real (ping, and the download when only the upload failed), and
+    /// saves nothing to history.
+    private func fail(_ failure: SpeedTestFailure) {
+        if failure != .upload { downloadMbps = 0 }
+        uploadMbps = 0
+        phase = .failed
+        status = failure.message(downloadMbps: downloadMbps)
+    }
+
     // MARK: - Ping
 
-    private func measurePing(urlStr: String) async -> (Double, Double) {
-        guard !urlStr.isEmpty, let url = URL(string: urlStr) else { return (0, 0) }
+    /// nil when no request got a 2xx reply: the server couldn't be reached.
+    private func measurePing(urlStr: String) async -> (Double, Double)? {
+        guard !urlStr.isEmpty, let url = URL(string: urlStr) else { return nil }
         let session = URLSession(configuration: {
             let c = URLSessionConfiguration.ephemeral
             c.timeoutIntervalForRequest = 5
             c.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
             return c
         }())
-        var warmup = URLRequest(url: url); warmup.httpMethod = "HEAD"
-        _ = try? await session.data(for: warmup)
+        defer { session.finishTasksAndInvalidate() }
+        _ = try? await session.data(for: URLRequest(url: url))   // warm-up: DNS, TCP, TLS
         var times: [Double] = []
         for _ in 0..<8 {
             guard !Task.isCancelled else { break }
-            var req = URLRequest(url: url); req.httpMethod = "HEAD"
+            var req = URLRequest(url: url)
             req.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
             let t0 = Date()
-            _ = try? await session.data(for: req)
-            times.append(Date().timeIntervalSince(t0) * 1000)
+            // A failed request or an error reply isn't a round-trip time
+            if let (_, response) = try? await session.data(for: req), InternetSpeedTest.isSuccess(response) {
+                times.append(Date().timeIntervalSince(t0) * 1000)
+            }
             try? await Task.sleep(nanoseconds: 80_000_000)
         }
-        guard times.count > 1 else { return (times.first ?? 0, 0) }
-        let sorted = times.sorted().dropLast()
-        let avg = sorted.reduce(0,+) / Double(sorted.count)
-        let jitter = sorted.map { abs($0 - avg) }.reduce(0,+) / Double(sorted.count)
-        return (avg, jitter)
+        return InternetSpeedTest.pingStats(times)
     }
 
     // MARK: - Download
@@ -645,7 +792,8 @@ struct SpeedTestView: View {
     // Swift async/await overhead per iteration. The delegate receives data as fast
     // as the OS delivers it, giving accurate readings at 400+ Mbps.
 
-    private func measureDownload(provider: SpeedProvider, size: TestSize) async -> Double {
+    /// nil when a chunk failed or got an error reply: the download didn't finish.
+    private func measureDownload(provider: SpeedProvider, size: TestSize) async -> Double? {
         var totalDownloaded = 0
         let testStart = Date()
         var sampleIndex = 0
@@ -653,7 +801,7 @@ struct SpeedTestView: View {
         for chunkIdx in 0..<size.chunks {
             guard !Task.isCancelled else { break }
             let urlStr = provider.chunkURL(index: chunkIdx, bytes: size.chunkBytes)
-            guard let url = URL(string: urlStr) else { continue }
+            guard let url = URL(string: urlStr) else { return nil }
 
             var req = URLRequest(url: url)
             req.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
@@ -672,6 +820,7 @@ struct SpeedTestView: View {
             )
 
             let chunkStart = Date()
+            var chunkOK = false
 
             // Cancelling the session on Task.cancel aborts the in-flight
             // chunk (Stop used to wait out the full 25 MB transfer) and
@@ -696,14 +845,16 @@ struct SpeedTestView: View {
                             self.status = statusStr
                         }
                     }
-                    delegate.onDone = { cont.resume() }
+                    delegate.onDone = { ok in chunkOK = ok; cont.resume() }
                     session.dataTask(with: req).resume()
                 }
             } onCancel: {
                 session.invalidateAndCancel()
             }
             session.invalidateAndCancel()
+            guard chunkOK || Task.isCancelled else { return nil }
         }
+        guard totalDownloaded > 0 || Task.isCancelled else { return nil }
 
         let elapsed = Date().timeIntervalSince(testStart)
         let final = elapsed > 0 ? Double(totalDownloaded) * 8 / elapsed / 1_000_000 : 0
@@ -718,13 +869,16 @@ struct SpeedTestView: View {
 
     // MARK: - Upload
 
-    private func measureUpload(size: TestSize) async -> Double {
-        guard let url = URL(string: "https://speed.cloudflare.com/__up") else { return 0 }
-        let chunkSize = 1_000_000
-        let numChunks = Swift.min(size.uploadBytes / chunkSize, 25)
+    /// Sends size.uploadBytes in 1 MB requests. nil when a request failed or
+    /// got an error reply: the upload didn't finish.
+    private func measureUpload(size: TestSize) async -> Double? {
+        guard let url = URL(string: "https://speed.cloudflare.com/__up") else { return nil }
+        let chunkSize = TestSize.uploadChunkBytes
+        let numChunks = size.uploadChunks
         var totalUploaded = 0
         let start = Date()
         var si = 0
+        // One buffer, sent for every request, so memory stays at 1 MB at any test size
         let chunk = Data((0..<chunkSize).map { _ in UInt8.random(in: 0...255) })
         for _ in 0..<numChunks {
             guard !Task.isCancelled else { break }
@@ -733,17 +887,21 @@ struct SpeedTestView: View {
             req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
             req.timeoutInterval = 30
             req.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            if let (_, _) = try? await URLSession.shared.data(for: req) {
-                totalUploaded += chunkSize
-                let elapsed = Date().timeIntervalSince(start)
-                let mbps = elapsed > 0 ? Double(totalUploaded)*8/elapsed/1_000_000 : 0
-                si += 1; let sii = si
-                await MainActor.run {
-                    self.uploadMbps = mbps
-                    self.bytesTransferred = totalUploaded
-                    self.livePoints.append(LivePoint(index: sii, mbps: mbps))
-                    self.status = "↑ \(self.fmt(totalUploaded)) · \(String(format:"%.1f",mbps)) Mbps"
-                }
+            guard let (_, response) = try? await URLSession.shared.data(for: req),
+                  InternetSpeedTest.isSuccess(response) else {
+                return Task.isCancelled ? 0 : nil
+            }
+            totalUploaded += chunkSize
+            let elapsed = Date().timeIntervalSince(start)
+            let mbps = elapsed > 0 ? Double(totalUploaded)*8/elapsed/1_000_000 : 0
+            let prog = 0.75 + 0.25 * Double(totalUploaded) / Double(size.uploadBytes)
+            si += 1; let sii = si
+            await MainActor.run {
+                self.uploadMbps = mbps
+                self.bytesTransferred = totalUploaded
+                self.progress = Swift.min(prog, 1.0)
+                self.livePoints.append(LivePoint(index: sii, mbps: mbps))
+                self.status = "↑ \(self.fmt(totalUploaded)) · \(String(format:"%.1f",mbps)) Mbps"
             }
         }
         let elapsed = Date().timeIntervalSince(start)
@@ -902,7 +1060,23 @@ struct SpeedTestView: View {
 
 final class DownloadDelegate: NSObject, URLSessionDataDelegate {
     var onData: ((Int) -> Void)?
-    var onDone: (() -> Void)?
+    /// true when the server sent a 2xx reply and the transfer ended without an error
+    var onDone: ((Bool) -> Void)?
+    private var rejected = false   // delegate callbacks run one at a time on the session's queue
+
+    func urlSession(_ session: URLSession,
+                    dataTask: URLSessionDataTask,
+                    didReceive response: URLResponse,
+                    completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
+        // An error reply (429, 5xx) has a body too; cancel before it arrives
+        // so those bytes never count as download speed
+        if InternetSpeedTest.isSuccess(response) {
+            completionHandler(.allow)
+        } else {
+            rejected = true
+            completionHandler(.cancel)
+        }
+    }
 
     func urlSession(_ session: URLSession,
                     dataTask: URLSessionDataTask,
@@ -913,7 +1087,7 @@ final class DownloadDelegate: NSObject, URLSessionDataDelegate {
     func urlSession(_ session: URLSession,
                     task: URLSessionTask,
                     didCompleteWithError error: Error?) {
-        onDone?()
+        onDone?(error == nil && !rejected)
     }
 }
 
@@ -1485,6 +1659,7 @@ struct IperfHistoryList: View {
     @ObservedObject var store: IperfHistoryStore
     /// Fills the server fields from a row; nil while a test runs.
     var onPick: ((String, String) -> Void)? = nil
+    @State private var confirmClear = false
 
     var body: some View {
         GroupBox {
@@ -1523,9 +1698,16 @@ struct IperfHistoryList: View {
             HStack {
                 Label("Recent LAN tests", systemImage: "clock.arrow.circlepath").font(.caption.bold())
                 Spacer()
-                Button("Clear") { store.clear() }
+                Button("Clear") { confirmClear = true }
                     .font(.caption).buttonStyle(.plain).foregroundStyle(.secondary)
             }
+        }
+        .confirmationDialog("Clear the recent LAN tests?", isPresented: $confirmClear) {
+            Button("Clear History", role: .destructive) { store.clear() }
+        } message: {
+            Text(store.entries.count == 1
+                 ? "This deletes the 1 saved iPerf3 result. It can't be undone."
+                 : "This deletes all \(store.entries.count) saved iPerf3 results. It can't be undone.")
         }
     }
 }

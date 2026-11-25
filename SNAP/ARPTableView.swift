@@ -156,13 +156,16 @@ struct ARPTableView: View {
         isLoading = true
         error = ""
         Task {
-            let raw = await Shell.run("/usr/sbin/arp", args: ["-an"])
+            let raw = await WithheldLists.arp(["-an"])
             let gw  = await Self.defaultGateway()
             var parsed = Self.parseARP(raw, gateway: gw)
+            // Nothing at all, with a router known: macOS withheld the table
+            let withheld = gw != nil && WithheldLists.arpIsEmpty(raw)
             // Best-effort reverse DNS for the first 64 entries (cheap fan-out)
             parsed = await Self.attachHostnames(parsed)
             await MainActor.run {
                 entries = parsed
+                if withheld { error = WithheldLists.arpMessage }
                 isLoading = false
             }
         }
@@ -372,3 +375,20 @@ struct ARPEntry: Identifiable, Hashable {
 
 // OUIDatabase was extracted to OUIDatabase.swift in v1.2.1 and shared with
 // the Network Map. Its public surface (`OUIDatabase.lookup(_:)`) is unchanged.
+
+/// A one-line explanation under a toolbar when macOS withheld a list
+/// (see `WithheldLists`). Informational, so amber, not the red error bar.
+struct WithheldNotice: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "info.circle.fill").foregroundStyle(NS.amber)
+            Text(text).font(.system(size: 12)).foregroundStyle(NS.text1)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 8)
+        .background(NS.amber.opacity(0.08))
+    }
+}

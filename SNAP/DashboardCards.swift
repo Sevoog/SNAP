@@ -16,6 +16,7 @@ import SwiftUI
 import Network
 import Darwin
 import CoreWLAN
+import CoreLocation
 import UniformTypeIdentifiers
 
 // MARK: - Card kind
@@ -575,39 +576,60 @@ private struct PingDashCard: View {
         let handle = pipe.fileHandleForReading
 
         var buffer = ""
+        // Everything ping printed, for the summary once it exits.
+        var output = ""
+        let lock = NSLock()
         var seq = 0
-        var rtts: [Double] = []
-        var lost = 0
 
         handle.readabilityHandler = { fh in
             let data = fh.availableData
             if data.isEmpty { return }
-            buffer += String(data: data, encoding: .utf8) ?? ""
+            let text = String(data: data, encoding: .utf8) ?? ""
+            lock.lock(); output += text; lock.unlock()
+            buffer += text
             while let nl = buffer.firstIndex(of: "\n") {
                 let line = String(buffer[..<nl])
                 buffer.removeSubrange(...nl)
-                if let rtt = Self.parseRTT(line) {
-                    seq += 1; rtts.append(rtt)
+                if let rtt = PingDashSummary.parseRTT(line) {
+                    seq += 1
+                    let n = seq
                     DispatchQueue.main.async {
-                        lines.append((seq: seq, ms: rtt))
+                        lines.append((seq: n, ms: rtt))
                     }
                 } else if line.contains("Request timeout") {
-                    seq += 1; lost += 1
+                    seq += 1
+                    let n = seq
                     DispatchQueue.main.async {
-                        lines.append((seq: seq, ms: nil))
+                        lines.append((seq: n, ms: nil))
                     }
                 }
             }
         }
 
-        p.terminationHandler = { _ in
+        p.terminationHandler = { proc in
             handle.readabilityHandler = nil
-            let avg = rtts.isEmpty ? 0 : rtts.reduce(0, +) / Double(rtts.count)
-            let totalSent = max(seq, rtts.count + lost)
-            let loss = totalSent == 0 ? 0 : Int(Double(lost) / Double(totalSent) * 100)
+            // The statistics line can arrive after the last readability call.
+            let rest = handle.readDataToEndOfFile()
+            lock.lock()
+            output += String(data: rest, encoding: .utf8) ?? ""
+            let all = output
+            lock.unlock()
+            let stopped = proc.terminationReason == .uncaughtSignal
+            let text = PingDashSummary.text(host: target, output: all, stopped: stopped)
+            // ping prints no "Request timeout" for the last packet; the
+            // statistics line still counts it.
+            let sent = PingDashSummary.counts(all)?.sent ?? 0
+            // Rebuilt from the full output: a reply read only just now would
+            // otherwise be padded in below as a timeout.
+            var final = PingDashSummary.samples(all)
+            if !stopped, sent > final.count {
+                final += Array(repeating: nil, count: sent - final.count)
+            }
             DispatchQueue.main.async {
-                summary = String(format: "sent %d  recv %d  loss %d%%  avg %.1f ms",
-                                 totalSent, rtts.count, loss, avg)
+                // A run started after this one was stopped owns the card now
+                if let current = process, current !== proc { return }
+                lines = final.enumerated().map { (seq: $0.offset + 1, ms: $0.element) }
+                summary = text
                 running = false
                 process = nil
             }
@@ -626,13 +648,57 @@ private struct PingDashCard: View {
         process = nil
         running = false
     }
+}
 
-    private static func parseRTT(_ line: String) -> Double? {
+/// What the Dashboard Ping card says once ping exits. Pure, for tests.
+enum PingDashSummary {
+    /// Each reply's time, or nil for a printed timeout, in order.
+    static func samples(_ output: String) -> [Double?] {
+        output.split(separator: "\n").compactMap { line -> Double?? in
+            let l = String(line)
+            if let rtt = parseRTT(l) { return .some(rtt) }
+            if l.contains("Request timeout") { return .some(nil) }
+            return nil
+        }
+    }
+
+    static func parseRTT(_ line: String) -> Double? {
         // "64 bytes from 1.1.1.1: icmp_seq=0 ttl=58 time=11.834 ms"
         guard let r = line.range(of: "time=") else { return nil }
         let tail = line[r.upperBound...]
         let token = tail.split(separator: " ").first ?? ""
         return Double(token)
+    }
+
+    /// Sent and received, from "5 packets transmitted, 3 packets received, 40.0% packet loss".
+    static func counts(_ output: String) -> (sent: Int, received: Int)? {
+        for line in output.split(separator: "\n") where line.contains("packets transmitted") {
+            let numbers = line.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+            if numbers.count >= 2 { return (numbers[0], numbers[1]) }
+        }
+        return nil
+    }
+
+    /// `stopped`: the user pressed Stop, so ping printed no statistics.
+    static func text(host: String, output: String, stopped: Bool) -> String {
+        if output.contains("cannot resolve") || output.contains("Unknown host") {
+            // macOS ping only takes IPv4, so an IPv6 address "doesn't resolve".
+            if host.contains(":") {
+                return "This card can't ping IPv6 addresses. Use an IPv4 address or a hostname."
+            }
+            return "Couldn't find \(host). Check the spelling."
+        }
+        let rtts = output.split(separator: "\n").compactMap { parseRTT(String($0)) }
+        let timeouts = output.components(separatedBy: "Request timeout").count - 1
+        let stats = counts(output)
+        let received = stats?.received ?? rtts.count
+        let sent = max(stats?.sent ?? 0, rtts.count + timeouts)
+        guard received > 0, !rtts.isEmpty else {
+            return stopped && sent == 0 ? "Stopped." : "No replies from \(host)."
+        }
+        let avg = rtts.reduce(0, +) / Double(rtts.count)
+        let loss = sent == 0 ? 0 : Int(Double(max(0, sent - received)) / Double(sent) * 100)
+        return String(format: "sent %d  recv %d  loss %d%%  avg %.1f ms", sent, received, loss, avg)
     }
 }
 
@@ -699,36 +765,27 @@ private struct LookupDashCard: View {
 
     private func resolve() {
         let target = host.trimmingCharacters(in: .whitespaces)
-        guard !target.isEmpty else { return }
+        guard !target.isEmpty, !running else { return }
         ToolHistory.shared.add(.lookup, target)
         rows.removeAll(); note = ""; running = true
         let want = rtype
         DispatchQueue.global(qos: .userInitiated).async {
-            var results: [(String, String)] = []
-            var hints = addrinfo(ai_flags: 0,
-                                 ai_family: want == "AAAA" ? AF_INET6 : AF_INET,
-                                 ai_socktype: SOCK_STREAM,
-                                 ai_protocol: IPPROTO_TCP,
-                                 ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil)
-            var info: UnsafeMutablePointer<addrinfo>?
-            let rv = getaddrinfo(target, nil, &hints, &info)
-            defer { if info != nil { freeaddrinfo(info) } }
-            if rv == 0, var node = info {
-                while true {
-                    var buf = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                    let n = getnameinfo(node.pointee.ai_addr, node.pointee.ai_addrlen,
-                                        &buf, socklen_t(buf.count),
-                                        nil, 0, NI_NUMERICHOST)
-                    if n == 0 {
-                        let addr = String(cString: buf)
-                        results.append((want, addr))
-                    }
-                    if let nxt = node.pointee.ai_next { node = nxt } else { break }
-                }
+            let family = want == "AAAA" ? AF_INET6 : AF_INET
+            let found = DashLookup.resolve(target, family: family)
+            let results = found.addresses.map { (want, $0) }
+            // Nothing of this type: tell "the name has no such records"
+            // apart from "the lookup failed".
+            var failureNote: String?
+            if results.isEmpty {
+                let other = DashLookup.resolve(target, family: family == AF_INET ? AF_INET6 : AF_INET)
+                let failure = other.addresses.isEmpty
+                    ? DashLookup.failure(code: found.code, offline: DashLookup.isOffline())
+                    : nil
+                failureNote = DashLookup.lookupText(host: target, type: want, failure: failure)
             }
             DispatchQueue.main.async {
-                if results.isEmpty {
-                    note = "no \(want) records"
+                if let failureNote {
+                    note = failureNote
                 }
                 // dedup
                 var seen = Set<String>()
@@ -744,6 +801,7 @@ private struct LookupDashCard: View {
 private struct PortScanDashCard: View {
     @State private var host = "192.168.1.1"
     @State private var results: [(Int, Bool)] = []
+    @State private var note = ""
     @State private var running = false
     private var themeMgr = ThemeManager.shared
     private let ports = [22, 80, 443, 53, 161, 8080, 8443]
@@ -783,7 +841,9 @@ private struct PortScanDashCard: View {
                             .foregroundStyle(open ? NS.green : NS.text4)
                     }
                 }
-                if results.isEmpty {
+                if !note.isEmpty {
+                    Text(note).font(.system(size: 10)).foregroundStyle(NS.red)
+                } else if results.isEmpty {
                     Text("Idle.").font(.system(size: 10)).foregroundStyle(NS.text4)
                 }
             }
@@ -792,9 +852,28 @@ private struct PortScanDashCard: View {
 
     private func scan() {
         let target = host.trimmingCharacters(in: .whitespaces)
-        guard !target.isEmpty else { return }
+        guard !target.isEmpty, !running else { return }
         ToolHistory.shared.add(.portScan, target)
-        running = true; results.removeAll()
+        running = true; results.removeAll(); note = ""
+        // Resolve first: a name that doesn't resolve would otherwise show
+        // every port as closed.
+        DispatchQueue.global(qos: .userInitiated).async {
+            let found = DashLookup.resolve(target, family: AF_UNSPEC)
+            let failure = found.addresses.isEmpty
+                ? DashLookup.failure(code: found.code, offline: DashLookup.isOffline())
+                : nil
+            DispatchQueue.main.async {
+                if let failure {
+                    note = DashLookup.portScanText(host: target, failure: failure)
+                    running = false
+                } else {
+                    probe(target)
+                }
+            }
+        }
+    }
+
+    private func probe(_ target: String) {
         let endpoints = ports.map { ($0, NWEndpoint.Host(target)) }
         var done = 0
         for (port, h) in endpoints {
@@ -843,6 +922,83 @@ private struct PortScanDashCard: View {
                 }
             }
             conn.start(queue: .global())
+        }
+    }
+}
+
+/// Name lookups for the Lookup and Port Scan cards, so a failed lookup says
+/// what happened instead of looking like an empty answer.
+enum DashLookup {
+    enum Failure: Equatable {
+        /// The name doesn't exist (or the DNS server says so).
+        case notFound
+        /// No network, or the DNS server didn't answer.
+        case offline
+    }
+
+    /// Numeric addresses for `host` in `family` (AF_INET, AF_INET6 or
+    /// AF_UNSPEC), and getaddrinfo's return code. Blocks; call off main.
+    static func resolve(_ host: String, family: Int32) -> (code: Int32, addresses: [String]) {
+        var hints = addrinfo(ai_flags: 0,
+                             ai_family: family,
+                             ai_socktype: SOCK_STREAM,
+                             ai_protocol: IPPROTO_TCP,
+                             ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil)
+        var info: UnsafeMutablePointer<addrinfo>?
+        let rv = getaddrinfo(host, nil, &hints, &info)
+        defer { if info != nil { freeaddrinfo(info) } }
+        var addresses: [String] = []
+        if rv == 0, var node = info {
+            while true {
+                var buf = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                let n = getnameinfo(node.pointee.ai_addr, node.pointee.ai_addrlen,
+                                    &buf, socklen_t(buf.count),
+                                    nil, 0, NI_NUMERICHOST)
+                if n == 0 { addresses.append(String(cString: buf)) }
+                if let nxt = node.pointee.ai_next { node = nxt } else { break }
+            }
+        }
+        return (rv, addresses)
+    }
+
+    /// True when macOS reports no usable network. Waits up to a second for
+    /// the first path update; call off main.
+    static func isOffline() -> Bool {
+        let monitor = NWPathMonitor()
+        let ready = DispatchSemaphore(value: 0)
+        let lock = NSLock()
+        var satisfied = true
+        monitor.pathUpdateHandler = { path in
+            lock.lock(); satisfied = path.status == .satisfied; lock.unlock()
+            ready.signal()
+        }
+        monitor.start(queue: DispatchQueue(label: "com.sevagbardakjian.snap.dashLookup.path"))
+        _ = ready.wait(timeout: .now() + 1)
+        monitor.cancel()
+        lock.lock(); defer { lock.unlock() }
+        return !satisfied
+    }
+
+    /// Why a name didn't resolve. getaddrinfo answers EAI_NONAME both for a
+    /// misspelled name and with no network at all, so `offline` decides.
+    static func failure(code: Int32, offline: Bool) -> Failure {
+        if offline || code == EAI_AGAIN || code == EAI_FAIL { return .offline }
+        return .notFound
+    }
+
+    /// Lookup card. `failure` nil: the name resolved, just not to `type`.
+    static func lookupText(host: String, type: String, failure: Failure?) -> String {
+        switch failure {
+        case nil:       return "\(host) has no \(type) records."
+        case .offline?: return "Couldn't look up \(host). Check that this Mac is online, then try again."
+        case .notFound?: return "Couldn't find \(host). Check the spelling."
+        }
+    }
+
+    static func portScanText(host: String, failure: Failure) -> String {
+        switch failure {
+        case .offline:  return "Couldn't look up \(host). Check that this Mac is online, then try again."
+        case .notFound: return "Couldn't find \(host)."
         }
     }
 }
@@ -1033,8 +1189,8 @@ private struct WiFiDashCard: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(ssid)
                 .font(.system(size: 13, weight: .semibold))
-                .lineLimit(1)
-            Text("\(channel) · \(band)")
+                .lineLimit(2)
+            Text(channel.isEmpty ? " " : "\(channel) · \(band)")
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(NS.text3)
             HStack(alignment: .bottom, spacing: 5) {
@@ -1095,29 +1251,75 @@ private struct WiFiDashCard: View {
     }
 
     private func refresh() {
+        let locationAllowed = WiFiDashText.locationAllowed()
         DispatchQueue.global(qos: .utility).async {
             guard let i = CWWiFiClient.shared().interface() else {
                 DispatchQueue.main.async { ssid = "Not associated" }
                 return
             }
-            let s = i.ssid() ?? "Hidden"
-            let r = i.rssiValue()
-            let ch = i.wlanChannel()?.channelNumber ?? 0
-            let widthRaw = i.wlanChannel()?.channelWidth.rawValue ?? 0
-            let widthLbl = ["20","40","80","160","320"][min(widthRaw, 4)]
-            let bandLbl: String = {
-                guard let cb = i.wlanChannel()?.channelBand else { return "Wi-Fi" }
-                switch cb {
-                case .band2GHz: return "2.4 GHz · \(widthLbl) MHz"
-                case .band5GHz: return "5 GHz · \(widthLbl) MHz"
-                case .band6GHz, .bandUnknown: return "6 GHz · \(widthLbl) MHz"
-                @unknown default: return "Wi-Fi"
-                }
-            }()
-            let chStr = "Ch \(ch)"
+            let on = i.powerOn()
+            let chan = on ? i.wlanChannel() : nil
+            let r = on ? i.rssiValue() : 0
+            let s = WiFiDashText.name(powerOn: on, ssid: i.ssid(),
+                                      associated: chan != nil || r != 0,
+                                      locationAllowed: locationAllowed)
+            // Not joined: no channel line (it used to say "Ch 0").
+            let chStr = chan.map { "Ch \($0.channelNumber)" } ?? ""
+            let bandLbl = chan.map { WiFiDashText.bandLabel($0.channelBand, width: $0.channelWidth) } ?? ""
             DispatchQueue.main.async {
                 ssid = s; rssi = r; channel = chStr; band = bandLbl
             }
+        }
+    }
+}
+
+/// The Wi-Fi card's labels. Pure, for tests (except locationAllowed).
+enum WiFiDashText {
+    /// nil when CoreWLAN doesn't know the width.
+    static func widthLabel(_ width: CWChannelWidth) -> String? {
+        switch width {
+        case .width20MHz:   return "20 MHz"
+        case .width40MHz:   return "40 MHz"
+        case .width80MHz:   return "80 MHz"
+        case .width160MHz:  return "160 MHz"
+        case .widthUnknown: return nil
+        @unknown default:   return nil
+        }
+    }
+
+    static func bandName(_ band: CWChannelBand) -> String? {
+        switch band {
+        case .band2GHz:    return "2.4 GHz"
+        case .band5GHz:    return "5 GHz"
+        case .band6GHz:    return "6 GHz"
+        case .bandUnknown: return nil
+        @unknown default:  return nil
+        }
+    }
+
+    /// "5 GHz · 80 MHz", leaving out whatever CoreWLAN doesn't know.
+    static func bandLabel(_ band: CWChannelBand, width: CWChannelWidth) -> String {
+        let parts = [bandName(band), widthLabel(width)].compactMap { $0 }
+        return parts.isEmpty ? "Wi-Fi" : parts.joined(separator: " · ")
+    }
+
+    /// The card's title. CoreWLAN gives no network name with Wi-Fi off, when
+    /// not joined, or without Location access; tell those apart.
+    static func name(powerOn: Bool, ssid: String?, associated: Bool, locationAllowed: Bool) -> String {
+        if !powerOn { return "Wi-Fi off" }
+        if let ssid, !ssid.isEmpty { return ssid }
+        if !associated { return "Not connected" }
+        if !locationAllowed { return "Allow Location access to see the network name" }
+        return "Hidden network"
+    }
+
+    private static let locationManager = CLLocationManager()
+
+    /// Whether SNAP may read the network name. Call on the main thread.
+    static func locationAllowed() -> Bool {
+        switch locationManager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse: return true
+        default: return false
         }
     }
 }
@@ -1241,7 +1443,7 @@ private struct TracerouteDashCard: View {
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(NS.text3)
             VStack(alignment: .leading, spacing: 1) {
-                ForEach(Array(hops.prefix(6).enumerated()), id: \.offset) { _, line in
+                ForEach(Array(TracerouteDashText.visibleHops(hops).enumerated()), id: \.offset) { _, line in
                     Text(verbatim: line)
                         .font(.system(size: 9, design: .monospaced))
                         .foregroundStyle(NS.text2)
@@ -1270,6 +1472,8 @@ private struct TracerouteDashCard: View {
         p.standardOutput = pipe; p.standardError = pipe
         let handle = pipe.fileHandleForReading
         var buffer = ""
+        let lock = NSLock()
+        var unknownHost = false
         handle.readabilityHandler = { fh in
             let data = fh.availableData
             if data.isEmpty { return }
@@ -1277,6 +1481,10 @@ private struct TracerouteDashCard: View {
             while let nl = buffer.firstIndex(of: "\n") {
                 let line = String(buffer[..<nl]).trimmingCharacters(in: .whitespaces)
                 buffer.removeSubrange(...nl)
+                if TracerouteDashText.isUnknownHost(line) {
+                    lock.lock(); unknownHost = true; lock.unlock()
+                    continue
+                }
                 if line.isEmpty || line.hasPrefix("traceroute") { continue }
                 DispatchQueue.main.async {
                     hops.append(line)
@@ -1286,9 +1494,17 @@ private struct TracerouteDashCard: View {
         }
         p.terminationHandler = { _ in
             handle.readabilityHandler = nil
+            // "unknown host" can arrive after the last readability call.
+            let rest = String(data: handle.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            lock.lock()
+            let notFound = unknownHost || rest.split(separator: "\n")
+                .contains { TracerouteDashText.isUnknownHost(String($0)) }
+            lock.unlock()
             DispatchQueue.main.async {
                 running = false; process = nil
-                if hops.isEmpty { summary = "no response" }
+                if hops.isEmpty {
+                    summary = notFound ? TracerouteDashText.notFoundText(host: target) : "no response"
+                }
             }
         }
         do { try p.run(); process = p } catch { summary = "failed to launch"; running = false }
@@ -1296,6 +1512,34 @@ private struct TracerouteDashCard: View {
 
     private func stop() {
         process?.terminate(); process = nil; running = false
+    }
+}
+
+/// The Traceroute card's text. Pure, for tests.
+enum TracerouteDashText {
+    /// traceroute's "traceroute: unknown host example.invalid" on stderr.
+    static func isUnknownHost(_ line: String) -> Bool {
+        line.trimmingCharacters(in: .whitespaces).hasPrefix("traceroute: unknown host")
+    }
+
+    static func notFoundText(host: String) -> String {
+        // macOS traceroute only takes IPv4, so an IPv6 address is "unknown".
+        if host.contains(":") {
+            return "This card can't trace IPv6 addresses. Use an IPv4 address or a hostname."
+        }
+        return "Couldn't find \(host). Check the spelling."
+    }
+
+    /// At most `limit` lines. A longer trace keeps its first and last hops,
+    /// so the destination stays in view, with one line for the rest.
+    static func visibleHops(_ hops: [String], limit: Int = 6) -> [String] {
+        guard limit >= 4, hops.count > limit else { return hops }
+        let tail = limit / 2
+        let head = limit - tail - 1
+        let hidden = hops.count - head - tail
+        return Array(hops.prefix(head))
+            + ["\u{2026} \(hidden) more hop\(hidden == 1 ? "" : "s")"]
+            + Array(hops.suffix(tail))
     }
 }
 

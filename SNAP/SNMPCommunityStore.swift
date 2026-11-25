@@ -32,12 +32,13 @@ import Security
 //   enum SNMPCommunityStore {
 //     static func hasSaved(host: String, port: UInt16) -> Bool   // index only, no Keychain access
 //     static func load(host: String, port: UInt16) -> String?
-//     static func save(host: String, port: UInt16, community: String)
+//     @discardableResult
+//     static func save(host: String, port: UInt16, community: String) -> Bool   // false: the Keychain refused it
 //     static func forget(host: String, port: UInt16)
 //     static func forgetAll()                                    // Remember's entries and the board's copy
 //     static var savedCount: Int { get }                         // Remember's entries, plus 1 for the board's copy
 //     // The Status Board's own copy, separate from Remember:
-//     static func saveForBoard(community: String, host: String, port: UInt16)
+//     static func saveForBoard(community: String, host: String, port: UInt16) -> Bool   // false if the Keychain refused
 //     static func loadForBoard(host: String, port: UInt16) -> String?   // nil unless saved for this host and port
 //     static func forgetForBoard()
 //   }
@@ -263,17 +264,21 @@ enum SNMPCommunityStore {
 
     /// Saves (or replaces) the remembered community for this host and port.
     /// An empty community isn't saved: the SNMP tab sends "public" for an
-    /// empty field.
-    static func save(host: String, port: UInt16, community: String) {
+    /// empty field. False only when the Keychain refused the write, so the
+    /// caller can say nothing was remembered.
+    @discardableResult
+    static func save(host: String, port: UInt16, community: String) -> Bool {
         let b = backend
-        guard let a = account(host: host, port: port), !community.isEmpty else { return }
-        if b.secrets.write(account: a, secret: community) {
+        guard let a = account(host: host, port: port), !community.isEmpty else { return true }
+        let stored = b.secrets.write(account: a, secret: community)
+        if stored {
             setIndex(index(b) + [a], b)
         } else {
             // The old item was removed before the write failed.
             setIndex(index(b).filter { $0 != a }, b)
         }
         bumpRevision()
+        return stored
     }
 
     /// Forgets the remembered community for this host and port. The board's
@@ -321,20 +326,23 @@ enum SNMPCommunityStore {
     /// Saves the board's copy for this host and port, replacing the copy
     /// for whatever it watched before. Remember's entries aren't touched.
     /// With an empty host or community there's nothing to save, so the old
-    /// copy is only deleted.
-    static func saveForBoard(community: String, host: String, port: UInt16) {
+    /// copy is only deleted. False when the Keychain refused the write.
+    @discardableResult
+    static func saveForBoard(community: String, host: String, port: UInt16) -> Bool {
         let b = backend
         guard let a = account(host: host, port: port), !community.isEmpty else {
             forgetForBoard()
-            return
+            return false
         }
-        if b.secrets.write(account: boardAccount, secret: community) {
+        let saved = b.secrets.write(account: boardAccount, secret: community)
+        if saved {
             b.defaults.set(a, forKey: b.boardKey)
         } else {
             // The old item was removed before the write failed.
             b.defaults.removeObject(forKey: b.boardKey)
         }
         bumpRevision()
+        return saved
     }
 
     /// The board's copy, or nil when it was saved for another host or port

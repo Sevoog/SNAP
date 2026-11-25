@@ -75,8 +75,7 @@ struct DNSPropagationView: View {
         let groups = answerGroups()
         let total = rows.filter { $0.status != .running }.count
         if total > 0 {
-            let topCount = groups.first?.1.count ?? 0
-            let pct = Int((Double(topCount) / Double(total)) * 100)
+            let pct = PropagationConsensus.percent(top: groups.first?.rows.count ?? 0, of: total)
             HStack(spacing: 6) {
                 Circle()
                     .fill(pct >= 100 ? NS.green : (pct >= 80 ? NS.amber : NS.red))
@@ -172,18 +171,18 @@ struct DNSPropagationView: View {
                     ForEach(Array(answerGroups().enumerated()), id: \.offset) { _, group in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
-                                Text("\(group.1.count)× resolvers")
+                                Text("\(group.rows.count)× resolvers")
                                     .font(.system(size: 11, weight: .semibold))
                                     .foregroundStyle(NS.text1)
                                 Spacer()
                             }
-                            ForEach(group.0, id: \.self) { v in
+                            ForEach(groupLines(group.answer), id: \.self) { v in
                                 Text(v)
                                     .font(.system(size: 11, design: .monospaced))
                                     .foregroundStyle(NS.text2)
                                     .textSelection(.enabled)
                             }
-                            Text(group.1.map { $0.resolver.name }.joined(separator: ", "))
+                            Text(group.rows.map { $0.resolver.name }.joined(separator: ", "))
                                 .font(.system(size: 10))
                                 .foregroundStyle(NS.text3)
                                 .padding(.top, 2)
@@ -223,7 +222,8 @@ struct DNSPropagationView: View {
                             status: result.error == nil ? .ok : .failed,
                             values: result.values,
                             elapsedMs: result.elapsedMs,
-                            error: result.error
+                            error: result.error,
+                            nxdomain: result.nxdomain
                         )
                         return (r.id, row)
                     }
@@ -240,11 +240,7 @@ struct DNSPropagationView: View {
         }
     }
 
-    private static func sortKey(_ values: [String]) -> String {
-        values.sorted().joined(separator: "|")
-    }
-
-    private static func runOne(server: String, name: String, type: DNSWireType) async -> (values: [String], elapsedMs: Double?, error: String?) {
+    private static func runOne(server: String, name: String, type: DNSWireType) async -> (values: [String], elapsedMs: Double?, error: String?, nxdomain: Bool) {
         return await withCheckedContinuation { cont in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
@@ -254,9 +250,11 @@ struct DNSPropagationView: View {
                         .map { $0.value }
                     // Fallback: if no matches at all (e.g. CNAME chase), use whatever answers were returned
                     let final = values.isEmpty ? r.answers.map { "\($0.type) \($0.value)" } : values
-                    cont.resume(returning: (final, r.elapsedMs, nil))
+                    cont.resume(returning: (final, r.elapsedMs, nil, false))
                 } catch {
-                    cont.resume(returning: ([], nil, (error as? LocalizedError)?.errorDescription ?? error.localizedDescription))
+                    let nx: Bool
+                    if case .rcode(3)? = error as? DNSWireError { nx = true } else { nx = false }
+                    cont.resume(returning: ([], nil, (error as? LocalizedError)?.errorDescription ?? error.localizedDescription, nx))
                 }
             }
         }
@@ -264,14 +262,22 @@ struct DNSPropagationView: View {
 
     // MARK: Grouping for consensus
 
-    private func answerGroups() -> [([String], [PropagationRow])] {
-        let successful = rows.filter { $0.status == .ok && !$0.values.isEmpty }
-        let bucketed = Dictionary(grouping: successful, by: { Self.sortKey($0.values) })
-        return bucketed
-            .map { (key, rows) -> ([String], [PropagationRow]) in
-                (rows.first?.values.sorted() ?? [], rows)
+    private func answerGroups() -> [(answer: PropagationAnswer, rows: [PropagationRow])] {
+        PropagationConsensus.groups(rows) { row in
+            switch row.status {
+            case .running: return nil
+            case .ok:      return .records(row.values)
+            case .failed:  return row.nxdomain ? .nxdomain : nil
             }
-            .sorted { $0.1.count > $1.1.count }
+        }
+    }
+
+    private func groupLines(_ answer: PropagationAnswer) -> [String] {
+        switch answer {
+        case .records(let values) where values.isEmpty: return ["No \(recordType.label) record"]
+        case .records(let values):                      return values
+        case .nxdomain:                                 return ["Name doesn't exist"]
+        }
     }
 
     // MARK: Export
@@ -327,6 +333,50 @@ struct DNSPropagationView: View {
     }
 }
 
+// MARK: - Consensus
+
+/// What consensus compares for one resolver.
+enum PropagationAnswer: Hashable {
+    /// Sorted values; empty means the name exists but has no record of this type
+    case records([String])
+    /// NXDOMAIN: the resolver says the name doesn't exist
+    case nxdomain
+
+    fileprivate var sortKey: String {
+        switch self {
+        case .records(let v): return "r:" + v.joined(separator: "|")
+        case .nxdomain:       return "nx"
+        }
+    }
+}
+
+enum PropagationConsensus {
+    /// Resolvers grouped by identical answer, largest group first. A nil
+    /// answer (still running, or failed: timeout, SERVFAIL, refused) is left
+    /// out. Agreeing NXDOMAIN or empty answers form a group like any other;
+    /// counting only non-empty answers showed "0% consensus" when every
+    /// resolver agreed the name or record doesn't exist.
+    static func groups<Row>(_ rows: [Row], answer: (Row) -> PropagationAnswer?) -> [(answer: PropagationAnswer, rows: [Row])] {
+        var order: [PropagationAnswer] = []
+        var buckets: [PropagationAnswer: [Row]] = [:]
+        for row in rows {
+            guard var a = answer(row) else { continue }
+            if case .records(let v) = a { a = .records(v.sorted()) }
+            if buckets[a] == nil { order.append(a) }
+            buckets[a, default: []].append(row)
+        }
+        return order
+            .map { (answer: $0, rows: buckets[$0] ?? []) }
+            .sorted { $0.rows.count != $1.rows.count ? $0.rows.count > $1.rows.count : $0.answer.sortKey < $1.answer.sortKey }
+    }
+
+    /// Share of finished resolvers in the largest group, 0 to 100.
+    static func percent(top: Int, of total: Int) -> Int {
+        guard total > 0 else { return 0 }
+        return Int((Double(top) / Double(total)) * 100)
+    }
+}
+
 // MARK: - Row model
 
 private struct PropagationRow: Identifiable {
@@ -336,6 +386,7 @@ private struct PropagationRow: Identifiable {
     var values: [String]
     var elapsedMs: Double?
     var error: String?
+    var nxdomain = false
 
     enum RowStatus { case running, ok, failed }
 

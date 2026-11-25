@@ -32,6 +32,16 @@ final class VisualTraceViewModel: ObservableObject {
     @Published var cameraLon: Double = -40
     @Published var cameraLatDelta: Double = 80
     @Published var cameraLonDelta: Double = 120
+    /// Hops the location service didn't answer for (not private addresses,
+    /// which have no location by design).
+    @Published var geoFailures = 0
+
+    // Identifies the current run. Without it a previous run's onFinish could
+    // end a new run, and its late lookups appended old hops to the new list.
+    private var runID = UUID()
+    // Set by Stop, so the stopped traceroute's last lines start no lookups
+    private var stopped = false
+    private var lookups: [Task<Void, Never>] = []
 
     var currentRegion: MKCoordinateRegion {
         MKCoordinateRegion(
@@ -41,20 +51,65 @@ final class VisualTraceViewModel: ObservableObject {
     }
 
     func start(host: String) {
+        stop()
         hops = []
+        geoFailures = 0
         isRunning = true
+        stopped = false
+        let id = UUID()
+        runID = id
         // Reset camera to world view
         cameraLat = 30; cameraLon = -40; cameraLatDelta = 80; cameraLonDelta = 120
 
         process = Shell.stream("/usr/sbin/traceroute", args: ["-m", "20", "-q", "1", "-w", "3", host],
             onLine: { [weak self] line in
-                guard let self else { return }
+                guard let self, self.runID == id, !self.stopped else { return }
                 if let hop = parseTracerouteLine(line) {
-                    Task { await self.geolocate(hop: hop) }
+                    lookups.append(Task { await self.geolocate(hop: hop, runID: id) })
                 }
             },
-            onFinish: { [weak self] in self?.isRunning = false }
+            onFinish: { [weak self] in
+                guard let self, self.runID == id else { return }
+                self.isRunning = false
+            }
         )
+    }
+
+    /// The note under the toolbar when some hops couldn't be placed.
+    static func failureMessage(_ count: Int) -> String? {
+        guard count > 0 else { return nil }
+        return "Couldn't place \(count) hop\(count == 1 ? "" : "s") on the map. The location service didn't answer. Try again in a minute."
+    }
+
+    /// What an ipwho.is reply says about one hop.
+    enum GeoReply: Equatable {
+        case located(lat: Double?, lon: Double?, city: String, country: String, countryCode: String, org: String)
+        /// Private or reserved address: no location, and that's expected
+        case noLocation
+        /// No usable answer (an error reply, a rate limit, not JSON)
+        case failed
+    }
+
+    static func parseGeoReply(_ data: Data) -> GeoReply {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return .failed }
+        guard json["success"] as? Bool == true else {
+            let message = (json["message"] as? String ?? "").lowercased()
+            return message.contains("reserved") ? .noLocation : .failed
+        }
+        // Cast via NSNumber so integer lat/lon (39 vs 39.0) parse too.
+        let lat = (json["latitude"] as? NSNumber)?.doubleValue
+        let lon = (json["longitude"] as? NSNumber)?.doubleValue
+        var org = ""
+        if let conn = json["connection"] as? [String: Any] {
+            let asn = conn["asn"].map { "AS\($0)" } ?? ""
+            let name = (conn["org"] as? String) ?? (conn["isp"] as? String) ?? ""
+            org = [asn, name].filter { !$0.isEmpty }.joined(separator: " ")
+        }
+        return .located(lat: lat, lon: lon,
+                        city: json["city"] as? String ?? "",
+                        country: json["country"] as? String ?? "",
+                        countryCode: json["country_code"] as? String ?? "",
+                        org: org)
     }
 
     private func parseTracerouteLine(_ line: String) -> GeoHop? {
@@ -84,7 +139,11 @@ final class VisualTraceViewModel: ObservableObject {
     }
 
     func stop() {
+        stopped = true
         if process?.isRunning == true { process?.terminate() }
+        // Cancelled lookups still list their hop, just without a location
+        lookups.forEach { $0.cancel() }
+        lookups.removeAll()
         isRunning = false
     }
 
@@ -99,9 +158,10 @@ final class VisualTraceViewModel: ObservableObject {
     }
 
     @MainActor
-    private func geolocate(hop: GeoHop) async {
+    private func geolocate(hop: GeoHop, runID id: UUID) async {
         var h = hop
         guard !hop.ip.isEmpty && hop.ip != "*" && !isPrivateIP(hop.ip) else {
+            guard runID == id else { return }
             hops.append(h)
             hops.sort { $0.hop < $1.hop }
             return
@@ -110,32 +170,36 @@ final class VisualTraceViewModel: ObservableObject {
         // (Earlier ip-api.com attempt hit unclear failures on some hops;
         // ipwho.is has been consistent for our other geolocation code path.)
         guard let url = URL(string: "https://ipwho.is/\(hop.ip)") else {
+            guard runID == id else { return }
             hops.append(h)
             hops.sort { $0.hop < $1.hop }
             return
         }
+        var failed = false
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               json["success"] as? Bool == true {
-                // Cast via NSNumber so integer lat/lon (39 vs 39.0) parse too.
-                if let latN = json["latitude"] as? NSNumber,
-                   let lonN = json["longitude"] as? NSNumber {
-                    h.coordinate = CLLocationCoordinate2D(
-                        latitude: latN.doubleValue, longitude: lonN.doubleValue)
+            switch Self.parseGeoReply(data) {
+            case .located(let lat, let lon, let city, let country, let code, let org):
+                if let lat, let lon {
+                    h.coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
                 }
-                h.city        = json["city"]         as? String ?? ""
-                h.country     = json["country"]      as? String ?? ""
-                h.countryCode = json["country_code"] as? String ?? ""
-                if let conn = json["connection"] as? [String: Any] {
-                    let asn = conn["asn"].map { "AS\($0)" } ?? ""
-                    let org = (conn["org"] as? String) ?? (conn["isp"] as? String) ?? ""
-                    h.org = [asn, org].filter { !$0.isEmpty }.joined(separator: " ")
-                }
+                h.city = city
+                h.country = country
+                h.countryCode = code
+                h.org = org
+            case .noLocation:
+                break
+            case .failed:
+                failed = true
             }
         } catch {
+            // Stop cancels pending lookups; that isn't the service failing
+            failed = !Task.isCancelled
             NSLog("VisualTrace geolocate failed for \(hop.ip): \(error.localizedDescription)")
         }
+        // A newer run has started: this hop belongs to the old one
+        guard runID == id else { return }
+        if failed { geoFailures += 1 }
         hops.append(h)
         hops.sort { $0.hop < $1.hop }
         updateCamera()
@@ -244,6 +308,17 @@ struct VisualTraceRouteView: View {
             .background(NS.bg0)
 
             Divider()
+
+            if let note = VisualTraceViewModel.failureMessage(model.geoFailures) {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(NS.amber)
+                    Text(note).font(.caption).foregroundStyle(NS.text1)
+                    Spacer()
+                }
+                .padding(.horizontal, 16).padding(.vertical, 6)
+                .background(NS.bg3)
+                Divider()
+            }
 
             HSplitView {
                 // Map pane

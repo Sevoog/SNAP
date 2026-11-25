@@ -1,6 +1,6 @@
 # Contributing to SNAP
 
-Thanks for your interest in SNAP. Contributions are welcome — bug reports, fixes, and new tools alike. SNAP is maintained in spare time, so replies may take a few days.
+Thanks for your interest in SNAP. Contributions are welcome: bug reports, fixes, and new tools alike. SNAP is maintained in spare time, so replies may take a few days.
 
 ## Before you start
 

@@ -35,7 +35,7 @@ import Combine
 //   @MainActor final class SNMPBoardWatch: ObservableObject {
 //     static let shared
 //     @Published private(set) var target: SNMPBoardTarget?
-//     func pin(_ target: SNMPBoardTarget, community: String)   // saves the board's copy via SNMPCommunityStore.saveForBoard
+//     func pin(_ target: SNMPBoardTarget, community: String) -> Bool   // saves the board's copy via SNMPCommunityStore.saveForBoard; false if the Keychain refused
 //     func unpin()                                             // deletes it via SNMPCommunityStore.forgetForBoard
 //   }
 //   struct SBSNMPWatchTile: View { init() }
@@ -435,9 +435,16 @@ final class SNMPBoardWatch: ObservableObject {
     // MARK: Pin
 
     /// Watches `target`, saving the board's own copy of the community.
-    /// Remember's saved communities aren't touched.
-    func pin(_ target: SNMPBoardTarget, community: String) {
-        SNMPCommunityStore.saveForBoard(community: community, host: target.host, port: target.port)
+    /// Remember's saved communities aren't touched. When the Keychain
+    /// refuses the copy this returns false and the board watches nothing:
+    /// the failed write already removed the previous target's copy, and a
+    /// tile without its community could only say so every 10 seconds.
+    @discardableResult
+    func pin(_ target: SNMPBoardTarget, community: String) -> Bool {
+        guard SNMPCommunityStore.saveForBoard(community: community, host: target.host, port: target.port) else {
+            if self.target != nil { unpin() }
+            return false
+        }
         stopPolling()
         self.target = target
         saveTarget()
@@ -448,6 +455,7 @@ final class SNMPBoardWatch: ObservableObject {
         }
         if !env.boardHasTile() { env.addTileToBoard() }
         updatePolling()
+        return true
     }
 
     /// Stops watching and deletes the board's copy of the community. A

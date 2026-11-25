@@ -14,7 +14,7 @@ SNAP is a network tool that runs unsandboxed and talks to devices on your networ
 - TLS and certificate validation, including UniFi certificate pinning.
 - Anything that sends data somewhere the [Privacy & Security](README.md#privacy--security) section doesn't say it goes.
 - Parsing of untrusted network input (DNS, SNMP, syslog, mDNS/SSDP, HTTP responses) that could crash SNAP or be exploited.
-- How SNAP launches system tools (ping, traceroute, arp, tcpdump, and so on).
+- How SNAP launches system tools (ping, traceroute, arp, tcpdump, and so on), including the launchd fallback that builds without a Developer ID signature use for arp and netstat.
 
 ## Supported versions
 

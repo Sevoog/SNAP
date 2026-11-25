@@ -125,6 +125,9 @@ final class WiFiAnalyzerModel: ObservableObject {
     @Published var connected: WiFiNetwork?
     @Published var isScanning = false
     @Published var error = ""
+    // True only when the error is about Location Services, so the banner's
+    // Open Settings button goes somewhere that can fix it
+    @Published var errorNeedsLocation = false
     @Published var liveOn = false
     @Published var lastScan: Date?
 
@@ -166,6 +169,7 @@ final class WiFiAnalyzerModel: ObservableObject {
     func scan() {
         isScanning = true
         error = ""
+        errorNeedsLocation = false
         // Resolve and use the CWInterface entirely inside the background block.
         // `scanForNetworks` is designed to be called off the main thread, and
         // keeping the (non-Sendable) interface local avoids capturing it across
@@ -228,19 +232,27 @@ final class WiFiAnalyzerModel: ObservableObject {
         isScanning = false
         if list.isEmpty {
             error = "No networks found. Check System Settings → Privacy & Security → Location Services → SNAP"
+            errorNeedsLocation = true
         }
     }
 
     private func handle(_ error: Error) {
-        let m = error.localizedDescription
+        let (text, needsLocation) = Self.describe(scanError: error.localizedDescription)
+        self.error = text
+        self.errorNeedsLocation = needsLocation
+    }
+
+    /// Banner text for a CoreWLAN scan error, and whether Location Services
+    /// settings are the fix (only then does the banner offer Open Settings).
+    nonisolated static func describe(scanError m: String) -> (text: String, needsLocation: Bool) {
         if m.contains("not authorized") || m.contains("denied") || m.contains("-3") {
-            self.error = "Location Services denied. Enable in System Settings → Privacy & Security → Location Services → SNAP"
+            return ("Location Services denied. Enable in System Settings → Privacy & Security → Location Services → SNAP", true)
         } else if m.contains("not supported") || m.contains("-4") {
-            self.error = "WiFi scanning not supported on this Mac"
+            return ("WiFi scanning not supported on this Mac", false)
         } else if m.contains("power") || m.contains("off") {
-            self.error = "WiFi is turned off — enable it first"
+            return ("WiFi is turned off. Turn it on, then press Scan.", false)
         } else {
-            self.error = "Scan error: \(m)"
+            return ("Scan error: \(m)", false)
         }
     }
 
@@ -472,6 +484,8 @@ struct WiFiAnalyzerView: View {
                 Button("Scan") {}.buttonStyle(.borderedProminent).hidden().accessibilityHidden(true)
                 if model.isScanning { ProgressView().controlSize(.small) }
                 else {
+                    // ⌘Return, not plain Return: plain Return would also fire from
+                    // the filter field and the sidebar's search box.
                     Button("Scan") { model.scan() }.buttonStyle(.borderedProminent).keyboardShortcut(.return)
                 }
             }
@@ -484,9 +498,11 @@ struct WiFiAnalyzerView: View {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             Text(model.error).foregroundStyle(.orange).font(.system(size: 12, weight: .semibold))
             Spacer()
-            Button("Open Settings") {
-                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")!)
-            }.font(.caption).buttonStyle(.bordered)
+            if model.errorNeedsLocation {
+                Button("Open Settings") {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")!)
+                }.font(.caption).buttonStyle(.bordered)
+            }
         }
         .padding(10).background(Color.orange.opacity(0.08))
     }
@@ -816,8 +832,9 @@ struct WiFiSignalView: View {
                         .foregroundColor(Color(red: 0.04, green: 0.04, blue: 0.06)),
                      at: CGPoint(x: pill.midX, y: pill.midY))
         }
-        // Time axis labels.
-        ctx.draw(Text("−60s").font(.system(size: 9, design: .monospaced)).foregroundColor(NS.text3),
+        // Time axis labels. History is the last 60 scans (not seconds), each
+        // line stretched across the full width, so the left edge is its oldest scan.
+        ctx.draw(Text("oldest scan").font(.system(size: 9, design: .monospaced)).foregroundColor(NS.text3),
                  at: CGPoint(x: padL + 2, y: size.height - 6), anchor: .leading)
         ctx.draw(Text("now").font(.system(size: 9, design: .monospaced)).foregroundColor(NS.text3),
                  at: CGPoint(x: size.width - padR - 4, y: size.height - 6), anchor: .trailing)
@@ -858,9 +875,12 @@ struct SpectrumCanvas: View {
     let selectID: (String) -> Void
 
     var body: some View {
-        Canvas { ctx, size in draw(ctx, size) }
-            .contentShape(Rectangle())
-            .onTapGesture { loc in tap(loc) }
+        // GeometryReader hands the tap the same width the Canvas draws with
+        GeometryReader { geo in
+            Canvas { ctx, size in draw(ctx, size) }
+                .contentShape(Rectangle())
+                .onTapGesture { loc in tap(loc, width: geo.size.width) }
+        }
     }
 
     private var freqRange: (Int, Int) {
@@ -874,7 +894,10 @@ struct SpectrumCanvas: View {
         return (left - margin, right + margin)
     }
     private func xFor(_ f: Int, _ w: CGFloat) -> CGFloat {
-        let (fmin, fmax) = freqRange; let padL: CGFloat = 34, padR: CGFloat = 8
+        Self.x(forFreq: f, range: freqRange, width: w)
+    }
+    static func x(forFreq f: Int, range: (Int, Int), width w: CGFloat) -> CGFloat {
+        let (fmin, fmax) = range; let padL: CGFloat = 34, padR: CGFloat = 8
         return padL + CGFloat(Double(f - fmin) / Double(max(1, fmax - fmin))) * (w - padL - padR)
     }
     private func draw(_ ctx: GraphicsContext, _ size: CGSize) {
@@ -902,17 +925,15 @@ struct SpectrumCanvas: View {
             ctx.draw(Text("\(n.channel)").font(.system(size: 9, design: .monospaced)).foregroundColor(NS.text3), at: CGPoint(x: xc, y: size.height - 8))
         }
     }
-    private func tap(_ loc: CGPoint) {
-        // pick nearest network center by x
-        guard !networks.isEmpty else { return }
-        let w: CGFloat = 900 // approximate; Canvas tap uses view coords — use proportion
-        _ = w
-        let nearest = networks.min(by: { abs(xForView($0, loc) - loc.x) < abs(xForView($1, loc) - loc.x) })
-        if let n = nearest { selectID(n.id) }
+    private func tap(_ loc: CGPoint, width: CGFloat) {
+        if let n = Self.nearest(to: loc.x, width: width, networks: networks, range: freqRange) { selectID(n.id) }
     }
-    private func xForView(_ n: WiFiNetwork, _ loc: CGPoint) -> CGFloat {
-        // Use the actual width from the tap context isn't available; approximate with a wide canvas.
-        xFor(n.centerFreq, 900)
+    /// The network whose channel center is drawn closest to `x` on a chart `width` points wide.
+    static func nearest(to x: CGFloat, width: CGFloat, networks: [WiFiNetwork], range: (Int, Int)) -> WiFiNetwork? {
+        networks.min(by: {
+            abs(Self.x(forFreq: $0.centerFreq, range: range, width: width) - x) <
+            abs(Self.x(forFreq: $1.centerFreq, range: range, width: width) - x)
+        })
     }
 }
 

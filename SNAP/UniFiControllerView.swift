@@ -52,6 +52,15 @@ struct UniFiDevice: Identifiable, Hashable {
     let uptime: TimeInterval        // seconds
     let lastSeen: Date?
     let satelliteParent: String?    // mesh AP only
+
+    /// Adopted devices first, then by name. Connect and Refresh both use
+    /// this; Refresh used to sort by name only, mixing pending devices in.
+    static func sortedForDisplay(_ devices: [UniFiDevice]) -> [UniFiDevice] {
+        devices.sorted {
+            if $0.adopted != $1.adopted { return $0.adopted }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
 }
 
 // MARK: - Keychain helpers
@@ -62,7 +71,9 @@ private enum UniFiKeychain {
     /// the first time it's read.
     private static let legacyService = "com.bardaklabs.snap.unifi"
 
-    static func save(host: String, username: String, password: String) {
+    /// False when the Keychain refused the write.
+    @discardableResult
+    static func save(host: String, username: String, password: String) -> Bool {
         // Stored under key "<host>|<username>" so multiple controllers can
         // coexist (one set per host+user). We only support one at a time
         // in the UI today; this keeps the door open.
@@ -78,9 +89,9 @@ private enum UniFiKeychain {
             kSecValueData as String:   data,
         ]
         // Drop the old copy only once the new one exists.
-        if SecItemAdd(attrs as CFDictionary, nil) == errSecSuccess {
-            delete(service: legacyService, key: key)
-        }
+        guard SecItemAdd(attrs as CFDictionary, nil) == errSecSuccess else { return false }
+        delete(service: legacyService, key: key)
+        return true
     }
 
     static func load(host: String, username: String) -> String? {
@@ -689,7 +700,11 @@ final class UniFiControllerModel: ObservableObject {
         }
     }
 
-    private var client: UniFiClient?
+    /// The logged-in session. Published so a controller with no devices
+    /// still shows as connected.
+    @Published private var client: UniFiClient?
+
+    var isConnected: Bool { client != nil }
 
     init() {
         if rememberCredentials, !username.isEmpty,
@@ -730,10 +745,7 @@ final class UniFiControllerModel: ObservableObject {
                 let devs = try await c.devices()
                 await MainActor.run {
                     self.client = c
-                    self.devices = devs.sorted {
-                        if $0.adopted != $1.adopted { return $0.adopted && !$1.adopted }
-                        return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-                    }
+                    self.devices = UniFiDevice.sortedForDisplay(devs)
                     self.connectionStatus = "Connected · \(devs.count) device\(devs.count == 1 ? "" : "s")"
                     self.isConnecting = false
                     self.lastRefresh = Date()
@@ -759,10 +771,35 @@ final class UniFiControllerModel: ObservableObject {
                 await MainActor.run {
                     self.client = nil
                     self.connectionStatus = "Failed"
-                    self.errorMessage = "\(error)"
+                    self.errorMessage = Self.errorText(error, controller: url.absoluteString)
                     self.isConnecting = false
                 }
             }
+        }
+    }
+
+    /// Plain text for a failed connect or refresh. Network failures (the
+    /// most common case) get a sentence instead of an NSURLErrorDomain dump;
+    /// the client's own errors keep their wording.
+    /// `controller`: what's in the Host field.
+    nonisolated static func errorText(_ error: Error, controller: String) -> String {
+        if let e = error as? UniFiClient.ClientError { return e.description }
+        guard let e = error as? URLError else { return error.localizedDescription }
+        let url = URL(string: controller)
+        let host = url?.host.map { h in url?.port.map { "\(h):\($0)" } ?? h } ?? controller
+        switch e.code {
+        case .timedOut, .cannotConnectToHost, .networkConnectionLost:
+            return "Couldn't reach the controller at \(host). Check the address and that this Mac can reach it, then Connect again."
+        case .cannotFindHost, .dnsLookupFailed:
+            return "Couldn't find \(host). Check the controller address, then Connect again."
+        case .notConnectedToInternet:
+            return "This Mac isn't connected to a network. Connect to the controller's network, then Connect again."
+        case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
+             .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
+             .clientCertificateRejected, .clientCertificateRequired:
+            return "Couldn't set up a secure connection to \(host). Check that the address points at the controller's HTTPS port, then Connect again."
+        default:
+            return "Couldn't reach the controller at \(host). \(e.localizedDescription)"
         }
     }
 
@@ -800,11 +837,10 @@ final class UniFiControllerModel: ObservableObject {
             do {
                 let devs = try await c.devices()
                 await MainActor.run {
-                    self.devices = devs.sorted {
-                        $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-                    }
+                    self.devices = UniFiDevice.sortedForDisplay(devs)
                     self.lastRefresh = Date()
                     self.connectionStatus = "Connected · \(devs.count) device\(devs.count == 1 ? "" : "s")"
+                    self.errorMessage = nil
                 }
             } catch UniFiClient.ClientError.unauthenticated,
                     UniFiClient.ClientError.http(401, _) {
@@ -820,7 +856,7 @@ final class UniFiControllerModel: ObservableObject {
                     }
                 }
             } catch {
-                await MainActor.run { self.errorMessage = "\(error)" }
+                await MainActor.run { self.errorMessage = Self.errorText(error, controller: self.host) }
             }
         }
     }
@@ -837,10 +873,12 @@ final class UniFiControllerModel: ObservableObject {
     private func saveSettings() {
         UserDefaults.standard.set(host, forKey: "unifi.host")
         UserDefaults.standard.set(username, forKey: "unifi.user")
-        UserDefaults.standard.set(rememberCredentials, forKey: "unifi.remember")
-        if rememberCredentials, !password.isEmpty {
-            UniFiKeychain.save(host: host, username: username, password: password)
+        if rememberCredentials, !password.isEmpty,
+           !UniFiKeychain.save(host: host, username: username, password: password) {
+            rememberCredentials = false
+            errorMessage = "Connected, but SNAP couldn't save the password in your Keychain, so you'll need to enter it next time."
         }
+        UserDefaults.standard.set(rememberCredentials, forKey: "unifi.remember")
     }
 
     // MARK: Export
@@ -966,7 +1004,7 @@ struct UniFiControllerView: View {
     private var toolbarStatus: some View {
         Text(model.connectionStatus)
             .font(.system(size: 11, design: .monospaced))
-            .foregroundStyle(model.devices.isEmpty ? NS.text3 : NS.green)
+            .foregroundStyle(model.isConnected ? NS.green : NS.text3)
             .fixedSize()
         if let t = model.lastRefresh {
             Text("· refreshed \(t.formatted(date: .omitted, time: .standard))")
@@ -982,12 +1020,14 @@ struct UniFiControllerView: View {
                           text: { model.exportText() },
                           csv:  { model.exportCSV() },
                           json: { model.exportJSON() })
+        }
+        if model.isConnected {
             Button("Refresh") { model.refresh() }
                 .buttonStyle(.bordered)
         }
         if model.isConnecting {
             ProgressView().controlSize(.small)
-        } else if model.devices.isEmpty {
+        } else if !model.isConnected {
             Button("Connect") { model.connect() }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.return)
@@ -1024,6 +1064,14 @@ struct UniFiControllerView: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 6)
         .background(NS.bg1)
+        // Return in Host, User, Pass or 2FA connects, like the Connect button.
+        .onSubmit { connectFromReturn() }
+    }
+
+    /// Same conditions as the Connect button being shown.
+    private func connectFromReturn() {
+        guard !model.isConnected, !model.isConnecting, model.pendingCertificate == nil else { return }
+        model.connect()
     }
 
     private func fieldLabel(_ s: String) -> some View {
@@ -1033,7 +1081,7 @@ struct UniFiControllerView: View {
     private var hostField: some View {
         TextField("https://controller", text: $model.host)
             .textFieldStyle(.roundedBorder)
-            .disabled(!model.devices.isEmpty || model.isConnecting)
+            .disabled(model.isConnected || model.isConnecting)
     }
 
     @ViewBuilder
@@ -1042,12 +1090,12 @@ struct UniFiControllerView: View {
         TextField("admin", text: $model.username)
             .textFieldStyle(.roundedBorder).frame(width: 110)
             .textContentType(.username)
-            .disabled(!model.devices.isEmpty || model.isConnecting)
+            .disabled(model.isConnected || model.isConnecting)
         fieldLabel("Pass:")
         SecureField("", text: $model.password)
             .textFieldStyle(.roundedBorder).frame(width: 130)
             .textContentType(.password)
-            .disabled(!model.devices.isEmpty || model.isConnecting)
+            .disabled(model.isConnected || model.isConnecting)
     }
 
     @ViewBuilder
@@ -1059,7 +1107,7 @@ struct UniFiControllerView: View {
         TextField("optional", text: $model.twoFactorCode)
             .textFieldStyle(.roundedBorder).frame(width: 80)
             .textContentType(.oneTimeCode)
-            .disabled(!model.devices.isEmpty || model.isConnecting)
+            .disabled(model.isConnected || model.isConnecting)
             .help("6-digit TOTP / SMS code. Leave blank if 2FA isn't enabled. Single-use — never stored.")
         Toggle("Remember", isOn: $model.rememberCredentials)
             .toggleStyle(.checkbox).font(.system(size: 11))
@@ -1074,7 +1122,7 @@ struct UniFiControllerView: View {
                 Text("Certificate pinned").foregroundStyle(NS.text3)
                 Button("Forget") { model.forgetPinnedCertificate() }
                     .buttonStyle(.link)
-                    .disabled(!model.devices.isEmpty || model.isConnecting)
+                    .disabled(model.isConnected || model.isConnecting)
             }
             .font(.system(size: 10))
             .fixedSize()
@@ -1104,7 +1152,9 @@ struct UniFiControllerView: View {
                 VStack(spacing: 10) {
                     Image(systemName: "antenna.radiowaves.left.and.right.circle")
                         .font(.system(size: 40)).foregroundStyle(NS.text3)
-                    Text("Connect to a UniFi controller to see adopted devices across all VLANs.")
+                    Text(model.isConnected
+                         ? "Connected, but site 'default' has no adopted devices. If your controller has several sites, the devices may be on another one."
+                         : "Connect to a UniFi controller to see adopted devices across all VLANs.")
                         .font(.system(size: 12)).foregroundStyle(NS.text2)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 380)

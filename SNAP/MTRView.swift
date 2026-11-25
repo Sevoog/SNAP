@@ -91,6 +91,11 @@ final class MTRModel: ObservableObject {
     }
 
     private var pingProcesses: [Process] = []
+    /// The path-discovery traceroute, so Stop can end it.
+    private var discoveryProcess: Process?
+    /// Identifies the current run. A stopped run's traceroute and ping lines
+    /// check it and drop out instead of touching the next run.
+    private var runID = UUID()
     private var startedAt: Date?
     private var tickTimer: Timer?
 
@@ -116,8 +121,14 @@ final class MTRModel: ObservableObject {
         RunLoop.main.add(t, forMode: .common)
         tickTimer = t
 
+        let id = UUID()
+        runID = id
         Task {
+            guard runID == id else { return }  // stopped before it began
             let path = await discoverPath()
+            // Stopped (or restarted) while tracing: never start the pings.
+            // They used to launch here with no Stop button left to end them.
+            guard runID == id, isRunning else { return }
             if path.isEmpty {
                 error = "Couldn't discover a path to \(target)"
                 stop()
@@ -127,11 +138,14 @@ final class MTRModel: ObservableObject {
                 MTRHop(num: i + 1, ip: ip)
             }
             phase = .running
-            launchPingPerHop()
+            launchPingPerHop(runID: id)
         }
     }
 
     func stop() {
+        runID = UUID()
+        if let p = discoveryProcess, p.isRunning { p.terminate() }
+        discoveryProcess = nil
         for p in pingProcesses where p.isRunning {
             p.terminate()
         }
@@ -152,10 +166,28 @@ final class MTRModel: ObservableObject {
 
     // MARK: Phase A — path discovery
 
+    /// Runs its own Process rather than Shell.run so Stop can terminate it.
     private func discoverPath() async -> [String] {
         let t = target.trimmingCharacters(in: .whitespaces)
-        let out = await Shell.run("/usr/sbin/traceroute",
-                                  args: ["-n", "-q", "1", "-m", String(maxHops), "-w", "2", t])
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/sbin/traceroute")
+        proc.arguments = ["-n", "-q", "1", "-m", String(maxHops), "-w", "2", t]
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = pipe
+        // Launched here, before handing off: launched later on the queue, a
+        // Stop in between would find it not yet running and leave it to finish
+        do { try proc.run() } catch { return [] }
+        discoveryProcess = proc
+        let out: String = await withCheckedContinuation { cont in
+            DispatchQueue.global(qos: .userInitiated).async {
+                // Drain to EOF before waiting (see Shell.run for why)
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                proc.waitUntilExit()
+                cont.resume(returning: String(data: data, encoding: .utf8) ?? "")
+            }
+        }
+        if discoveryProcess === proc { discoveryProcess = nil }
         return Self.parseTraceroute(out)
     }
 
@@ -188,7 +220,7 @@ final class MTRModel: ObservableObject {
 
     // MARK: Phase B — continuous ping per hop
 
-    private func launchPingPerHop() {
+    private func launchPingPerHop(runID id: UUID) {
         for i in hops.indices {
             let hop = hops[i]
             if hop.ip == "*" { continue }
@@ -196,17 +228,22 @@ final class MTRModel: ObservableObject {
             let proc = Shell.stream("/sbin/ping",
                                     args: ["-i", "1", "-W", "2000", ip],
                                     onLine: { [weak self] line in
-                                        Task { @MainActor in self?.parsePingLine(hopIndex: i, line: line) }
+                                        Task { @MainActor in
+                                            guard let self, self.runID == id else { return }
+                                            self.parsePingLine(hopIndex: i, line: line)
+                                        }
                                     },
                                     onFinish: {})
             pingProcesses.append(proc)
         }
         // Best-effort reverse DNS for each non-blackhole hop, in the background.
+        let ips = hops.map(\.ip)
         Task {
-            for i in hops.indices {
-                let ip = hops[i].ip
+            for (i, ip) in ips.enumerated() {
                 guard ip != "*" else { continue }
-                if let h = await Self.reverseDNS(ip) {
+                // Still filled in after Stop, but a newer run may have
+                // replaced (or emptied) the hop list, so check it's the same hop
+                if let h = await Self.reverseDNS(ip), i < hops.count, hops[i].ip == ip {
                     hops[i].hostname = h
                 }
             }

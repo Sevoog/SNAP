@@ -115,6 +115,12 @@ final class SyslogReceiverModel: ObservableObject {
     @Published var port: String = "5140"
     @Published var entries: [SyslogEntry] = []
     @Published var isListening = false
+    /// Start was pressed and the listener isn't ready yet. Start used to
+    /// stay clickable here, and a second click bound a second listener: the
+    /// first kept the port, and Stop could no longer close it.
+    @Published private(set) var isStarting = false
+    /// Starting or listening: Start is hidden and the port is locked
+    var isActive: Bool { isListening || isStarting }
     @Published var isPaused = false
     @Published var errorMessage: String?
     @Published var receivedCount: Int = 0
@@ -148,7 +154,7 @@ final class SyslogReceiverModel: ObservableObject {
     }
 
     func start() {
-        guard !isListening else { return }
+        guard !isActive else { return }
         errorMessage = nil
         guard let p = UInt16(port), let nwPort = NWEndpoint.Port(rawValue: p) else {
             errorMessage = "Invalid port"
@@ -156,16 +162,23 @@ final class SyslogReceiverModel: ObservableObject {
         }
         do {
             let l = try NWListener(using: .udp, on: nwPort)
-            l.stateUpdateHandler = { [weak self] state in
+            l.stateUpdateHandler = { [weak self, weak l] state in
                 Task { @MainActor in
+                    // A stopped or replaced listener's late updates are ignored
+                    guard let self, let l, self.listener === l else { return }
                     switch state {
                     case .ready:
-                        self?.isListening = true
+                        self.isStarting = false
+                        self.isListening = true
                     case .failed(let e):
-                        self?.errorMessage = "Listener failed: \(e.localizedDescription)"
-                        self?.isListening = false
+                        self.errorMessage = "Listener failed: \(e.localizedDescription)"
+                        l.cancel()
+                        self.listener = nil
+                        self.isStarting = false
+                        self.isListening = false
                     case .cancelled:
-                        self?.isListening = false
+                        self.isStarting = false
+                        self.isListening = false
                     default: break
                     }
                 }
@@ -173,8 +186,9 @@ final class SyslogReceiverModel: ObservableObject {
             l.newConnectionHandler = { [weak self] conn in
                 Task { @MainActor in self?.attach(conn) }
             }
-            l.start(queue: DispatchQueue.global(qos: .utility))
             listener = l
+            isStarting = true
+            l.start(queue: DispatchQueue.global(qos: .utility))
         } catch {
             errorMessage = "Could not bind UDP/\(p): \(error.localizedDescription) — try port 5140 if you don't have root."
         }
@@ -185,6 +199,7 @@ final class SyslogReceiverModel: ObservableObject {
         listener = nil
         for c in connections { c.cancel() }
         connections.removeAll()
+        isStarting = false
         isListening = false
     }
 
@@ -366,11 +381,15 @@ struct SyslogReceiverView: View {
             TextField("", text: $model.port)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 60)
-                .disabled(model.isListening)
+                .disabled(model.isActive)
+                .onSubmit { if !model.isActive { model.start() } }  // same condition that shows Start
             if model.isListening {
                 Text("listening · \(model.receivedCount) msg")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(NS.text3)
+            } else if model.isStarting {
+                Text("starting…")
+                    .font(.system(size: 11)).foregroundStyle(NS.text3)
             } else {
                 Text("idle")
                     .font(.system(size: 11)).foregroundStyle(NS.text3)
@@ -387,6 +406,9 @@ struct SyslogReceiverView: View {
                 .buttonStyle(.bordered)
                 Button("Clear") { model.clear() }
                     .buttonStyle(.bordered)
+                Button("Stop") { model.stop() }
+                    .buttonStyle(.bordered).tint(.red)
+            } else if model.isStarting {
                 Button("Stop") { model.stop() }
                     .buttonStyle(.bordered).tint(.red)
             } else {

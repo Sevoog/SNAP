@@ -1,6 +1,6 @@
 # SNAP Individual Contributor License Agreement
 
-Version 1.0 — October 2026
+Version 1.0, October 2026
 
 Thank you for contributing to SNAP. This agreement explains the rights you give Sevag Bardakjian ("the Maintainer") over your contributions. **You keep the copyright in your work.** You're granting a license, not transferring ownership.
 

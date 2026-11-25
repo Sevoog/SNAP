@@ -135,6 +135,7 @@ struct LookupView: View {
     private var hostField: some View {
         TextField("Hostname or IP", text: $host)
             .textFieldStyle(.roundedBorder)
+            .onSubmit { if !host.isEmpty && !isRunning { startLookup() } }
     }
 
     private var queryPickers: some View {
@@ -189,20 +190,44 @@ struct LookupView: View {
     @MainActor
     private func performDoHLookup() async {
         let qtype = typeNumbers[recordType] ?? 1
-        // Cloudflare / Google DoH JSON API
-        let urlStr = "https://\(useServer)/dns-query?name=\(host.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? host)&type=\(qtype)"
+        let typed = host.trimmingCharacters(in: .whitespaces)
+        // PTR needs the reverse name; an IP typed as-is was sent unchanged
+        let name = recordType == "PTR" ? (DoH.reverseName(for: typed) ?? typed) : typed
 
-        guard let url = URL(string: urlStr) else {
-            error = "Invalid query URL"; isRunning = false; return
+        // Chosen once: the server picker can change while the request is out,
+        // and the reply has to be read in the format it was asked in.
+        let endpoint = DoH.endpoint(for: useServer)
+        var req: URLRequest
+        switch endpoint {
+        case .json(let base):
+            let urlStr = "\(base)?name=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name)&type=\(qtype)"
+            guard let url = URL(string: urlStr) else {
+                error = "Invalid query URL"; isRunning = false; return
+            }
+            req = URLRequest(url: url)
+            req.setValue("application/dns-json", forHTTPHeaderField: "Accept")
+        case .wire(let url):
+            guard let body = DoH.wireQuery(name: name, type: UInt16(qtype)) else {
+                error = "\(typed) isn't a valid host name."; isRunning = false; return
+            }
+            req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.httpBody = body
+            req.setValue("application/dns-message", forHTTPHeaderField: "Content-Type")
+            req.setValue("application/dns-message", forHTTPHeaderField: "Accept")
         }
-
-        var req = URLRequest(url: url)
-        req.setValue("application/dns-json", forHTTPHeaderField: "Accept")
         req.timeoutInterval = 10
 
         do {
             let (data, _) = try await URLSession.shared.data(for: req)
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            let decoded: [String: Any]?
+            switch endpoint {
+            case .json:
+                decoded = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            case .wire:
+                decoded = DoH.parseWire(data)
+            }
+            guard let json = decoded else {
                 error = "Invalid response from DNS server"; isRunning = false; return
             }
 
@@ -232,7 +257,7 @@ struct LookupView: View {
             }
 
             records = parsed
-            if parsed.isEmpty { error = "No records found for \(host) \(recordType)" }
+            if parsed.isEmpty { error = "No records found for \(name) \(recordType)" }
         } catch {
             self.error = error.localizedDescription
         }
@@ -282,5 +307,177 @@ struct LookupView: View {
         case "PTR":   return .indigo
         default:      return .gray
         }
+    }
+}
+
+// MARK: - DoH endpoints and wire format
+
+/// How each DoH provider in the picker is queried. Checked live with curl
+/// (2026-11-20): Cloudflare answers JSON at /dns-query, Google answers JSON
+/// only at /resolve (/dns-query is RFC 8484 wire format), and Quad9 has no
+/// JSON on 443 (its old :5053 JSON port didn't connect), so Quad9 gets the
+/// RFC 8484 wire format, converted to the same dictionary shape as the JSON.
+enum DoH {
+    enum Endpoint: Equatable {
+        case json(String)   // base URL; ?name=&type= appended
+        case wire(URL)      // POST application/dns-message
+    }
+
+    static func endpoint(for provider: String) -> Endpoint {
+        switch provider {
+        case "8.8.8.8": return .json("https://8.8.8.8/resolve")
+        case "9.9.9.9": return .wire(URL(string: "https://9.9.9.9/dns-query")!)
+        default:        return .json("https://\(provider)/dns-query")
+        }
+    }
+
+    /// in-addr.arpa / ip6.arpa name for an IP literal, nil for anything else.
+    static func reverseName(for ip: String) -> String? {
+        var v4 = in_addr()
+        if inet_pton(AF_INET, ip, &v4) == 1 {
+            let b = withUnsafeBytes(of: &v4) { Array($0) }
+            return "\(b[3]).\(b[2]).\(b[1]).\(b[0]).in-addr.arpa"
+        }
+        var v6 = in6_addr()
+        if inet_pton(AF_INET6, ip, &v6) == 1 {
+            let b = withUnsafeBytes(of: &v6) { Array($0) }
+            let nibbles = b.reversed().flatMap { [String($0 & 0x0F, radix: 16), String($0 >> 4, radix: 16)] }
+            return nibbles.joined(separator: ".") + ".ip6.arpa"
+        }
+        return nil
+    }
+
+    /// A recursive query (ID 0, as RFC 8484 suggests for caching), or nil
+    /// when a label is empty or longer than 63 bytes.
+    static func wireQuery(name: String, type: UInt16) -> Data? {
+        var labels = name.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        if labels.last == "" { labels.removeLast() }   // trailing root dot
+        var q = Data([0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+        var nameLength = 1
+        for label in labels {
+            let bytes = Array(label.utf8)
+            guard (1...63).contains(bytes.count) else { return nil }
+            q.append(UInt8(bytes.count))
+            q.append(contentsOf: bytes)
+            nameLength += bytes.count + 1
+        }
+        guard nameLength <= 255 else { return nil }
+        q.append(0)
+        q.append(contentsOf: [UInt8(type >> 8), UInt8(type & 0xFF), 0x00, 0x01])
+        return q
+    }
+
+    /// Decode a DNS response into the JSON API's shape: "Status" plus
+    /// "Answer" / "Authority" / "Additional" arrays of name, type, TTL, data.
+    static func parseWire(_ data: Data) -> [String: Any]? {
+        let p = [UInt8](data)
+        guard p.count >= 12 else { return nil }
+        func u16(_ i: Int) -> Int { Int(p[i]) << 8 | Int(p[i + 1]) }
+        let counts = [u16(4), u16(6), u16(8), u16(10)]
+        var idx = 12
+        for _ in 0..<counts[0] {
+            guard readName(p, &idx) != nil, idx + 4 <= p.count else { return nil }
+            idx += 4
+        }
+        var out: [String: Any] = ["Status": u16(2) & 0x000F]
+        for (section, count) in zip(["Answer", "Authority", "Additional"], counts.dropFirst()) {
+            var records: [[String: Any]] = []
+            for _ in 0..<count {
+                guard let name = readName(p, &idx), idx + 10 <= p.count else { return nil }
+                let type = u16(idx)
+                let ttl = Int(p[idx + 4]) << 24 | Int(p[idx + 5]) << 16 | Int(p[idx + 6]) << 8 | Int(p[idx + 7])
+                let rdlen = u16(idx + 8)
+                idx += 10
+                guard idx + rdlen <= p.count else { return nil }
+                if type != 41 {   // OPT pseudo-record, not data
+                    records.append(["name": name, "type": type, "TTL": ttl,
+                                    "data": rdataText(type: type, p, start: idx, length: rdlen)])
+                }
+                idx += rdlen
+            }
+            if !records.isEmpty { out[section] = records }
+        }
+        return out
+    }
+
+    /// Presentation form, matching what the JSON providers return.
+    private static func rdataText(type: Int, _ p: [UInt8], start: Int, length: Int) -> String {
+        let r = Array(p[start..<(start + length)])
+        func u16(_ i: Int) -> Int { Int(r[i]) << 8 | Int(r[i + 1]) }
+        func u32(_ i: Int) -> UInt32 { UInt32(r[i]) << 24 | UInt32(r[i + 1]) << 16 | UInt32(r[i + 2]) << 8 | UInt32(r[i + 3]) }
+        func name(at offset: Int) -> String? {
+            var i = start + offset
+            return readName(p, &i)
+        }
+        func quoted(_ bytes: ArraySlice<UInt8>) -> String {
+            let s = String(decoding: bytes, as: UTF8.self)
+            return "\"" + s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+        }
+        switch type {
+        case 1 where length == 4:
+            return r.map(String.init).joined(separator: ".")
+        case 28 where length == 16:
+            var addr = in6_addr()
+            withUnsafeMutableBytes(of: &addr) { $0.copyBytes(from: r) }
+            var buf = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+            return inet_ntop(AF_INET6, &addr, &buf, socklen_t(buf.count)).map { String(cString: $0) } ?? ""
+        case 2, 5, 12:
+            return name(at: 0) ?? ""
+        case 15 where length >= 3:
+            return "\(u16(0)) \(name(at: 2) ?? "")"
+        case 16:
+            var parts: [String] = []
+            var i = 0
+            while i < r.count {
+                let len = Int(r[i])
+                guard i + 1 + len <= r.count else { break }
+                parts.append(quoted(r[(i + 1)..<(i + 1 + len)]))
+                i += 1 + len
+            }
+            return parts.joined(separator: " ")
+        case 6:
+            var i = start
+            guard let mname = readName(p, &i), let rname = readName(p, &i), i + 20 <= start + length else { break }
+            let n = i - start
+            return "\(mname) \(rname) \(u32(n)) \(u32(n + 4)) \(u32(n + 8)) \(u32(n + 12)) \(u32(n + 16))"
+        case 33 where length >= 7:
+            return "\(u16(0)) \(u16(2)) \(u16(4)) \(name(at: 6) ?? "")"
+        case 257 where length >= 2:
+            let tagLen = Int(r[1])
+            guard 2 + tagLen <= r.count else { break }
+            let tag = String(decoding: r[2..<(2 + tagLen)], as: UTF8.self)
+            return "\(r[0]) \(tag) \(quoted(r[(2 + tagLen)...]))"
+        default:
+            break
+        }
+        // RFC 3597 generic form for anything else
+        return "\\# \(length) " + r.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Name at `idx` (following compression pointers) with a trailing dot;
+    /// advances `idx` past it. Nil if malformed.
+    private static func readName(_ p: [UInt8], _ idx: inout Int) -> String? {
+        var labels: [String] = []
+        var ptr = idx
+        var jumped = false
+        for _ in 0..<128 {
+            guard ptr < p.count else { return nil }
+            let len = Int(p[ptr])
+            if len == 0 {
+                if !jumped { idx = ptr + 1 }
+                return labels.isEmpty ? "." : labels.joined(separator: ".") + "."
+            }
+            if len & 0xC0 == 0xC0 {
+                guard ptr + 1 < p.count else { return nil }
+                if !jumped { idx = ptr + 2 }
+                jumped = true
+                ptr = (len & 0x3F) << 8 | Int(p[ptr + 1])
+                continue
+            }
+            guard ptr + 1 + len <= p.count else { return nil }
+            labels.append(String(decoding: p[(ptr + 1)..<(ptr + 1 + len)], as: UTF8.self))
+            ptr += 1 + len
+        }
+        return nil
     }
 }
