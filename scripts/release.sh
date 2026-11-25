@@ -117,8 +117,8 @@ swift scripts/sign-release.swift sign "$ZIP"
 swift scripts/sign-release.swift verify "$ZIP" "$ZIP.sig" scripts/release-signing-key.pub
 mkdir "$WORK/unzip" && ditto -x -k "$ZIP" "$WORK/unzip"
 codesign --verify --deep --strict "$WORK/unzip/SNAP.app" || fail "the unzipped app's signature doesn't verify"
-codesign -dvv "$WORK/unzip/SNAP.app" 2>&1 | grep -q '^Authority=Developer ID Application:' \
-  || fail "the unzipped app lost its Developer ID signature"
+UNZIPPED=$(codesign -dvv "$WORK/unzip/SNAP.app" 2>&1)   # not piped: grep -q would end it early under pipefail
+grep -q '^Authority=Developer ID Application:' <<< "$UNZIPPED" || fail "the unzipped app lost its Developer ID signature"
 echo "$ZIP  $(stat -f %z "$ZIP") bytes"
 echo "SHA-256 $SHA"
 
